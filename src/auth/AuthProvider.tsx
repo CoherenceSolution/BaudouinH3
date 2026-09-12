@@ -147,6 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthState>(() => {
     const role = staff?.role ?? null
+    // Compte staff relié à un joueur : identité imposée par le compte, valable sur tous les appareils.
+    const effectiveIdentity: PublicIdentity | null = staff?.playerId ? { playerId: staff.playerId, mode: 'public' } : identity
     return {
       ready: authReady && staffReady && bootstrapped !== null,
       bootstrapped,
@@ -155,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       isStaff: role !== null,
       isAdmin: role === 'admin',
-      identity,
+      identity: effectiveIdentity,
       setIdentity,
       clearIdentity,
       loginStaff,
@@ -163,11 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       actorFor: (players: Player[]) => {
         if (staff) return { uid: staff.id, name: staff.displayName || staff.email, role: staff.role }
-        const p = players.find((x) => x.id === identity?.playerId)
+        const p = players.find((x) => x.id === effectiveIdentity?.playerId)
         return {
           uid: user?.uid ?? 'anonymous',
           name: p ? `${p.firstName} ${p.lastName}` : 'Membre',
-          role: identity?.mode === 'speaker' ? 'speaker' : 'public',
+          role: effectiveIdentity?.mode === 'speaker' ? 'speaker' : 'public',
         }
       },
     }

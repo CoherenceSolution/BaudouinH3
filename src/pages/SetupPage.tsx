@@ -4,7 +4,8 @@ import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore
 import { Rocket } from 'lucide-react'
 import { auth, db } from '@/lib/firebase'
 import { INITIAL_FINE_TYPES, INITIAL_PLAYERS, INITIAL_STAT_CATEGORIES } from '@/lib/initialPlayers'
-import { Button, Input, Toggle } from '@/components/ui'
+import { Button, Input, Select, Toggle } from '@/components/ui'
+import { playerName } from '@/lib/format'
 import { humanizeAuthError } from './LoginPage'
 
 /**
@@ -16,6 +17,7 @@ export function SetupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [seed, setSeed] = useState(true)
+  const [playerIndex, setPlayerIndex] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -28,13 +30,18 @@ export function SetupPage() {
       await updateProfile(cred.user, { displayName: displayName.trim() })
       const uid = cred.user.uid
       const batch = writeBatch(db)
-      batch.set(doc(db, 'staff', uid), { email: email.trim(), displayName: displayName.trim(), role: 'admin', createdAt: serverTimestamp() })
-      batch.set(doc(db, 'config', 'bootstrap'), { claimedBy: uid, at: serverTimestamp() })
+      let adminPlayerId: string | null = null
       if (seed) {
-        INITIAL_PLAYERS.forEach((p) => batch.set(doc(collection(db, 'players')), { ...p, active: true, createdAt: serverTimestamp() }))
+        INITIAL_PLAYERS.forEach((p, i) => {
+          const ref = doc(collection(db, 'players'))
+          if (String(i) === playerIndex) adminPlayerId = ref.id
+          batch.set(ref, { ...p, active: true, createdAt: serverTimestamp() })
+        })
         INITIAL_FINE_TYPES.forEach((t, i) => batch.set(doc(collection(db, 'fineTypes')), { description: '', unitLabel: '', freeUnits: 0, cap: null, ...t, active: true, order: i, createdAt: serverTimestamp() }))
         INITIAL_STAT_CATEGORIES.forEach((c, i) => batch.set(doc(collection(db, 'statCategories')), { ...c, active: true, order: i }))
       }
+      batch.set(doc(db, 'staff', uid), { email: email.trim(), displayName: displayName.trim(), role: 'admin', playerId: adminPlayerId, createdAt: serverTimestamp() })
+      batch.set(doc(db, 'config', 'bootstrap'), { claimedBy: uid, at: serverTimestamp() })
       batch.set(doc(collection(db, 'activity')), {
         actorUid: uid, actorName: displayName.trim(), actorRole: 'admin', action: 'create', entity: 'setup', entityId: uid,
         summary: 'Première installation de l’application', at: serverTimestamp(),
@@ -56,6 +63,12 @@ export function SetupPage() {
         <Input label="Adresse e-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="mb-3" autoComplete="email" />
         <Input label="Mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} hint="6 caractères minimum" className="mb-4" autoComplete="new-password" />
         <Toggle checked={seed} onChange={setSeed} label={`Précharger l’équipe (${INITIAL_PLAYERS.length} joueurs), le barème d’amendes et les catégories`} />
+        {seed && (
+          <Select label="Vous êtes quel joueur ? (optionnel)" value={playerIndex} onChange={(e) => setPlayerIndex(e.target.value)} className="mt-3" hint="Relie votre compte admin à votre nom pour voter">
+            <option value="">— Choisir plus tard —</option>
+            {INITIAL_PLAYERS.map((p, i) => <option key={i} value={String(i)}>{playerName({ id: '', active: true, ...p })}</option>)}
+          </Select>
+        )}
         {error && <p className="mt-3 text-[13px] text-rose">{error}</p>}
         <Button type="submit" block size="lg" className="mt-5" loading={loading}>Créer l’administrateur</Button>
       </form>

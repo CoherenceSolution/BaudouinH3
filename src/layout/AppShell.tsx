@@ -19,7 +19,7 @@ export function AppShell() {
   const players = usePlayers(true)
   const navigate = useNavigate()
   const me = identity ? players.byId.get(identity.playerId) : null
-  const displayName = isStaff ? staff?.displayName || staff?.email || '' : me ? playerName(me) : ''
+  const displayName = me ? playerName(me) : isStaff ? staff?.displayName || staff?.email || '' : ''
 
   const nav = isStaff ? [...NAV, { to: '/admin', label: 'Gestion', icon: Settings }] : NAV
 

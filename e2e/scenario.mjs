@@ -1,7 +1,6 @@
 // Scénario de bout en bout joué contre les émulateurs Firebase (npm run emulators) et le serveur Vite (npm run dev, .env avec VITE_USE_EMULATORS=true).
 // Prérequis : npx playwright install chromium. Lancer : bash e2e/reset-emulators.sh && node e2e/scenario.mjs
 // Il couvre : installation, création de match, amendes, buts, trois votants, orateur, lecture en direct, coups de cœur, rétrospective, mobile.
-
 import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:5173'
@@ -45,6 +44,16 @@ const matchId = href.split('/').pop()
 await admin.goto(BASE + href)
 await admin.getByRole('button', { name: 'Console' }).waitFor()
 console.log('matchId', matchId)
+
+// 2b. Compte admin relié à un joueur : l'admin vote sous ce nom
+await admin.goto(BASE + '/admin/staff')
+await admin.getByTitle('Joueur relié').first().waitFor()
+await admin.getByTitle('Joueur relié').first().selectOption({ label: 'Bruno Huberty' })
+await admin.getByText('joueur : Bruno Huberty').waitFor()
+await admin.goto(BASE + `/votes/${matchId}`)
+await admin.getByRole('button', { name: 'Mon ticket', exact: true }).click()
+await admin.getByText('Vous votez en tant que Bruno Huberty').waitFor()
+await shot(admin, '03b-admin-ticket')
 
 // 3. Amende : retard 20 min -> 15 €
 await admin.goto(BASE + '/amendes')

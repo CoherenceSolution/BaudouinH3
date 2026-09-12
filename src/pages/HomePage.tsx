@@ -30,7 +30,7 @@ export function HomePage() {
 
   const hour = new Date().getHours()
   const greeting = hour < 18 ? 'Bonjour' : 'Bonsoir'
-  const name = me ? me.firstName : staff?.displayName?.split(' ')[0] ?? ''
+  const name = me ? me.firstName : (staff?.displayName?.split(' ')[0] ?? '')
 
   return (
     <div className="space-y-6">

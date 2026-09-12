@@ -52,7 +52,9 @@ service cloud.firestore {
       allow create: if (signedIn() && request.auth.uid == uid && !bootstrapDone()
                         && request.resource.data.role == 'admin')
                     || isAdmin();
-      allow update, delete: if isAdmin();
+      // L'admin gère tout ; un membre du staff peut seulement relier son propre compte à un joueur.
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && onlyChanges(['playerId']));
+      allow delete: if isAdmin();
     }
 
     // ---- Joueurs ----

@@ -7,6 +7,8 @@ export interface StaffMember {
   email: string
   displayName: string
   role: Role
+  /** Joueur de l'équipe auquel ce compte est relié (nom, avatar, votes). */
+  playerId?: string | null
   createdAt?: Timestamp
 }
 
