@@ -6,7 +6,7 @@ import { Badge, Card, Chip, Spinner } from '@/components/ui'
 import type { ActivityLog } from '@/lib/types'
 
 const ENTITY_LABELS: Record<string, string> = {
-  player: 'Joueur', match: 'Match', ticket: 'Ticket', fine: 'Amende', fineType: 'Barème', goal: 'But', statEntry: 'Statistique', statCategory: 'Catégorie', staff: 'Staff', setup: 'Installation',
+  player: 'Joueur', match: 'Match', ticket: 'Ticket', fine: 'Amende', fineType: 'Barème', goal: 'But', statEntry: 'Statistique', statCategory: 'Catégorie', staff: 'Staff', setup: 'Installation', backup: 'Sauvegarde',
 }
 
 export function ActivityAdmin() {
