@@ -14,6 +14,7 @@ import { SpeakerConsole } from './SpeakerConsole'
 import { LiveReading } from './LiveReading'
 import { Rankings } from './Rankings'
 import { Participation } from './Participation'
+import { ChooseIdentity } from './ChooseIdentity'
 
 type Tab = 'ticket' | 'console' | 'participation' | 'live' | 'rankings'
 
@@ -35,7 +36,7 @@ export function MatchVotePage() {
 
   const tabs = useMemo(() => {
     const list: { key: Tab; label: string }[] = []
-    if (identity && !isSpeaker) list.push({ key: 'ticket', label: 'Mon ticket' })
+    if (!isSpeaker) list.push({ key: 'ticket', label: 'Mon ticket' })
     if (canAnimate) list.push({ key: 'console', label: 'Console' }, { key: 'participation', label: 'Participation' })
     list.push({ key: 'live', label: 'En direct' }, { key: 'rankings', label: 'Classement' })
     return list
@@ -81,7 +82,7 @@ export function MatchVotePage() {
         </div>
       </div>
 
-      {tab === 'ticket' && identity && <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} />}
+      {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
       {tab === 'console' && <SpeakerConsole match={match} players={players.byId} tickets={tickets.data} likes={likes.data} />}
       {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}
       {tab === 'live' && <LiveReading match={match} players={players.byId} tickets={tickets.data} likes={likes.data} myPlayerId={identity?.playerId ?? null} />}

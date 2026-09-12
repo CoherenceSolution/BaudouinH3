@@ -11,10 +11,10 @@ import { ActivityAdmin } from './ActivityAdmin'
 export function AdminPage() {
   const { isAdmin } = useAuth()
   const items = [
-    { to: 'joueurs', label: 'Joueurs', icon: Users },
-    { to: 'matchs', label: 'Matchs', icon: CalendarDays },
-    ...(isAdmin ? [{ to: 'staff', label: 'Staff', icon: ShieldCheck }] : []),
-    { to: 'activite', label: 'Activité', icon: ScrollText },
+    { to: '/admin/joueurs', label: 'Joueurs', icon: Users },
+    { to: '/admin/matchs', label: 'Matchs', icon: CalendarDays },
+    ...(isAdmin ? [{ to: '/admin/staff', label: 'Staff', icon: ShieldCheck }] : []),
+    { to: '/admin/activite', label: 'Activité', icon: ScrollText },
   ]
   return (
     <div>
@@ -27,7 +27,7 @@ export function AdminPage() {
         ))}
       </div>
       <Routes>
-        <Route index element={<Navigate to="joueurs" replace />} />
+        <Route index element={<Navigate to="/admin/joueurs" replace />} />
         <Route path="joueurs" element={<PlayersAdmin />} />
         <Route path="matchs" element={<MatchesAdmin />} />
         {isAdmin && <Route path="staff" element={<StaffAdmin />} />}

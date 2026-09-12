@@ -55,7 +55,7 @@ export function HomePage() {
             </p>
             <Link to={`/votes/${live.id}`} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[14px] font-semibold text-ink transition hover:bg-lime-400">
               {identity?.mode === 'speaker' || isStaff ? <Mic className="size-4" /> : <Vote className="size-4" />}
-              {identity?.mode === 'speaker' ? 'Ouvrir la console orateur' : live.status === 'voting' ? 'Remplir mon ticket' : 'Suivre la lecture'}
+              {identity?.mode === 'speaker' ? 'Ouvrir la console orateur' : isStaff && !identity ? 'Ouvrir le match' : live.status === 'voting' ? 'Remplir mon ticket' : 'Suivre la lecture'}
               <ArrowRight className="size-4" />
             </Link>
           </div>

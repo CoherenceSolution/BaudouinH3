@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       isStaff: role !== null,
       isAdmin: role === 'admin',
-      identity: user && user.isAnonymous ? identity : staff ? null : identity,
+      identity,
       setIdentity,
       clearIdentity,
       loginStaff,

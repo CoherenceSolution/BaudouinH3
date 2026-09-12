@@ -19,6 +19,7 @@ export function AppShell() {
   const players = usePlayers(true)
   const navigate = useNavigate()
   const me = identity ? players.byId.get(identity.playerId) : null
+  const displayName = isStaff ? staff?.displayName || staff?.email || '' : me ? playerName(me) : ''
 
   const nav = isStaff ? [...NAV, { to: '/admin', label: 'Gestion', icon: Settings }] : NAV
 
@@ -55,7 +56,7 @@ export function AppShell() {
           ))}
         </nav>
         <div className="border-t border-line p-3">
-          <IdentityCard me={me ? playerName(me) : staff?.displayName || staff?.email || ''} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
+          <IdentityCard me={displayName} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
         </div>
       </aside>
 
@@ -66,7 +67,7 @@ export function AppShell() {
             <span className="flex size-8 items-center justify-center rounded-lg bg-ink text-[12px] font-extrabold text-accent">H3</span>
             <span className="text-[15px] font-bold">Baudouin H3</span>
           </div>
-          <IdentityCard compact me={me ? playerName(me) : staff?.displayName || staff?.email || ''} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
+          <IdentityCard compact me={displayName} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
           <ErrorBoundary>
