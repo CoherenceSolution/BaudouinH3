@@ -38,7 +38,8 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
     setHomeScore(match?.homeScore != null ? String(match.homeScore) : '')
     setAwayScore(match?.awayScore != null ? String(match.awayScore) : '')
     setStatus(match?.status ?? 'voting')
-  }, [open, match])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, match?.id])
 
   async function submit(e: FormEvent) {
     e.preventDefault()

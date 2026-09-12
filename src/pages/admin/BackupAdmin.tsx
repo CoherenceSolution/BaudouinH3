@@ -7,7 +7,7 @@ import { Button, Card } from '@/components/ui'
 import { ErrorNotice } from '@/components/ErrorNotice'
 
 const LABELS: Record<string, string> = {
-  players: 'Joueurs', staff: 'Comptes staff', matches: 'Matchs', tickets: 'Tickets de vote', likes: 'Coups de cœur', goals: 'Buts et passes',
+  players: 'Joueurs', staff: 'Comptes staff', matches: 'Matchs', tickets: 'Votes', likes: 'Coups de cœur', goals: 'Buts et passes',
   fineTypes: 'Barème des amendes', fines: 'Amendes', statCategories: 'Catégories maison', statEntries: 'Entrées de catégories', activity: 'Journal d’activité',
 }
 

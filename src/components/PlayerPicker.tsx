@@ -21,16 +21,20 @@ interface Props {
   allowCreate?: boolean
 }
 
-/** Sélecteur de joueur avec recherche, sous forme de grille de pastilles. */
+/**
+ * Sélecteur de joueur avec recherche.
+ * Sur téléphone : liste verticale à grandes lignes, faciles à lire et à toucher.
+ * Sur grand écran : grille sur deux ou trois colonnes.
+ */
 export function PlayerPicker({ players, value, onChange, label, placeholder = 'Rechercher un joueur…', exclude = [], allowNone, compact, allowCreate }: Props) {
   const [q, setQ] = useState('')
   const { isStaff } = useAuth()
   const [creating, setCreating] = useState(false)
   const list = useMemo(() => {
-    const norm = q.trim().toLowerCase()
+    const norm = normalize(q)
     return players
       .filter((p) => !exclude.includes(p.id))
-      .filter((p) => !norm || playerName(p).toLowerCase().includes(norm))
+      .filter((p) => !norm || normalize(playerName(p)).includes(norm))
   }, [players, q, exclude])
   const selected = players.find((p) => p.id === value)
 
@@ -38,11 +42,11 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
     <div>
       {label && <label className="label">{label}</label>}
       {selected ? (
-        <div className="flex items-center gap-3 rounded-xl border border-ink bg-ink px-3 py-2 text-white">
-          <Avatar player={selected} size="sm" />
-          <span className="flex-1 text-[15px] font-medium">{playerName(selected)}</span>
-          <button type="button" onClick={() => onChange(null)} className="rounded-lg p-1 hover:bg-white/10" aria-label="Retirer">
-            <X className="size-4" />
+        <div className="flex items-center gap-3 rounded-xl border border-ink bg-ink px-3 py-2.5 text-white">
+          <Avatar player={selected} />
+          <span className="flex-1 text-[16px] font-semibold">{playerName(selected)}</span>
+          <button type="button" onClick={() => onChange(null)} className="rounded-lg p-1.5 hover:bg-white/10" aria-label="Changer de joueur">
+            <X className="size-5" />
           </button>
         </div>
       ) : (
@@ -51,9 +55,9 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="field pl-9" />
           </div>
-          <div className={cx('mt-2 grid gap-1.5', compact ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3')}>
+          <div className={cx('mt-2 grid gap-1.5', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
             {allowNone && (
-              <button type="button" onClick={() => onChange(null)} className="flex items-center gap-2 rounded-xl border border-dashed border-line px-2.5 py-2 text-left text-[13px] text-muted hover:bg-slate-50">
+              <button type="button" onClick={() => onChange(null)} className="flex min-h-12 items-center gap-3 rounded-xl border border-dashed border-line px-3 text-left text-[15px] text-muted hover:bg-slate-50">
                 Aucun
               </button>
             )}
@@ -62,7 +66,7 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
                 key={p.id}
                 type="button"
                 onClick={() => onChange(p.id)}
-                className="flex items-center gap-2 rounded-xl border border-line bg-surface px-2.5 py-2 text-left text-[13px] font-medium text-ink transition hover:border-ink hover:bg-slate-50"
+                className="flex min-h-12 items-center gap-3 rounded-xl border border-line bg-surface px-3 text-left text-[15px] font-medium text-ink transition hover:border-ink hover:bg-slate-50 active:bg-slate-100"
               >
                 <Avatar player={p} size="sm" />
                 <span className="truncate">{playerName(p)}</span>
@@ -84,6 +88,17 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
       )}
     </div>
   )
+}
+
+/** Minuscules, sans accents, espaces normalisés : « Jérôme  Fetu » → « jerome fetu ». */
+export function normalize(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[-']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function QuickAddPlayer({ initial, onDone }: { initial: string; onDone: (id: string | null) => void }) {

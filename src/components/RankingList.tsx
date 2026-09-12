@@ -5,7 +5,7 @@ import { Avatar } from './ui'
 
 const medals = ['🥇', '🥈', '🥉']
 
-export function RankingList({ rows, players, tone = 'accent', unit = 'vote', unitPlural, max = 10, empty = 'Pas encore de données.' }: { rows: RankRow[]; players: Map<string, Player>; tone?: 'accent' | 'rose' | 'sky' | 'gold'; unit?: string; unitPlural?: string; max?: number; empty?: string }) {
+export function RankingList({ rows, players, tone = 'accent', unit = 'voix', unitPlural, max = 10, empty = 'Pas encore de données.' }: { rows: RankRow[]; players: Map<string, Player>; tone?: 'accent' | 'rose' | 'sky' | 'gold'; unit?: string; unitPlural?: string; max?: number; empty?: string }) {
   if (rows.length === 0) return <p className="py-6 text-center text-[13px] text-muted">{empty}</p>
   const top = rows[0].count
   const bar = tone === 'rose' ? 'bg-rose' : tone === 'sky' ? 'bg-sky' : tone === 'gold' ? 'bg-gold' : 'bg-accent'

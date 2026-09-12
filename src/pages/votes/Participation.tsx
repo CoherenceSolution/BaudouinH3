@@ -45,7 +45,7 @@ export function Participation({ players, tickets }: Props) {
           <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
             <Avatar player={p} size="sm" />
             <span className={cx('flex-1 text-[14px]', state === 'none' && 'text-muted')}>{playerName(p)}</span>
-            {state === 'done' && <span className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong"><CheckCircle2 className="size-4" /> Envoyé{t?.coAuthorPlayerId ? ' (à deux)' : ''}</span>}
+            {state === 'done' && <span className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong"><CheckCircle2 className="size-4" /> Envoyé{(t?.authorUids?.length ?? 0) > 1 ? ' · double auteur' : ''}</span>}
             {state === 'draft' && <span className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-600"><CircleDashed className="size-4" /> En cours · {filled}/3</span>}
             {state === 'none' && <span className="inline-flex items-center gap-1 text-[12px] text-muted"><Circle className="size-4" /> Pas de vote</span>}
           </div>

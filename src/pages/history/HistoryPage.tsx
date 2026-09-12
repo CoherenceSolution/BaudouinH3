@@ -11,6 +11,7 @@ import { RankingList } from '@/components/RankingList'
 import { ResultPill } from '@/components/MatchCard'
 import { TicketCard } from '../votes/TicketCard'
 import type { VoteCategory } from '@/lib/types'
+import { useCategories } from '@/hooks/useSettings'
 
 /** Rétrospective de saison : classements cumulés, tickets étoilés et conservés, buts, amendes. */
 export function HistoryPage() {
@@ -24,6 +25,7 @@ export function HistoryPage() {
   const cats = useStatCategories()
   const entries = useStatEntries()
   const [season, setSeason] = useState(currentSeason())
+  const categories = useCategories()
 
   const seasons = useMemo(() => {
     const s = new Set(matches.data.map((m) => seasonOf(m.date)))
@@ -74,7 +76,7 @@ export function HistoryPage() {
     <div>
       <PageHeader
         title="Rétrospective"
-        subtitle="Le bilan de la saison : classements cumulés, tickets à retenir, buts et amendes."
+        subtitle="Le bilan de la saison : classements cumulés, votes à retenir, buts et amendes."
         actions={
           <Select value={season} onChange={(e) => setSeason(e.target.value)} className="w-48">
             {seasons.map((s) => <option key={s} value={s}>Saison {s}</option>)}
@@ -84,19 +86,19 @@ export function HistoryPage() {
 
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Matchs" value={seasonMatches.length} sub={`${record.win} V · ${record.draw} N · ${record.loss} D`} />
-        <Stat label="Tickets lus" value={read.length} sub={`${starred.length} étoilés`} tone="gold" />
+        <Stat label="Votes lus" value={read.length} sub={`${starred.length} étoilés`} tone="gold" />
         <Stat label="Buts" value={totals.scorers.reduce((s, r) => s + r.count, 0)} tone="accent" />
         <Stat label="Amendes" value={formatEuro(seasonFines.reduce((s, f) => s + f.amount, 0))} tone="rose" />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-5">
-          <SectionTitle>🏆 Meilleur joueur de la saison</SectionTitle>
-          <RankingList rows={best} players={players.byId} tone="gold" empty="Aucun ticket lu cette saison." />
+          <SectionTitle>{categories[0].emoji} {categories[0].label} de la saison</SectionTitle>
+          <RankingList rows={best} players={players.byId} tone="gold" unit="voix" empty="Aucun vote lu cette saison." />
         </Card>
         <Card className="p-5">
-          <SectionTitle>🥴 Pire joueur de la saison</SectionTitle>
-          <RankingList rows={worst} players={players.byId} tone="rose" empty="Aucun ticket lu cette saison." />
+          <SectionTitle>{categories[1].emoji} {categories[1].label} de la saison</SectionTitle>
+          <RankingList rows={worst} players={players.byId} tone="rose" unit="voix" empty="Aucun vote lu cette saison." />
         </Card>
         <Card className="p-5">
           <SectionTitle>⚽ Buteurs</SectionTitle>
@@ -149,8 +151,9 @@ export function HistoryPage() {
                 <Card key={`${t.id}-${cat}`} className="flex items-start gap-3 px-4 py-3">
                   <span className="text-[13px] font-semibold text-rose">♥ {n}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[14px] font-semibold">{e.proposal || playerName(players.byId.get(e.playerId ?? ''))}</div>
-                    {e.comment && <p className="text-[13px] text-ink-2">{e.comment}</p>}
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{categories.find((c) => c.key === cat)?.label}</div>
+                    {e.playerId && <div className="text-[14px] font-semibold">{playerName(players.byId.get(e.playerId))}</div>}
+                    {(e.comment || e.proposal) && <p className="text-[13px] text-ink-2">{[e.proposal, e.comment].filter(Boolean).join(' — ')}</p>}
                     <div className="mt-1 text-[12px] text-muted">{m ? `${matchTitle(m)} · ${formatDate(m.date)}` : ''}</div>
                   </div>
                 </Card>
@@ -179,7 +182,7 @@ export function HistoryPage() {
 
       {saved.length > 0 && (
         <section className="mt-8">
-          <SectionTitle><span className="inline-flex items-center gap-1.5"><Bookmark className="size-4 fill-current text-sky" /> Tickets conservés</span></SectionTitle>
+          <SectionTitle><span className="inline-flex items-center gap-1.5"><Bookmark className="size-4 fill-current text-sky" /> Votes conservés</span></SectionTitle>
           <div className="space-y-3">
             {saved.map((t) => {
               const m = byMatch.get(t.matchId)
@@ -207,7 +210,7 @@ export function HistoryPage() {
                 <Link key={m.id} to={`/votes/${m.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-[14px] font-semibold">{matchTitle(m)} <ResultPill match={m} /></div>
-                    <div className="text-[12px] text-muted">{formatDate(m.date)} · {mt.length} ticket{mt.length > 1 ? 's' : ''} lu{mt.length > 1 ? 's' : ''}{b ? ` · 🏆 ${playerName(players.byId.get(b.playerId))}` : ''}</div>
+                    <div className="text-[12px] text-muted">{formatDate(m.date)} · {mt.length} vote{mt.length > 1 ? 's' : ''} lu{mt.length > 1 ? 's' : ''}{b ? ` · ${categories[0].emoji} ${playerName(players.byId.get(b.playerId))}` : ''}</div>
                   </div>
                   <Sparkles className="size-4 text-muted" />
                 </Link>

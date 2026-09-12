@@ -51,7 +51,7 @@ await admin.getByTitle('Joueur relié').first().waitFor()
 await admin.getByTitle('Joueur relié').first().selectOption({ label: 'Bruno Huberty' })
 await admin.getByText('joueur : Bruno Huberty').waitFor()
 await admin.goto(BASE + `/votes/${matchId}`)
-await admin.getByRole('button', { name: 'Mon ticket', exact: true }).click()
+await admin.getByRole('button', { name: 'Mon vote', exact: true }).click()
 await admin.getByText('Vous votez en tant que Bruno Huberty').waitFor()
 await shot(admin, '03b-admin-ticket')
 
@@ -101,21 +101,20 @@ await admin.waitForTimeout(400)
 await shot(admin, '07-stats-duos')
 
 // 5. Votants
-async function vote(name, best, worst, moment, comment, duoWith) {
+async function login(name, firstName, lastName, mode = 'public') {
   const p = await ctx('voter-' + name)
   await p.goto(BASE)
-  await p.getByRole('button', { name: /Je vote/ }).click()
-  await p.locator('input[placeholder="Rechercher un joueur…"]').fill(name)
-  await p.getByRole('button', { name: new RegExp(name) }).first().click()
-  await p.getByRole('button', { name: 'Continuer' }).click()
+  await p.getByRole('button', { name: mode === 'speaker' ? /orateur/ : /Je vote/ }).click()
+  await p.getByLabel('Prénom').fill(firstName)
+  await p.getByLabel('Nom', { exact: true }).fill(lastName)
+  await p.getByRole('button', { name: mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer' }).click()
+  return p
+}
+async function vote(name, best, worst, moment, comment) {
+  const [firstName, lastName] = name
+  const p = await login(firstName, firstName, lastName)
   await p.goto(BASE + `/votes/${matchId}`)
   await p.getByText('Vous votez en tant que').waitFor()
-  if (duoWith) {
-    await p.getByRole('switch').click()
-    await p.locator('input[placeholder="Rechercher un joueur…"]').first().fill(duoWith)
-    await p.getByRole('button', { name: new RegExp(duoWith) }).first().click()
-  }
-  const blocks = p.locator('article, .card').filter({ hasText: /Meilleur joueur|Pire joueur|Geste marquant/ })
   const bestBlock = p.locator('.card').filter({ hasText: '🏆' }).first()
   await bestBlock.locator('input[placeholder="Rechercher un joueur…"]').fill(best)
   await bestBlock.getByRole('button', { name: new RegExp(best) }).first().click()
@@ -125,30 +124,23 @@ async function vote(name, best, worst, moment, comment, duoWith) {
   await worstBlock.getByRole('button', { name: new RegExp(worst) }).first().click()
   await worstBlock.locator('textarea').fill('Il a raté un but tout fait à la 12e.')
   const momentBlock = p.locator('.card').filter({ hasText: '⚡' }).first()
-  await momentBlock.getByLabel('Le geste').fill(moment)
-  await momentBlock.locator('textarea').fill('On en parlera encore à Noël.')
-  void blocks
+  await momentBlock.locator('textarea').fill(moment)
   return p
 }
-const ronny = await vote('Ronny', 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.')
+const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.')
 await shot(ronny, '08-ticket-form')
-await ronny.getByRole('button', { name: 'Envoyer mon ticket' }).click()
-await ronny.getByText('Ticket envoyé', { exact: true }).waitFor()
+await ronny.getByRole('button', { name: 'Envoyer mon vote' }).click()
+await ronny.getByText('Vote envoyé', { exact: true }).waitFor()
 await shot(ronny, '09-ticket-sent')
-const mathis = await vote('Mathis', 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.', 'Compere')
-await mathis.getByRole('button', { name: 'Envoyer mon ticket' }).click()
-await mathis.getByText('Ticket envoyé', { exact: true }).waitFor()
-const jarne = await vote('Jarne', 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.')
+const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
+await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
+await mathis.getByText('Vote envoyé', { exact: true }).waitFor()
+const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.')
 // Jarne garde un brouillon (ne pas envoyer)
 await jarne.waitForTimeout(1500)
 
 // 6. Orateur
-const speaker = await ctx('speaker')
-await speaker.goto(BASE)
-await speaker.getByRole('button', { name: /orateur/ }).click()
-await speaker.locator('input[placeholder="Rechercher un joueur…"]').fill('Maxim ')
-await speaker.getByRole('button', { name: /Maxim Leonard/ }).first().click()
-await speaker.getByRole('button', { name: 'Entrer comme orateur' }).click()
+const speaker = await login('speaker', 'Maxim', 'Leonard', 'speaker')
 await speaker.goto(BASE + `/votes/${matchId}`)
 await speaker.getByText('Phase de vote').waitFor()
 await speaker.getByRole('button', { name: 'Participation' }).click()
@@ -169,7 +161,7 @@ await shot(speaker, '12-console-lecture')
 
 // 7. Votant en direct + coup de coeur
 await ronny.getByRole('button', { name: 'En direct' }).click()
-await ronny.getByText('1 / 2 tickets lus').waitFor()
+await ronny.getByText('1 / 2 votes lus').waitFor()
 await ronny.locator('article button:has(svg)').first().click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '13-en-direct')
@@ -197,14 +189,24 @@ await admin.goto(BASE + '/')
 await admin.waitForTimeout(800)
 await shot(admin, '18-home')
 
+// 8b. Paramètres : renommer la 3e catégorie
+await admin.goto(BASE + '/admin/parametres')
+await admin.getByLabel(/Catégorie 3/).fill('Moment de la soirée')
+await admin.getByRole('button', { name: 'Enregistrer' }).click()
+await admin.getByText('Paramètres enregistrés').waitFor()
+await admin.goto(BASE + `/votes/${matchId}`)
+await admin.getByRole('button', { name: 'Classement' }).click()
+await admin.getByText('Moment de la soirée').first().waitFor()
+await shot(admin, '17b-parametres-renommes')
+
 // 9. Mobile
 const m = await ctx('mobile', true)
 await m.goto(BASE)
 await m.waitForTimeout(800)
 await shot(m, '19-mobile-login')
 await m.getByRole('button', { name: /Je vote/ }).click()
-await m.locator('input[placeholder="Rechercher un joueur…"]').fill('Kobe')
-await m.getByRole('button', { name: /Kobe/ }).first().click()
+await m.getByLabel('Prénom').fill('Kobe')
+await m.getByLabel('Nom', { exact: true }).fill('van bellinghen')
 await m.getByRole('button', { name: 'Continuer' }).click()
 await m.waitForTimeout(800)
 await shot(m, '20-mobile-home')

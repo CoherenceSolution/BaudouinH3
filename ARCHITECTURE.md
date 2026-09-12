@@ -21,9 +21,9 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 
 | Rôle | Connexion | Peut |
 |---|---|---|
-| **Membre public (votant)** | Connexion anonyme Firebase + choix de son nom complet dans la liste des joueurs. Identité mémorisée sur l'appareil. | Remplir et modifier son ticket, suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
+| **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote, suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
 | **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
-| **Secrétaire** | E-mail + mot de passe (Firebase Auth), rôle `secretary` dans `staff/{uid}`. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, consulter le journal d'activité. |
+| **Secrétaire** | E-mail + mot de passe (Firebase Auth), rôle `secretary` dans `staff/{uid}`, relié à un joueur (`playerId`) pour voter sous son nom. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, consulter le journal d'activité. |
 | **Administrateur** | Idem secrétaire, rôle `admin`. | Tout ce que fait le secrétaire + créer/supprimer des comptes staff et changer leurs rôles. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
@@ -37,12 +37,13 @@ ce qui évite de déconnecter l'admin et rend les Cloud Functions inutiles.
 
 ```
 config/bootstrap              { claimedBy, at }
-staff/{uid}                   { email, displayName, role: 'admin'|'secretary', createdAt }
+staff/{uid}                   { email, displayName, role: 'admin'|'secretary', playerId, createdAt }
+config/settings               { categories: { best|worst|moment: { label, emoji } } }
 players/{id}                  { firstName, lastName, active, createdAt }
 matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
                                 status: 'voting'|'reading'|'closed',
                                 speakerName, speakerUid, readingStartedAt, closedAt, createdBy, createdAt, updatedAt }
-tickets/{matchId_authorId}    { matchId, authorPlayerId, coAuthorPlayerId, authorUids[],
+tickets/{matchId_authorId}    { matchId, authorPlayerId, authorUids[],
                                 best:{playerId, proposal, comment}, worst:{…}, moment:{…},
                                 status: 'draft'|'submitted', readAt, readOrder, starred, saved, revealAuthor,
                                 createdAt, updatedAt }
@@ -59,10 +60,11 @@ activity/{id}                 { actorUid, actorName, actorRole, action: 'create'
 
 Points de conception :
 
-- **Un ticket par auteur et par match** : l'identifiant `matchId_authorPlayerId` garantit l'unicité sans requête.
-  Le champ `authorUids` accumule les appareils ayant modifié le ticket ; l'orateur voit un avertissement si
-  plusieurs appareils ont touché le même ticket (« double auteur » involontaire). Le **ticket à deux** (double auteur
-  volontaire) est porté par `coAuthorPlayerId` et signalé au votant et à l'orateur.
+- **Un vote par auteur et par match** (« ticket » dans le code, « vote » à l'écran) : l'identifiant `matchId_authorPlayerId`
+  garantit l'unicité sans requête. Le champ `authorUids` accumule les appareils ayant modifié le vote ; le votant et
+  l'orateur voient un avertissement « double auteur » si plusieurs appareils ont touché le même vote.
+- **Catégories renommables** : les libellés et emojis des trois catégories vivent dans `config/settings`
+  (Gestion → Paramètres) ; les deux premières désignent un joueur, la troisième est un commentaire libre.
 - **Brouillon auto-sauvegardé** : chaque modification écrit un `draft` après 800 ms ; l'orateur et le staff voient
   ainsi la complétion (0/3, 1/3, 2/3) des votes ouverts mais non envoyés.
 - **Classements en temps réel** : seuls les tickets `submitted` **et** `readAt != null` comptent. Le compteur bouge

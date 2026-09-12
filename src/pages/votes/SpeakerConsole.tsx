@@ -109,7 +109,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
             <div>
               <div className="font-semibold">{match.status === 'voting' ? 'Phase de vote' : match.status === 'reading' ? `Lecture par ${match.speakerName ?? speakerName}` : 'Soirée terminée'}</div>
               <div className="text-[13px] text-muted">
-                {submitted.length} tickets envoyés · {drafts} brouillons · {read.length} lus
+                {submitted.length} votes envoyés · {drafts} brouillons · {read.length} lus
               </div>
             </div>
           </div>
@@ -130,7 +130,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
             )}
           </div>
         </div>
-        {match.status === 'voting' && <p className="mt-3 text-[13px] text-muted">Vous pouvez déjà préparer l’ordre de lecture et les étoiles. Les tickets restent modifiables par leurs auteurs jusqu’à la clôture.</p>}
+        {match.status === 'voting' && <p className="mt-3 text-[13px] text-muted">Vous pouvez déjà préparer l’ordre de lecture et les étoiles. Les votes restent modifiables par leurs auteurs jusqu’à la clôture.</p>}
         {isStaff && !identity && <p className="mt-3 text-[13px] text-muted">Vous êtes connecté comme staff : les noms des auteurs vous sont visibles dans cette console.</p>}
       </Card>
 
@@ -140,7 +140,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
           À lire ({unread.length})
         </SectionTitle>
         {unread.length === 0 ? (
-          <p className="card px-5 py-8 text-center text-[14px] text-muted">{submitted.length === 0 ? 'Aucun ticket envoyé pour l’instant.' : 'Tous les tickets ont été lus. 🎉'}</p>
+          <p className="card px-5 py-8 text-center text-[14px] text-muted">{submitted.length === 0 ? 'Aucun vote envoyé pour l’instant.' : 'Tous les votes ont été lus. 🎉'}</p>
         ) : (
           <div className="space-y-3">
             {unread.map((t, i) => (
@@ -156,9 +156,9 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                     <IconBtn title="Monter" disabled={i === 0} onClick={() => move(t, -1)}><ArrowUp className="size-4" /></IconBtn>
                     <IconBtn title="Descendre" disabled={i === unread.length - 1} onClick={() => move(t, 1)}><ArrowDown className="size-4" /></IconBtn>
                     <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
-                    <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Ticket retiré des conservés' : 'Ticket conservé')} />
+                    <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
                     <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Auteur masqué' : 'Auteur affiché')} />
-                    <Button size="sm" variant="accent" icon={<BookOpenCheck className="size-4" />} loading={busy === t.id} onClick={() => announce(t)} disabled={match.status === 'voting'} title={match.status === 'voting' ? 'Clôturez d’abord les votes' : 'Annoncer la lecture de ce ticket'}>
+                    <Button size="sm" variant="accent" icon={<BookOpenCheck className="size-4" />} loading={busy === t.id} onClick={() => announce(t)} disabled={match.status === 'voting'} title={match.status === 'voting' ? 'Clôturez d’abord les votes' : 'Annoncer la lecture de ce vote'}>
                       Lire
                     </Button>
                   </>
@@ -186,7 +186,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                 actions={
                   <>
                     <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
-                    <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Ticket retiré des conservés' : 'Ticket conservé')} />
+                    <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
                     <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Auteur masqué' : 'Auteur affiché')} />
                     <IconBtn title="Remettre à lire" onClick={() => patchTicket(t, { readAt: null })}><RotateCcw className="size-4" /></IconBtn>
                   </>
@@ -224,7 +224,7 @@ function StarBtn({ t, onToggle }: { t: Ticket; onToggle: () => void }) {
 
 function SaveBtn({ t, onToggle }: { t: Ticket; onToggle: () => void }) {
   return (
-    <IconBtn title={t.saved ? 'Ne plus conserver' : 'Conserver ce ticket'} onClick={onToggle} active={t.saved} activeClass="bg-sky-soft text-sky-700">
+    <IconBtn title={t.saved ? 'Ne plus conserver' : 'Conserver ce vote'} onClick={onToggle} active={t.saved} activeClass="bg-sky-soft text-sky-700">
       <Bookmark className={cx('size-4', t.saved && 'fill-current')} />
     </IconBtn>
   )

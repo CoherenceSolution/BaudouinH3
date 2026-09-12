@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { arrayUnion, doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { CheckCircle2, Lock, Pencil, Send, Users, AlertTriangle, Eye } from 'lucide-react'
+import { CheckCircle2, Lock, Pencil, Send, AlertTriangle, Eye } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
-import { VOTE_CATEGORIES, type Match, type Player, type Ticket, type VoteCategory, type VoteEntry } from '@/lib/types'
+import { useCategories } from '@/hooks/useSettings'
+import type { CategoryDef, Match, Player, Ticket, VoteCategory, VoteEntry } from '@/lib/types'
 import { cx, playerName } from '@/lib/format'
 import { isTicketComplete } from '@/lib/rankings'
 import { PlayerPicker } from '@/components/PlayerPicker'
-import { Badge, Button, Card, Textarea, Input, Toggle } from '@/components/ui'
+import { Badge, Button, Card, Textarea } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 import { logActivity } from '@/lib/activity'
 import { useActor } from '@/hooks/useActor'
@@ -16,16 +17,17 @@ interface Props {
   match: Match
   players: Player[]
   tickets: Ticket[]
-  /** true une fois la première lecture des tickets terminée */
+  /** true une fois la première lecture des votes terminée */
   loaded: boolean
   myPlayerId: string
 }
 
 const emptyEntry = (): VoteEntry => ({ playerId: null, proposal: '', comment: '' })
 
-/** Formulaire du ticket de vote (une entrée par catégorie) avec brouillon auto-sauvegardé. */
+/** Formulaire de vote (une entrée par catégorie) avec brouillon auto-sauvegardé. */
 export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Props) {
   const { user } = useAuth()
+  const categories = useCategories()
   const actor = useActor()
   const toast = useToast()
   const ticketId = `${match.id}_${myPlayerId}`
@@ -33,21 +35,17 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
   const me = players.find((p) => p.id === myPlayerId)
 
   const [entries, setEntries] = useState<Record<VoteCategory, VoteEntry>>({ best: emptyEntry(), worst: emptyEntry(), moment: emptyEntry() })
-  const [coAuthor, setCoAuthor] = useState<string | null>(null)
-  const [duo, setDuo] = useState(false)
   const [editing, setEditing] = useState(false)
   const [sending, setSending] = useState(false)
   const hydrated = useRef(false)
   const dirty = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Hydratation depuis le ticket existant (brouillon ou envoyé), une seule fois après le chargement.
+  // Hydratation depuis le vote existant (brouillon ou envoyé), une seule fois après le chargement.
   useEffect(() => {
     if (hydrated.current || !loaded) return
     if (existing) {
       setEntries({ best: existing.best ?? emptyEntry(), worst: existing.worst ?? emptyEntry(), moment: existing.moment ?? emptyEntry() })
-      setCoAuthor(existing.coAuthorPlayerId ?? null)
-      setDuo(Boolean(existing.coAuthorPlayerId))
     }
     hydrated.current = true
   }, [existing, loaded])
@@ -57,16 +55,13 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
   const otherDevice = Boolean(existing && user && existing.authorUids && !existing.authorUids.includes(user.uid))
   const showForm = !locked && (!submitted || editing)
 
-  const complete = useMemo(
-    () => isTicketComplete({ best: entries.best, worst: entries.worst, moment: entries.moment } as Ticket),
-    [entries],
-  )
+  const complete = useMemo(() => isTicketComplete({ best: entries.best, worst: entries.worst, moment: entries.moment } as Ticket), [entries])
 
   function payload(status: Ticket['status']) {
     return {
       matchId: match.id,
       authorPlayerId: myPlayerId,
-      coAuthorPlayerId: duo ? coAuthor : null,
+      coAuthorPlayerId: null,
       authorUids: arrayUnion(user?.uid ?? 'anonymous'),
       best: entries.best,
       worst: entries.worst,
@@ -76,24 +71,29 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
     }
   }
 
-  // Sauvegarde automatique du brouillon (tant que le ticket n'est pas envoyé)
+  const baseFields = () => ({
+    readAt: existing?.readAt ?? null,
+    readOrder: existing?.readOrder ?? null,
+    starred: existing?.starred ?? false,
+    saved: existing?.saved ?? false,
+    revealAuthor: existing?.revealAuthor ?? false,
+    createdAt: existing?.createdAt ?? serverTimestamp(),
+  })
+
+  // Sauvegarde automatique du brouillon (tant que le vote n'est pas envoyé)
   useEffect(() => {
     if (!hydrated.current || !dirty.current || locked || submitted) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null
-      setDoc(
-        doc(db, 'tickets', ticketId),
-        { ...payload('draft'), readAt: existing?.readAt ?? null, readOrder: existing?.readOrder ?? null, starred: existing?.starred ?? false, saved: existing?.saved ?? false, revealAuthor: existing?.revealAuthor ?? false, createdAt: existing?.createdAt ?? serverTimestamp() },
-        { merge: true },
-      ).catch(console.error)
+      setDoc(doc(db, 'tickets', ticketId), { ...payload('draft'), ...baseFields() }, { merge: true }).catch(console.error)
     }, 800)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, coAuthor, duo])
+  }, [entries])
 
   function update(cat: VoteCategory, patch: Partial<VoteEntry>) {
     dirty.current = true
@@ -108,14 +108,10 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
     }
     setSending(true)
     try {
-      await setDoc(
-        doc(db, 'tickets', ticketId),
-        { ...payload('submitted'), readAt: existing?.readAt ?? null, readOrder: existing?.readOrder ?? null, starred: existing?.starred ?? false, saved: existing?.saved ?? false, revealAuthor: existing?.revealAuthor ?? false, createdAt: existing?.createdAt ?? serverTimestamp() },
-        { merge: true },
-      )
-      await logActivity(actor, existing?.status === 'submitted' ? 'update' : 'create', 'ticket', ticketId, `Ticket ${existing?.status === 'submitted' ? 'modifié' : 'envoyé'} pour ${match.opponent}`)
+      await setDoc(doc(db, 'tickets', ticketId), { ...payload('submitted'), ...baseFields() }, { merge: true })
+      await logActivity(actor, existing?.status === 'submitted' ? 'update' : 'create', 'ticket', ticketId, `Vote ${existing?.status === 'submitted' ? 'modifié' : 'envoyé'} pour ${match.opponent}`)
       setEditing(false)
-      toast('Ticket envoyé, merci !')
+      toast('Vote envoyé, merci !')
     } catch (e) {
       console.error(e)
       toast('Envoi impossible', 'error')
@@ -141,7 +137,7 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
       {otherDevice && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-gold-soft px-4 py-3 text-[13px] text-amber-800">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <span>Un ticket existe déjà sous le nom de <b>{playerName(me)}</b> depuis un autre appareil. Si ce n’est pas vous, changez d’utilisateur. Sinon, vos modifications remplaceront le contenu existant.</span>
+          <span>Un vote existe déjà au nom de <b>{playerName(me)}</b> depuis un autre appareil. Si ce n’est pas vous, changez d’utilisateur. Sinon, vos modifications remplaceront le contenu existant.</span>
         </div>
       )}
 
@@ -150,21 +146,18 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong"><CheckCircle2 className="size-5" /></span>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">Ticket envoyé</p>
+              <p className="font-semibold">Vote envoyé</p>
               <p className="text-[14px] text-muted">
-                {existing?.readAt ? 'Votre ticket a été lu par l’orateur.' : match.status === 'voting' ? 'Vous pouvez encore le modifier tant que la lecture n’a pas commencé.' : 'La lecture est en cours.'}
+                {existing?.readAt ? 'Votre vote a été lu par l’orateur.' : match.status === 'voting' ? 'Vous pouvez encore le modifier tant que la lecture n’a pas commencé.' : 'La lecture est en cours.'}
               </p>
               {existing?.revealAuthor && <Badge tone="sky" className="mt-2"><Eye className="size-3" /> L’orateur a affiché votre nom</Badge>}
             </div>
             {!locked && <Button variant="secondary" size="sm" icon={<Pencil className="size-4" />} onClick={() => setEditing(true)}>Modifier</Button>}
           </div>
           <div className="mt-4 space-y-3">
-            {VOTE_CATEGORIES.map((c) => (
-              <TicketSummaryRow key={c.key} label={c.label} emoji={c.emoji} entry={existing![c.key]} players={players} />
+            {categories.map((c) => (
+              <TicketSummaryRow key={c.key} category={c} entry={existing![c.key]} players={players} />
             ))}
-            {existing?.coAuthorPlayerId && (
-              <p className="text-[13px] text-muted"><Users className="mr-1 inline size-4" /> Ticket à deux avec {playerName(players.find((p) => p.id === existing.coAuthorPlayerId))}</p>
-            )}
           </div>
         </Card>
       )}
@@ -172,29 +165,17 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
       {showForm && (
         <>
           <Card className="p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[15px] font-semibold">Vous votez en tant que {playerName(me)}</p>
-                <p className="text-[13px] text-muted">Vos votes restent anonymes pour l’orateur, sauf s’il choisit d’afficher votre nom.</p>
-              </div>
-            </div>
-            <div className="mt-3 border-t border-line pt-3">
-              <Toggle checked={duo} onChange={(v) => { dirty.current = true; setDuo(v); if (!v) setCoAuthor(null) }} label="Ticket à deux (double auteur)" />
-              {duo && (
-                <div className="mt-3">
-                  <PlayerPicker players={players} value={coAuthor} onChange={(id) => { dirty.current = true; setCoAuthor(id) }} exclude={[myPlayerId]} label="Co-auteur" compact />
-                </div>
-              )}
-            </div>
+            <p className="text-[15px] font-semibold">Vous votez en tant que {playerName(me)}</p>
+            <p className="text-[13px] text-muted">Votre vote reste anonyme pour l’orateur, sauf s’il choisit d’afficher votre nom.</p>
           </Card>
 
-          {VOTE_CATEGORIES.map((c) => (
-            <CategoryBlock key={c.key} category={c.key} label={c.label} emoji={c.emoji} entry={entries[c.key]} players={players} onChange={(patch) => update(c.key, patch)} />
+          {categories.map((c) => (
+            <CategoryBlock key={c.key} category={c} entry={entries[c.key]} players={players} onChange={(patch) => update(c.key, patch)} />
           ))}
 
           <div className="sticky bottom-20 z-10 md:static">
             <Button block size="lg" variant="accent" icon={<Send className="size-4" />} loading={sending} disabled={!complete} onClick={send}>
-              {submitted ? 'Mettre à jour mon ticket' : 'Envoyer mon ticket'}
+              {submitted ? 'Mettre à jour mon vote' : 'Envoyer mon vote'}
             </Button>
             {!complete && <p className="mt-2 text-center text-[12px] text-muted">Remplissez les trois catégories pour envoyer. Votre brouillon est sauvegardé automatiquement.</p>}
           </div>
@@ -204,30 +185,31 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
   )
 }
 
-function CategoryBlock({ category, label, emoji, entry, players, onChange }: { category: VoteCategory; label: string; emoji: string; entry: VoteEntry; players: Player[]; onChange: (p: Partial<VoteEntry>) => void }) {
-  const tone = category === 'best' ? 'border-l-gold' : category === 'worst' ? 'border-l-rose' : 'border-l-sky'
-  const isMoment = category === 'moment'
+function CategoryBlock({ category, entry, players, onChange }: { category: CategoryDef; entry: VoteEntry; players: Player[]; onChange: (p: Partial<VoteEntry>) => void }) {
+  const tone = category.key === 'best' ? 'border-l-gold' : category.key === 'worst' ? 'border-l-rose' : 'border-l-sky'
   return (
     <Card className={cx('border-l-4 p-4 sm:p-5', tone)}>
-      <h3 className="mb-3 flex items-center gap-2 text-[16px] font-bold"><span>{emoji}</span> {label}</h3>
+      <h3 className="mb-3 flex items-center gap-2 text-[16px] font-bold"><span>{category.emoji}</span> {category.label}</h3>
       <div className="space-y-3">
-        {isMoment && (
-          <Input label="Le geste" placeholder="Ex. : le petit pont sur le 9 adverse à la 70e" value={entry.proposal} onChange={(e) => onChange({ proposal: e.target.value })} />
-        )}
-        <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label={isMoment ? 'Joueur concerné (optionnel)' : 'Votre choix'} allowNone={isMoment} compact />
-        <Textarea label="Commentaire" placeholder={isMoment ? 'Pourquoi ce geste restera dans les mémoires…' : 'Justifiez votre vote (ce sera lu à voix haute !)'} value={entry.comment} onChange={(e) => onChange({ comment: e.target.value })} />
+        {category.pickPlayer && <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label="Votre choix" />}
+        <Textarea
+          label={category.pickPlayer ? 'Commentaire' : 'Votre commentaire'}
+          placeholder={category.pickPlayer ? 'Justifiez votre vote (ce sera lu à voix haute !)' : 'Racontez le moment qui restera dans les mémoires…'}
+          value={entry.comment}
+          onChange={(e) => onChange({ comment: e.target.value })}
+        />
       </div>
     </Card>
   )
 }
 
-export function TicketSummaryRow({ label, emoji, entry, players }: { label: string; emoji: string; entry: VoteEntry | undefined; players: Player[] | Map<string, Player> }) {
+export function TicketSummaryRow({ category, entry, players }: { category: CategoryDef; entry: VoteEntry | undefined; players: Player[] | Map<string, Player> }) {
   const p = entry?.playerId ? (players instanceof Map ? players.get(entry.playerId) : players.find((x) => x.id === entry.playerId)) : undefined
   return (
     <div className="rounded-xl bg-slate-50 px-3.5 py-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{emoji} {label}</div>
-      <div className="mt-0.5 text-[14px] font-semibold">{entry?.proposal ? entry.proposal : ''}{entry?.proposal && p ? ' — ' : ''}{p ? playerName(p) : !entry?.proposal ? '—' : ''}</div>
-      {entry?.comment && <p className="mt-0.5 whitespace-pre-line text-[14px] text-ink-2">{entry.comment}</p>}
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{category.emoji} {category.label}</div>
+      {category.pickPlayer && <div className="mt-0.5 text-[14px] font-semibold">{p ? playerName(p) : '—'}</div>}
+      {(entry?.comment || entry?.proposal) && <p className="mt-0.5 whitespace-pre-line text-[14px] text-ink-2">{[entry?.proposal, entry?.comment].filter(Boolean).join(' — ')}</p>}
     </div>
   )
 }

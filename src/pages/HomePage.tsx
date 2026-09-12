@@ -5,6 +5,7 @@ import { useAllGoals, useAllReadTickets, useFines, useMatches, usePlayers } from
 import { currentSeason, matchTitle, playerName, seasonOf } from '@/lib/format'
 import { goalTotals, nominationRanking, readTickets } from '@/lib/rankings'
 import { formatEuro } from '@/lib/fines'
+import { useCategories } from '@/hooks/useSettings'
 import { Card, Stat } from '@/components/ui'
 import { MatchCard, MatchStatusBadge } from '@/components/MatchCard'
 
@@ -16,6 +17,7 @@ export function HomePage() {
   const goals = useAllGoals()
   const tickets = useAllReadTickets()
   const season = currentSeason()
+  const categories = useCategories()
 
   const me = identity ? players.byId.get(identity.playerId) : null
   const live = matches.data.find((m) => m.status !== 'closed')
@@ -50,12 +52,12 @@ export function HomePage() {
             <div className="text-xl font-bold">{matchTitle(live)}</div>
             <p className="mt-1 text-[13px] text-slate-400">
               {live.status === 'voting'
-                ? 'Les votes sont ouverts. Remplissez votre ticket avant la lecture.'
-                : `Lecture en cours${live.speakerName ? ` par ${live.speakerName}` : ''}. Suivez les tickets et votez pour vos préférés.`}
+                ? 'Les votes sont ouverts. Remplissez votre vote avant la lecture.'
+                : `Lecture en cours${live.speakerName ? ` par ${live.speakerName}` : ''}. Suivez la lecture et votez pour vos préférés.`}
             </p>
             <Link to={`/votes/${live.id}`} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[14px] font-semibold text-ink transition hover:bg-lime-400">
               {identity?.mode === 'speaker' || isStaff ? <Mic className="size-4" /> : <Vote className="size-4" />}
-              {identity?.mode === 'speaker' ? 'Ouvrir la console orateur' : isStaff && !identity ? 'Ouvrir le match' : live.status === 'voting' ? 'Remplir mon ticket' : 'Suivre la lecture'}
+              {identity?.mode === 'speaker' ? 'Ouvrir la console orateur' : isStaff && !identity ? 'Ouvrir le match' : live.status === 'voting' ? 'Remplir mon vote' : 'Suivre la lecture'}
               <ArrowRight className="size-4" />
             </Link>
           </div>
@@ -75,14 +77,14 @@ export function HomePage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Meilleur joueur" value={best ? playerName(players.byId.get(best.playerId)) : '—'} sub={best ? `${best.count} votes cette saison` : 'Aucune lecture'} tone="gold" />
+        <Stat label={categories[0].label} value={best ? playerName(players.byId.get(best.playerId)) : '—'} sub={best ? `${best.count} voix cette saison` : 'Aucune lecture'} tone="gold" />
         <Stat label="Meilleur buteur" value={totals.scorers[0] ? playerName(players.byId.get(totals.scorers[0].playerId)) : '—'} sub={totals.scorers[0] ? `${totals.scorers[0].count} buts` : 'Aucun but encodé'} tone="accent" />
         <Stat label="Meilleur passeur" value={totals.assisters[0] ? playerName(players.byId.get(totals.assisters[0].playerId)) : '—'} sub={totals.assisters[0] ? `${totals.assisters[0].count} passes` : 'Aucune passe encodée'} />
         <Stat label="Amendes impayées" value={formatEuro(unpaid)} sub={`${fines.data.filter((f) => !f.paid).length} en attente`} tone="rose" />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <QuickLink to="/votes" icon={Trophy} title="Votes" desc="Tickets, lecture, classements" />
+        <QuickLink to="/votes" icon={Trophy} title="Votes" desc="Vote, lecture, classements" />
         <QuickLink to="/amendes" icon={Euro} title="Amendes" desc="Barème et retards" />
         <QuickLink to="/stats" icon={Target} title="Buts & passes" desc="Buteurs, passeurs, duos" />
       </div>

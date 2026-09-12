@@ -19,7 +19,7 @@ export function ticketCompletion(t: Ticket): number {
   let n = 0
   if (t.best?.playerId) n++
   if (t.worst?.playerId) n++
-  if (t.moment?.proposal?.trim() || t.moment?.playerId) n++
+  if (t.moment?.comment?.trim() || t.moment?.proposal?.trim()) n++
   return n
 }
 

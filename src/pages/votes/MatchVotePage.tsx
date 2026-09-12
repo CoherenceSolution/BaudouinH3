@@ -36,7 +36,7 @@ export function MatchVotePage() {
 
   const tabs = useMemo(() => {
     const list: { key: Tab; label: string }[] = []
-    if (!isSpeaker) list.push({ key: 'ticket', label: 'Mon ticket' })
+    if (!isSpeaker) list.push({ key: 'ticket', label: 'Mon vote' })
     if (canAnimate) list.push({ key: 'console', label: 'Console' }, { key: 'participation', label: 'Participation' })
     list.push({ key: 'live', label: 'En direct' }, { key: 'rankings', label: 'Classement' })
     return list

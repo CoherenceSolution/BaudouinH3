@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { Users, CalendarDays, ShieldCheck, ScrollText, DatabaseBackup } from 'lucide-react'
+import { Users, CalendarDays, ShieldCheck, ScrollText, DatabaseBackup, SlidersHorizontal } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { cx } from '@/lib/format'
 import { PageHeader } from '@/components/ui'
@@ -8,6 +8,7 @@ import { MatchesAdmin } from './MatchesAdmin'
 import { StaffAdmin } from './StaffAdmin'
 import { ActivityAdmin } from './ActivityAdmin'
 import { BackupAdmin } from './BackupAdmin'
+import { SettingsAdmin } from './SettingsAdmin'
 
 export function AdminPage() {
   const { isAdmin } = useAuth()
@@ -15,6 +16,7 @@ export function AdminPage() {
     { to: '/admin/joueurs', label: 'Joueurs', icon: Users },
     { to: '/admin/matchs', label: 'Matchs', icon: CalendarDays },
     ...(isAdmin ? [{ to: '/admin/staff', label: 'Staff', icon: ShieldCheck }] : []),
+    { to: '/admin/parametres', label: 'Paramètres', icon: SlidersHorizontal },
     { to: '/admin/activite', label: 'Activité', icon: ScrollText },
     ...(isAdmin ? [{ to: '/admin/sauvegarde', label: 'Sauvegarde', icon: DatabaseBackup }] : []),
   ]
@@ -33,6 +35,7 @@ export function AdminPage() {
         <Route path="joueurs" element={<PlayersAdmin />} />
         <Route path="matchs" element={<MatchesAdmin />} />
         {isAdmin && <Route path="staff" element={<StaffAdmin />} />}
+        <Route path="parametres" element={<SettingsAdmin />} />
         <Route path="activite" element={<ActivityAdmin />} />
         {isAdmin && <Route path="sauvegarde" element={<BackupAdmin />} />}
       </Routes>

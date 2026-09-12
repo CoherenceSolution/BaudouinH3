@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { Heart, Star, Bookmark, Users, Eye, EyeOff, Smartphone } from 'lucide-react'
-import { VOTE_CATEGORIES, type Player, type Ticket, type VoteCategory } from '@/lib/types'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone } from 'lucide-react'
+import type { Player, Ticket, VoteCategory } from '@/lib/types'
+import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
 import type { LikeCounts } from '@/lib/rankings'
 import { Badge } from '@/components/ui'
@@ -27,8 +28,8 @@ const catTone: Record<VoteCategory, string> = {
 }
 
 export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, index, className }: Props) {
+  const categories = useCategories()
   const author = players.get(ticket.authorPlayerId)
-  const coAuthor = ticket.coAuthorPlayerId ? players.get(ticket.coAuthorPlayerId) : null
   const counts = likes?.get(ticket.id)
   const multiDevice = (ticket.authorUids?.length ?? 0) > 1
 
@@ -38,33 +39,30 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
         {index != null && <span className="flex size-6 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">{index}</span>}
         <span className="text-[13px] font-medium">
           {showAuthor ? (
-            <span className="inline-flex items-center gap-1"><Eye className="size-3.5 text-sky" /> {playerName(author)}{coAuthor ? ` & ${playerName(coAuthor)}` : ''}</span>
+            <span className="inline-flex items-center gap-1"><Eye className="size-3.5 text-sky" /> {playerName(author)}</span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-muted"><EyeOff className="size-3.5" /> {speakerView ? 'Auteur masqué' : 'Ticket anonyme'}</span>
+            <span className="inline-flex items-center gap-1 text-muted"><EyeOff className="size-3.5" /> {speakerView ? 'Auteur masqué' : 'Vote anonyme'}</span>
           )}
         </span>
-        {ticket.coAuthorPlayerId && <Badge tone="violet"><Users className="size-3" /> Ticket à deux</Badge>}
         {ticket.starred && <Badge tone="gold"><Star className="size-3 fill-current" /> Petite étoile</Badge>}
         {ticket.saved && <Badge tone="sky"><Bookmark className="size-3 fill-current" /> Conservé</Badge>}
-        {multiDevice && speakerView && <Badge tone="rose"><Smartphone className="size-3" /> Modifié depuis {ticket.authorUids.length} appareils</Badge>}
+        {multiDevice && <Badge tone="rose"><Smartphone className="size-3" /> Double auteur : rempli depuis {ticket.authorUids.length} appareils</Badge>}
         {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
       </header>
       <div className="divide-y divide-line">
-        {VOTE_CATEGORIES.map((c) => {
+        {categories.map((c) => {
           const e = ticket[c.key]
           const p = e?.playerId ? players.get(e.playerId) : undefined
           const n = counts?.[c.key] ?? 0
           const mine = myLikes?.[c.key] === ticket.id
+          const text = [e?.proposal, e?.comment].filter(Boolean).join(' — ')
           return (
             <div key={c.key} className="flex gap-3 px-4 py-3">
-              <span className={cx('mt-0.5 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold uppercase tracking-wide', catTone[c.key])}>{c.emoji} {c.short}</span>
+              <span className={cx('mt-0.5 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold uppercase tracking-wide', catTone[c.key])} title={c.label}>{c.emoji}</span>
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-semibold leading-snug">
-                  {e?.proposal && <span>{e.proposal}</span>}
-                  {e?.proposal && p && <span className="text-muted"> — </span>}
-                  {p ? <span>{playerName(p)}</span> : !e?.proposal ? <span className="text-muted">—</span> : null}
-                </div>
-                {e?.comment && <p className="mt-1 whitespace-pre-line text-[14px] text-ink-2">{e.comment}</p>}
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</div>
+                {c.pickPlayer && <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>}
+                {text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>}
               </div>
               {(onLike || n > 0) && (
                 <button

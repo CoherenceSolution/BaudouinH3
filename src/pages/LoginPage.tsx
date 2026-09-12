@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Mic, ShieldCheck, UserRound, ArrowLeft } from 'lucide-react'
 import { useAuth, type Mode } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
-import { PlayerPicker } from '@/components/PlayerPicker'
+import { normalize } from '@/components/PlayerPicker'
+import type { Player } from '@/lib/types'
 import { Button, Input } from '@/components/ui'
 import { cx } from '@/lib/format'
 import { ErrorNotice } from '@/components/ErrorNotice'
@@ -30,8 +31,8 @@ export function LoginPage() {
       <div className="w-full max-w-md">
         {step === 'choose' && (
           <div className="rise space-y-3">
-            <RoleCard icon={UserRound} title="Je vote" desc="Je choisis mon nom et je remplis mon ticket." onClick={() => setStep('public')} />
-            <RoleCard icon={Mic} title="Je suis l’orateur" desc="Je lis les tickets et j’anime la soirée." onClick={() => setStep('speaker')} accent />
+            <RoleCard icon={UserRound} title="Je vote" desc="J’entre mon nom et je remplis mon vote." onClick={() => setStep('public')} />
+            <RoleCard icon={Mic} title="Je suis l’orateur" desc="Je lis les votes et j’anime la soirée." onClick={() => setStep('speaker')} accent />
             <RoleCard icon={ShieldCheck} title="Secrétaire / Admin" desc="Amendes, buts, joueurs, gestion." onClick={() => setStep('staff')} />
           </div>
         )}
@@ -67,28 +68,59 @@ function RoleCard({ icon: Icon, title, desc, onClick, accent }: { icon: typeof U
 
 function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; onPick: (id: string) => void }) {
   const players = usePlayers()
-  const [value, setValue] = useState<string | null>(null)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [error, setError] = useState('')
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    setError('')
+    const match = findPlayerByName(players.data, firstName, lastName)
+    if (match === 'none') {
+      setError('Aucun joueur ne porte ce nom. Vérifiez l’orthographe ou demandez au secrétaire de vous ajouter.')
+      return
+    }
+    if (match === 'ambiguous') {
+      setError('Plusieurs joueurs correspondent. Indiquez le nom complet.')
+      return
+    }
+    onPick(match.id)
+  }
+
   return (
-    <div className="rise card p-5 text-ink">
-      <button onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
+    <form onSubmit={submit} className="rise card p-5 text-ink">
+      <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
         <ArrowLeft className="size-4" /> Retour
       </button>
       <h2 className="text-lg font-bold">{mode === 'speaker' ? 'Qui est l’orateur ce soir ?' : 'Qui êtes-vous ?'}</h2>
-      <p className="mb-4 text-[13px] text-muted">Choisissez votre nom complet dans la liste.</p>
-      {players.loading ? (
-        <p className="py-6 text-center text-[13px] text-muted">Chargement des joueurs…</p>
-      ) : players.error ? (
+      <p className="mb-4 text-[13px] text-muted">Entrez votre prénom et votre nom tels qu’ils figurent dans l’équipe. Vous resterez connecté sur cet appareil.</p>
+      {players.error ? (
         <ErrorNotice error={players.error} title="Impossible de charger la liste des joueurs" />
-      ) : players.data.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-muted">Aucun joueur enregistré. Un secrétaire ou l’admin doit d’abord ajouter les joueurs dans Gestion → Joueurs.</p>
       ) : (
-        <PlayerPicker players={players.data} value={value} onChange={setValue} />
+        <>
+          <Input label="Prénom" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" autoFocus required className="mb-3" />
+          <Input label="Nom" value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" required error={error} />
+        </>
       )}
-      <Button block size="lg" className="mt-4" variant={mode === 'speaker' ? 'accent' : 'primary'} disabled={!value} onClick={() => value && onPick(value)}>
+      <Button type="submit" block size="lg" className="mt-4" variant={mode === 'speaker' ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
         {mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer'}
       </Button>
-    </div>
+    </form>
   )
+}
+
+/** Retrouve un joueur par prénom + nom, sans tenir compte des accents, de la casse ni de l'ordre. */
+export function findPlayerByName(players: Player[], firstName: string, lastName: string): Player | 'none' | 'ambiguous' {
+  const a = normalize(firstName)
+  const b = normalize(lastName)
+  if (!a || !b) return 'none'
+  const exact = players.filter((p) => (normalize(p.firstName) === a && normalize(p.lastName) === b) || (normalize(p.firstName) === b && normalize(p.lastName) === a))
+  if (exact.length === 1) return exact[0]
+  if (exact.length > 1) return 'ambiguous'
+  // Tolérance : nom composé saisi partiellement (« Van Bellinghen » ↔ « Bellinghen »)
+  const loose = players.filter((p) => normalize(p.firstName) === a && (normalize(p.lastName).includes(b) || b.includes(normalize(p.lastName))))
+  if (loose.length === 1) return loose[0]
+  return loose.length > 1 ? 'ambiguous' : 'none'
 }
 
 function StaffLogin({ onBack, onLogin }: { onBack: () => void; onLogin: (e: string, p: string) => Promise<void> }) {

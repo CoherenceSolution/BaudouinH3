@@ -42,15 +42,28 @@ export interface Match {
 
 export type VoteCategory = 'best' | 'worst' | 'moment'
 
-export const VOTE_CATEGORIES: { key: VoteCategory; label: string; short: string; emoji: string }[] = [
-  { key: 'best', label: 'Meilleur joueur', short: 'Meilleur', emoji: '🏆' },
-  { key: 'worst', label: 'Pire joueur', short: 'Pire', emoji: '🥴' },
-  { key: 'moment', label: 'Geste marquant', short: 'Geste', emoji: '⚡' },
+export interface CategoryDef {
+  key: VoteCategory
+  label: string
+  emoji: string
+  /** true : on désigne un joueur ; false : commentaire libre uniquement (geste marquant) */
+  pickPlayer: boolean
+}
+
+/** Libellés par défaut ; modifiables par le staff dans Gestion → Paramètres (config/settings). */
+export const DEFAULT_CATEGORIES: CategoryDef[] = [
+  { key: 'best', label: 'Meilleur joueur', emoji: '🏆', pickPlayer: true },
+  { key: 'worst', label: 'Pire joueur', emoji: '🥴', pickPlayer: true },
+  { key: 'moment', label: 'Geste marquant', emoji: '⚡', pickPlayer: false },
 ]
+
+export interface Settings {
+  categories?: Partial<Record<VoteCategory, { label?: string; emoji?: string }>>
+}
 
 export interface VoteEntry {
   playerId: string | null
-  proposal: string // pour "moment" : description du geste ; pour best/worst : libre (optionnel)
+  proposal: string // conservé pour compatibilité, non utilisé dans le formulaire
   comment: string
 }
 

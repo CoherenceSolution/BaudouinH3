@@ -37,7 +37,8 @@ export function AddFineModal({ open, onClose, players, types, matches }: Props) 
     const live = matches.find((m) => m.status !== 'closed') ?? matches[0]
     setMatchId(live?.id ?? '')
     if (live?.date) setDate(live.date)
-  }, [open, types, matches])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const type = types.find((t) => t.id === typeId)
   const computed = useMemo(() => (type ? computeFineAmount(type, quantity === '' ? null : Number(quantity)) : 0), [type, quantity])

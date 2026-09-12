@@ -6,12 +6,14 @@ import { Button, EmptyState, PageHeader, Spinner } from '@/components/ui'
 import { MatchCard } from '@/components/MatchCard'
 import { MatchFormModal } from '@/components/MatchFormModal'
 import { seasonOf } from '@/lib/format'
+import { useCategories } from '@/hooks/useSettings'
 
 export function VotesPage() {
   const { isStaff } = useAuth()
   const matches = useMatches()
   const players = usePlayers()
   const [create, setCreate] = useState(false)
+  const categories = useCategories()
 
   const groups = useMemo(() => {
     const m = new Map<string, typeof matches.data>()
@@ -26,7 +28,7 @@ export function VotesPage() {
     <div>
       <PageHeader
         title="Votes du match"
-        subtitle="Meilleur joueur, pire joueur et geste marquant, à chaque match."
+        subtitle={categories.map((c) => c.label).join(', ') + ', à chaque match.'}
         actions={isStaff && <Button icon={<Plus className="size-4" />} onClick={() => setCreate(true)}>Nouveau match</Button>}
       />
       {matches.loading ? (

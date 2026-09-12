@@ -45,6 +45,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---- Paramètres (libellés des catégories…) ----
+    match /config/settings {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
     // ---- Comptes staff ----
     match /staff/{uid} {
       allow read: if isStaff() || (signedIn() && request.auth.uid == uid);

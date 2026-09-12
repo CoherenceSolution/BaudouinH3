@@ -62,9 +62,9 @@ Depuis **Gestion → Staff**, l'admin crée les comptes des secrétaires.
 
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
-| Votant | « Je vote » puis son nom | Remplir son ticket (meilleur, pire, geste), suivre la lecture, voter ses coups de cœur |
-| Orateur | « Je suis l'orateur » puis son nom | Console : ordre, mélange, étoiles, lecture, révélation d'auteur, clôture |
-| Secrétaire / Admin | E-mail + mot de passe | Matchs, amendes, buts et passes, joueurs, journal d'activité |
+| Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
+| Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture, révélation d'auteur, clôture |
+| Secrétaire / Admin | E-mail + mot de passe | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité ; vote sous le nom du joueur relié au compte |
 
 ## Scripts
 

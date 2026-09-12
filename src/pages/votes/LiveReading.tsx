@@ -49,11 +49,11 @@ export function LiveReading({ match, players, tickets, likes, myPlayerId }: Prop
           <Radio className={match.status === 'reading' ? 'size-4 animate-pulse text-accent' : 'size-4 text-slate-400'} />
           {match.status === 'voting' ? 'En attente du début de la lecture' : match.status === 'reading' ? 'Lecture en cours' : 'Lecture terminée'}
         </div>
-        <span className="text-[13px] text-slate-300">{read.length} / {total} tickets lus</span>
+        <span className="text-[13px] text-slate-300">{read.length} / {total} votes lus</span>
       </div>
       {myPlayerId && read.length > 0 && <p className="text-[13px] text-muted">Touchez ♥ pour désigner votre contribution préférée dans chaque catégorie (un seul choix par catégorie, modifiable).</p>}
       {read.length === 0 ? (
-        <EmptyState icon={<Radio className="size-6" />} title="Aucun ticket lu pour le moment" description="Les tickets apparaîtront ici dès que l’orateur annoncera leur lecture." />
+        <EmptyState icon={<Radio className="size-6" />} title="Aucun vote lu pour le moment" description="Les votes apparaîtront ici dès que l’orateur annoncera leur lecture." />
       ) : (
         read.map((t, i) => (
           <TicketCard
