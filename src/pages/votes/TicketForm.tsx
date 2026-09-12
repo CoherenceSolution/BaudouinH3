@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { arrayUnion, doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { CheckCircle2, Lock, Pencil, Send, AlertTriangle, Eye } from 'lucide-react'
+import { CheckCircle2, Lock, Pencil, Send, AlertTriangle } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useCategories } from '@/hooks/useSettings'
@@ -8,7 +8,7 @@ import type { CategoryDef, Match, Player, Ticket, VoteCategory, VoteEntry } from
 import { cx, playerName } from '@/lib/format'
 import { isTicketComplete } from '@/lib/rankings'
 import { PlayerPicker } from '@/components/PlayerPicker'
-import { Badge, Button, Card, Textarea } from '@/components/ui'
+import { Button, Card, Textarea } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 import { logActivity } from '@/lib/activity'
 import { useActor } from '@/hooks/useActor'
@@ -150,7 +150,6 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
               <p className="text-[14px] text-muted">
                 {existing?.readAt ? 'Votre vote a été lu par l’orateur.' : match.status === 'voting' ? 'Vous pouvez encore le modifier tant que la lecture n’a pas commencé.' : 'La lecture est en cours.'}
               </p>
-              {existing?.revealAuthor && <Badge tone="sky" className="mt-2"><Eye className="size-3" /> L’orateur a affiché votre nom</Badge>}
             </div>
             {!locked && <Button variant="secondary" size="sm" icon={<Pencil className="size-4" />} onClick={() => setEditing(true)}>Modifier</Button>}
           </div>
@@ -166,7 +165,7 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
         <>
           <Card className="p-4 sm:p-5">
             <p className="text-[15px] font-semibold">Vous votez en tant que {playerName(me)}</p>
-            <p className="text-[13px] text-muted">Votre vote reste anonyme pour l’orateur, sauf s’il choisit d’afficher votre nom.</p>
+            <p className="text-[13px] text-muted">Votre vote est anonyme. Seul l’orateur peut, s’il en a besoin, voir votre nom depuis sa console.</p>
           </Card>
 
           {categories.map((c) => (
@@ -193,8 +192,8 @@ function CategoryBlock({ category, entry, players, onChange }: { category: Categ
       <div className="space-y-3">
         {category.pickPlayer && <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label="Votre choix" />}
         <Textarea
-          label={category.pickPlayer ? 'Commentaire' : 'Votre commentaire'}
-          placeholder={category.pickPlayer ? 'Justifiez votre vote (ce sera lu à voix haute !)' : 'Racontez le moment qui restera dans les mémoires…'}
+          label="Commentaire"
+          placeholder={category.key === 'moment' ? 'Racontez le geste ou le moment (ce sera lu à voix haute !)' : 'Justifiez votre vote (ce sera lu à voix haute !)'}
           value={entry.comment}
           onChange={(e) => onChange({ comment: e.target.value })}
         />

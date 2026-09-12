@@ -19,7 +19,7 @@ export function ticketCompletion(t: Ticket): number {
   let n = 0
   if (t.best?.playerId) n++
   if (t.worst?.playerId) n++
-  if (t.moment?.comment?.trim() || t.moment?.proposal?.trim()) n++
+  if (t.moment?.playerId) n++
   return n
 }
 
@@ -28,7 +28,7 @@ export function isTicketComplete(t: Ticket): boolean {
 }
 
 /** Classement des nominations (meilleur / pire joueur) sur un ensemble de tickets. */
-export function nominationRanking(tickets: Ticket[], category: 'best' | 'worst'): RankRow[] {
+export function nominationRanking(tickets: Ticket[], category: VoteCategory): RankRow[] {
   const counts = new Map<string, number>()
   for (const t of tickets) {
     const id = t[category]?.playerId

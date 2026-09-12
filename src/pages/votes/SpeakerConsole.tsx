@@ -22,7 +22,7 @@ interface Props {
 
 /** Console de l'orateur : ordre de lecture, étoiles, annonce des lectures, révélation d'auteur. */
 export function SpeakerConsole({ match, players, tickets, likes }: Props) {
-  const { identity, user, isStaff } = useAuth()
+  const { identity, user } = useAuth()
   const allPlayers = usePlayers(true)
   const actor = useActor()
   const toast = useToast()
@@ -131,7 +131,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
           </div>
         </div>
         {match.status === 'voting' && <p className="mt-3 text-[13px] text-muted">Vous pouvez déjà préparer l’ordre de lecture et les étoiles. Les votes restent modifiables par leurs auteurs jusqu’à la clôture.</p>}
-        {isStaff && !identity && <p className="mt-3 text-[13px] text-muted">Vous êtes connecté comme staff : les noms des auteurs vous sont visibles dans cette console.</p>}
+        <p className="mt-3 text-[13px] text-muted">Les votes sont anonymes. L’icône œil affiche le nom de l’auteur d’un vote pour vous seul, dans cette console.</p>
       </Card>
 
       {/* À lire */}
@@ -148,7 +148,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                 key={t.id}
                 ticket={t}
                 players={players}
-                showAuthor={t.revealAuthor || isStaff}
+                showAuthor={t.revealAuthor}
                 speakerView
                 index={i + 1}
                 actions={
@@ -157,7 +157,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                     <IconBtn title="Descendre" disabled={i === unread.length - 1} onClick={() => move(t, 1)}><ArrowDown className="size-4" /></IconBtn>
                     <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
                     <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
-                    <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Auteur masqué' : 'Auteur affiché')} />
+                    <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Nom de l’auteur masqué (orateur)' : 'Nom de l’auteur consulté (orateur)')} />
                     <Button size="sm" variant="accent" icon={<BookOpenCheck className="size-4" />} loading={busy === t.id} onClick={() => announce(t)} disabled={match.status === 'voting'} title={match.status === 'voting' ? 'Clôturez d’abord les votes' : 'Annoncer la lecture de ce vote'}>
                       Lire
                     </Button>
@@ -180,14 +180,14 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                 ticket={t}
                 players={players}
                 likes={counts}
-                showAuthor={t.revealAuthor || isStaff}
+                showAuthor={t.revealAuthor}
                 speakerView
                 index={i + 1}
                 actions={
                   <>
                     <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
                     <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
-                    <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Auteur masqué' : 'Auteur affiché')} />
+                    <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Nom de l’auteur masqué (orateur)' : 'Nom de l’auteur consulté (orateur)')} />
                     <IconBtn title="Remettre à lire" onClick={() => patchTicket(t, { readAt: null })}><RotateCcw className="size-4" /></IconBtn>
                   </>
                 }
@@ -232,7 +232,7 @@ function SaveBtn({ t, onToggle }: { t: Ticket; onToggle: () => void }) {
 
 function RevealBtn({ t, onToggle }: { t: Ticket; onToggle: () => void }) {
   return (
-    <IconBtn title={t.revealAuthor ? 'Masquer l’auteur' : 'Afficher le nom de l’auteur'} onClick={onToggle} active={t.revealAuthor} activeClass="bg-violet-soft text-violet-700">
+    <IconBtn title={t.revealAuthor ? 'Masquer le nom de l’auteur' : 'Voir le nom de l’auteur (pour vous seul)'} onClick={onToggle} active={t.revealAuthor} activeClass="bg-violet-soft text-violet-700">
       {t.revealAuthor ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
     </IconBtn>
   )

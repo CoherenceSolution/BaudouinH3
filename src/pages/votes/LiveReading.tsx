@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { Radio } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import { useAuth } from '@/auth/AuthProvider'
 import type { Like, Match, Player, Ticket, VoteCategory } from '@/lib/types'
 import { likeCounts, readTickets, submittedTickets } from '@/lib/rankings'
 import { EmptyState } from '@/components/ui'
@@ -19,7 +18,6 @@ interface Props {
 
 /** Vue "En direct" : les tickets lus apparaissent au fur et à mesure, chacun peut voter pour sa contribution préférée. */
 export function LiveReading({ match, players, tickets, likes, myPlayerId }: Props) {
-  const { isStaff } = useAuth()
   const toast = useToast()
   const read = useMemo(() => readTickets(tickets).sort((a, b) => (b.readAt?.toMillis() ?? 0) - (a.readAt?.toMillis() ?? 0)), [tickets])
   const counts = useMemo(() => likeCounts(likes), [likes])
@@ -61,7 +59,7 @@ export function LiveReading({ match, players, tickets, likes, myPlayerId }: Prop
             ticket={t}
             players={players}
             likes={counts}
-            showAuthor={t.revealAuthor || isStaff}
+            showAuthor={false}
             index={read.length - i}
             myLikes={myLikes}
             onLike={myPlayerId ? (c) => toggleLike(t.id, c) : undefined}

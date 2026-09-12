@@ -68,7 +68,9 @@ Points de conception :
   garantit l'unicité sans requête. Le champ `authorUids` accumule les appareils ayant modifié le vote ; le votant et
   l'orateur voient un avertissement « double auteur » si plusieurs appareils ont touché le même vote.
 - **Catégories renommables** : les libellés et emojis des trois catégories vivent dans `config/settings`
-  (Gestion → Paramètres) ; les deux premières désignent un joueur, la troisième est un commentaire libre.
+  (Gestion → Paramètres) ; chacune désigne un joueur et porte un commentaire lu à voix haute.
+- **Anonymat** : les votes lus sont anonymes pour tout le monde, staff compris. Seul l'orateur peut, vote par vote,
+  consulter le nom de l'auteur dans sa console (`revealAuthor`), sans que ce nom soit montré ailleurs.
 - **Brouillon auto-sauvegardé** : chaque modification écrit un `draft` après 800 ms ; l'orateur et le staff voient
   ainsi la complétion (0/3, 1/3, 2/3) des votes ouverts mais non envoyés.
 - **Classements en temps réel** : seuls les tickets `submitted` **et** `readAt != null` comptent. Le compteur bouge

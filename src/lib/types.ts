@@ -57,7 +57,7 @@ export interface CategoryDef {
   key: VoteCategory
   label: string
   emoji: string
-  /** true : on désigne un joueur ; false : commentaire libre uniquement (geste marquant) */
+  /** true : on désigne un joueur (toutes les catégories aujourd'hui) */
   pickPlayer: boolean
 }
 
@@ -65,7 +65,7 @@ export interface CategoryDef {
 export const DEFAULT_CATEGORIES: CategoryDef[] = [
   { key: 'best', label: 'Meilleur joueur', emoji: '🏆', pickPlayer: true },
   { key: 'worst', label: 'Pire joueur', emoji: '🥴', pickPlayer: true },
-  { key: 'moment', label: 'Geste marquant', emoji: '⚡', pickPlayer: false },
+  { key: 'moment', label: 'Geste marquant', emoji: '⚡', pickPlayer: true },
 ]
 
 export interface Settings {

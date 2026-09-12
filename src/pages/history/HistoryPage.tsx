@@ -38,6 +38,7 @@ export function HistoryPage() {
   const read = useMemo(() => readTickets(tickets.data.filter((t) => ids.has(t.matchId))), [tickets.data, ids])
   const best = useMemo(() => nominationRanking(read, 'best'), [read])
   const worst = useMemo(() => nominationRanking(read, 'worst'), [read])
+  const moment = useMemo(() => nominationRanking(read, 'moment'), [read])
   const counts = useMemo(() => likeCounts(likes.data.filter((l) => ids.has(l.matchId))), [likes.data, ids])
   const starred = useMemo(() => read.filter((t) => t.starred), [read])
   const saved = useMemo(() => read.filter((t) => t.saved && !t.starred), [read])
@@ -99,6 +100,10 @@ export function HistoryPage() {
         <Card className="p-5">
           <SectionTitle>{categories[1].emoji} {categories[1].label} de la saison</SectionTitle>
           <RankingList rows={worst} players={players.byId} tone="rose" unit="voix" empty="Aucun vote lu cette saison." />
+        </Card>
+        <Card className="p-5 md:col-span-2">
+          <SectionTitle>{categories[2].emoji} {categories[2].label} de la saison</SectionTitle>
+          <RankingList rows={moment} players={players.byId} tone="sky" unit="voix" empty="Aucun vote lu cette saison." />
         </Card>
         <Card className="p-5">
           <SectionTitle>⚽ Buteurs</SectionTitle>
@@ -172,7 +177,7 @@ export function HistoryPage() {
               return (
                 <div key={t.id}>
                   <div className="mb-1 text-[12px] font-medium text-muted">{m ? `${matchTitle(m)} · ${formatDate(m.date)}` : ''}</div>
-                  <TicketCard ticket={t} players={players.byId} likes={counts} showAuthor={t.revealAuthor || isStaff} />
+                  <TicketCard ticket={t} players={players.byId} likes={counts} showAuthor={false} />
                 </div>
               )
             })}
@@ -189,7 +194,7 @@ export function HistoryPage() {
               return (
                 <div key={t.id}>
                   <div className="mb-1 text-[12px] font-medium text-muted">{m ? `${matchTitle(m)} · ${formatDate(m.date)}` : ''}</div>
-                  <TicketCard ticket={t} players={players.byId} likes={counts} showAuthor={t.revealAuthor || isStaff} />
+                  <TicketCard ticket={t} players={players.byId} likes={counts} showAuthor={false} />
                 </div>
               )
             })}

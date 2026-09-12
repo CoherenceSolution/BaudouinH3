@@ -12,7 +12,7 @@ interface Props {
   likes?: LikeCounts
   /** Affiche le nom de l'auteur (révélé par l'orateur, ou vue staff) */
   showAuthor: boolean
-  /** Vue orateur : indique que l'auteur est masqué (sans le nommer) */
+  /** Vue orateur (réservé, sans effet visuel) */
   speakerView?: boolean
   actions?: ReactNode
   myLikes?: Partial<Record<VoteCategory, string>>
@@ -27,7 +27,7 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, index, className }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, index, className }: Props) {
   const categories = useCategories()
   const author = players.get(ticket.authorPlayerId)
   const counts = likes?.get(ticket.id)
@@ -41,7 +41,7 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
           {showAuthor ? (
             <span className="inline-flex items-center gap-1"><Eye className="size-3.5 text-sky" /> {playerName(author)}</span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-muted"><EyeOff className="size-3.5" /> {speakerView ? 'Auteur masqué' : 'Vote anonyme'}</span>
+            <span className="inline-flex items-center gap-1 text-muted"><EyeOff className="size-3.5" /> Vote anonyme</span>
           )}
         </span>
         {ticket.starred && <Badge tone="gold"><Star className="size-3 fill-current" /> Petite étoile</Badge>}

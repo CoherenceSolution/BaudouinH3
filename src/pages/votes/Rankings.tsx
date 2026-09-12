@@ -33,10 +33,7 @@ export function Rankings({ players, tickets, likes }: Props) {
     return out
   }, [read, counts])
 
-  const moments = useMemo(
-    () => read.filter((t) => t.moment?.comment || t.moment?.proposal).map((t) => ({ t, n: counts.get(t.id)?.moment ?? 0 })).sort((a, b) => b.n - a.n),
-    [read, counts],
-  )
+  const moment = useMemo(() => nominationRanking(read, 'moment'), [read])
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -50,18 +47,7 @@ export function Rankings({ players, tickets, likes }: Props) {
       </Card>
       <Card className="p-5 md:col-span-2">
         <SectionTitle>{cMoment.emoji} {cMoment.label}</SectionTitle>
-        {moments.length === 0 ? (
-          <p className="py-6 text-center text-[13px] text-muted">Rien de lu pour l’instant.</p>
-        ) : (
-          <ul className="space-y-2">
-            {moments.map(({ t, n }) => (
-              <li key={t.id} className="flex items-start gap-3 rounded-xl bg-slate-50 px-3.5 py-2.5">
-                <p className="min-w-0 flex-1 whitespace-pre-line text-[14px] text-ink">{[t.moment.proposal, t.moment.comment].filter(Boolean).join(' — ')}{t.moment.playerId && <span className="text-muted"> — {playerName(players.get(t.moment.playerId))}</span>}</p>
-                <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-rose"><Heart className="size-3.5 fill-current" /> {n}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <RankingList rows={moment} players={players} tone="sky" unit="voix" empty="Aucun vote lu pour l’instant." />
       </Card>
       <Card className="p-5 md:col-span-2">
         <SectionTitle>❤️ Coups de cœur du public</SectionTitle>

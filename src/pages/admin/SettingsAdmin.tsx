@@ -58,7 +58,7 @@ export function SettingsAdmin() {
           <Button icon={<Save className="size-4" />} loading={loading} onClick={save} disabled={Object.values(form).some((v) => !v.label.trim())}>Enregistrer</Button>
         </div>
       </Card>
-      <p className="text-[12px] text-muted">La troisième catégorie est un commentaire libre (pas de joueur à désigner) ; les deux premières désignent un joueur.</p>
+      <p className="text-[12px] text-muted">Chaque catégorie désigne un joueur, accompagné d’un commentaire lu à voix haute.</p>
     </div>
   )
 }
