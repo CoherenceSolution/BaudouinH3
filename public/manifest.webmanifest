@@ -1,0 +1,9 @@
+{
+  "name": "Baudouin H3",
+  "short_name": "Baudouin H3",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

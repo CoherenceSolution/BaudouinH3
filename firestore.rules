@@ -1,0 +1,124 @@
+rules_version = '2';
+
+// Baudouin H3 — règles de sécurité Firestore
+//
+// Modèle de confiance :
+//  - Membres publics : connexion anonyme Firebase, identité déclarative (nom choisi dans la liste).
+//    Ils peuvent créer/modifier des tickets de vote, des "coups de cœur", et piloter la lecture (orateur).
+//  - Staff (secrétaires, admin) : compte e-mail + mot de passe, rôle stocké dans staff/{uid}.
+//    Seul le staff peut écrire joueurs, matchs, amendes, buts, statistiques.
+//  - Admin : gère les comptes staff.
+//  - Le journal d'activité est en ajout seul.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function staffDoc() {
+      return get(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function isStaff() {
+      return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isStaff() && staffDoc().data.role == 'admin';
+    }
+
+    function bootstrapDone() {
+      return exists(/databases/$(database)/documents/config/bootstrap);
+    }
+
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ---- Configuration / première installation ----
+    match /config/bootstrap {
+      allow read: if true;
+      allow create: if signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && request.resource.data.claimedBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ---- Comptes staff ----
+    match /staff/{uid} {
+      allow read: if isStaff() || (signedIn() && request.auth.uid == uid);
+      // Premier admin : créé par le compte e-mail qui réclame le bootstrap.
+      allow create: if (signedIn() && request.auth.uid == uid && !bootstrapDone()
+                        && request.resource.data.role == 'admin')
+                    || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- Joueurs ----
+    match /players/{playerId} {
+      allow read: if signedIn();
+      allow create: if isStaff() || (signedIn() && !bootstrapDone());
+      allow update, delete: if isStaff();
+    }
+
+    // ---- Matchs ----
+    match /matches/{matchId} {
+      allow read: if signedIn();
+      allow create, delete: if isStaff();
+      // Le staff modifie tout ; l'orateur (anonyme) ne touche qu'au cycle de vie de la lecture.
+      allow update: if isStaff()
+                    || (signedIn() && onlyChanges(['status', 'speakerName', 'speakerUid', 'readingStartedAt', 'closedAt', 'updatedAt']));
+    }
+
+    // ---- Tickets de vote : id = <matchId>_<authorPlayerId> ----
+    match /tickets/{ticketId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.matchId is string;
+      allow delete: if isStaff();
+    }
+
+    // ---- Coups de cœur : id = <matchId>_<voterPlayerId>_<category> ----
+    match /likes/{likeId} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn();
+    }
+
+    // ---- Buts (avec passeur) ----
+    match /goals/{goalId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ---- Amendes ----
+    match /fineTypes/{id} {
+      allow read: if signedIn();
+      allow create: if isStaff() || (signedIn() && !bootstrapDone());
+      allow update, delete: if isStaff();
+    }
+
+    match /fines/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ---- Statistiques personnalisées ----
+    match /statCategories/{id} {
+      allow read: if signedIn();
+      allow create: if isStaff() || (signedIn() && !bootstrapDone());
+      allow update, delete: if isStaff();
+    }
+
+    match /statEntries/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ---- Journal d'activité (ajout seul) ----
+    match /activity/{id} {
+      allow read: if isStaff();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+  }
+}
