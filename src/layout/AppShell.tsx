@@ -5,6 +5,9 @@ import { usePlayers } from '@/hooks/useData'
 import { cx, playerName } from '@/lib/format'
 import { Avatar } from '@/components/ui'
 import { ErrorBoundary } from '@/components/ErrorNotice'
+import { PinDialog } from '@/components/PinDialog'
+import { useState } from 'react'
+import { KeyRound } from 'lucide-react'
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: Home, end: true },
@@ -15,16 +18,19 @@ const NAV = [
 ]
 
 export function AppShell() {
-  const { identity, staff, isStaff, logout, clearIdentity } = useAuth()
+  const { identity, staff, isStaff, role, logout, clearIdentity } = useAuth()
   const players = usePlayers(true)
   const navigate = useNavigate()
   const me = identity ? players.byId.get(identity.playerId) : null
   const displayName = me ? playerName(me) : isStaff ? staff?.displayName || staff?.email || '' : ''
+  const [pinOpen, setPinOpen] = useState(false)
+  const canActivate = !isStaff && me?.role === 'secretary'
+  const roleLabelKey = role === 'admin' ? 'admin' : identity?.mode === 'speaker' ? 'speaker' : role === 'secretary' ? 'secretary' : 'public'
 
   const nav = isStaff ? [...NAV, { to: '/admin', label: 'Gestion', icon: Settings }] : NAV
 
   async function handleLogout() {
-    if (isStaff) await logout()
+    if (staff) await logout()
     else clearIdentity()
     navigate('/')
   }
@@ -56,7 +62,7 @@ export function AppShell() {
           ))}
         </nav>
         <div className="border-t border-line p-3">
-          <IdentityCard me={displayName} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
+          <IdentityCard me={displayName} player={me} mode={roleLabelKey} onLogout={handleLogout} />
         </div>
       </aside>
 
@@ -67,9 +73,16 @@ export function AppShell() {
             <span className="flex size-8 items-center justify-center rounded-lg bg-ink text-[12px] font-extrabold text-accent">H3</span>
             <span className="text-[15px] font-bold">Baudouin H3</span>
           </div>
-          <IdentityCard compact me={displayName} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
+          <IdentityCard compact me={displayName} player={me} mode={roleLabelKey} onLogout={handleLogout} />
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
+          {canActivate && (
+            <button onClick={() => setPinOpen(true)} className="mb-4 flex w-full items-center gap-3 rounded-xl border border-accent-strong/40 bg-accent-soft px-4 py-3 text-left text-[13px] text-ink hover:bg-lime-100">
+              <KeyRound className="size-4 shrink-0 text-accent-strong" />
+              <span><b>Vous avez des droits de secrétaire.</b> Entrez le code commun pour les activer sur cet appareil.</span>
+            </button>
+          )}
+          {canActivate && me && <PinDialog open={pinOpen} onClose={() => setPinOpen(false)} onSuccess={() => setPinOpen(false)} playerLabel={playerName(me)} />}
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

@@ -5,9 +5,11 @@ rules_version = '2';
 // Modèle de confiance :
 //  - Membres publics : connexion anonyme Firebase, identité déclarative (nom choisi dans la liste).
 //    Ils peuvent créer/modifier des tickets de vote, des "coups de cœur", et piloter la lecture (orateur).
-//  - Staff (secrétaires, admin) : compte e-mail + mot de passe, rôle stocké dans staff/{uid}.
+//  - Admin : compte e-mail + mot de passe, rôle 'admin' dans staff/{uid}. Gère les droits.
+//  - Secrétaires : joueurs marqués role = 'secretary' par l'admin. Pour écrire, ils ouvrent avec un
+//    code PIN commun un compte technique partagé (staff/{uid}, role 'secretary') : la base reste
+//    verrouillée pour quiconque n'a pas le code.
 //    Seul le staff peut écrire joueurs, matchs, amendes, buts, statistiques.
-//  - Admin : gère les comptes staff.
 //  - Le journal d'activité est en ajout seul.
 
 service cloud.firestore {
@@ -37,6 +39,10 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
+    function onlyChangesAny(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(keys);
+    }
+
     // ---- Configuration / première installation ----
     match /config/bootstrap {
       allow read: if true;
@@ -51,6 +57,12 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // ---- Accès secrétaires : compte technique partagé, ouvert par le code PIN fixé par l'admin ----
+    match /config/secretaryAccess {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     // ---- Comptes staff ----
     match /staff/{uid} {
       allow read: if isStaff() || (signedIn() && request.auth.uid == uid);
@@ -63,11 +75,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ---- Joueurs ----
+    // ---- Joueurs : le champ « role » (droits de secrétaire) est réservé à l'admin ----
     match /players/{playerId} {
       allow read: if signedIn();
-      allow create: if isStaff() || (signedIn() && !bootstrapDone());
-      allow update, delete: if isStaff();
+      allow create: if (isStaff() || (signedIn() && !bootstrapDone()))
+                    && (!('role' in request.resource.data) || request.resource.data.role == null || isAdmin());
+      allow update: if isStaff() && (!onlyChangesAny(['role']) || isAdmin());
+      allow delete: if isStaff();
     }
 
     // ---- Matchs ----

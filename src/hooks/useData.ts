@@ -72,8 +72,8 @@ export function useStatEntries() {
 }
 
 export function useStaffList() {
-  const { isStaff, user } = useAuth()
-  return useCollection<StaffMember>(() => (isStaff ? query(collection(db, 'staff'), orderBy('displayName')) : null), [isStaff, user?.uid])
+  const { isAdmin, user } = useAuth()
+  return useCollection<StaffMember>(() => (isAdmin ? query(collection(db, 'staff'), orderBy('displayName')) : null), [isAdmin, user?.uid])
 }
 
 export function useActivity(limitTo = 300) {

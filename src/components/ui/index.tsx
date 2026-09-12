@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
 import { cx } from '@/lib/format'
 import type { Player } from '@/lib/types'
@@ -235,7 +236,8 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
     }
   }, [open, onClose])
   if (!open) return null
-  return (
+  // Portail : la modale vit hors de son parent (évite les formulaires imbriqués et les soucis de z-index).
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div
         role="dialog"
@@ -252,7 +254,8 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
         <div className="overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-line px-5 py-3 safe-bottom">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

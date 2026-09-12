@@ -26,7 +26,8 @@ export const db = firebaseConfigured
   : getFirestore(app)
 
 // Développement local avec les émulateurs Firebase (npm run emulators)
-if (env.VITE_USE_EMULATORS === 'true') {
+export const useEmulators = env.VITE_USE_EMULATORS === 'true'
+if (useEmulators) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
   connectFirestoreEmulator(db, '127.0.0.1', 8080)
 }

@@ -56,7 +56,7 @@ Au premier chargement, l'application affiche **Première installation** : créez
 L'équipe (21 joueurs), le barème d'amendes (retard 1 €/min après 5 min plafonné à 15 €, équipement, cartons)
 et deux catégories maison sont préchargés. Cet écran n'apparaît plus ensuite.
 
-Depuis **Gestion → Staff**, l'admin crée les comptes des secrétaires.
+Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires et choisit quels joueurs ont les droits.
 
 ## Utilisation
 
@@ -64,7 +64,8 @@ Depuis **Gestion → Staff**, l'admin crée les comptes des secrétaires.
 |---|---|---|
 | Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
 | Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture, révélation d'auteur, clôture |
-| Secrétaire / Admin | E-mail + mot de passe | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité ; vote sous le nom du joueur relié au compte |
+| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
+| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
 
 ## Scripts
 
@@ -78,7 +79,8 @@ Depuis **Gestion → Staff**, l'admin crée les comptes des secrétaires.
 
 ## Sécurité et confidentialité
 
-- Les votants n'ont pas de mot de passe : l'identité est déclarative (choix du nom), comme souhaité.
+- Les votants n'ont pas de mot de passe : l'identité est déclarative (saisie du nom), comme souhaité.
+- Les secrétaires n'ont pas de mot de passe personnel : un code commun, fixé par l'admin, active leurs droits.
 - Les tickets restent anonymes pour l'orateur tant qu'il ne choisit pas d'afficher un nom ; le staff connecté
   voit les auteurs.
 - Seuls les comptes staff peuvent écrire amendes, buts, joueurs et matchs : c'est garanti par `firestore.rules`,

@@ -10,6 +10,7 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { auth, db, firebaseConfigured } from '@/lib/firebase'
 import type { Player, Role, StaffMember } from '@/lib/types'
 import type { Actor } from '@/lib/activity'
+import { signInSecretary } from '@/lib/secretaryAccess'
 
 /**
  * Session applicative.
@@ -36,6 +37,7 @@ interface AuthState {
   setIdentity: (playerId: string, mode: Mode) => void
   clearIdentity: () => void
   loginStaff: (email: string, password: string) => Promise<void>
+  loginSecretary: (pin: string) => Promise<void>
   ensureAnonymous: () => Promise<User>
   logout: () => Promise<void>
   actorFor: (players: Player[]) => Actor
@@ -140,6 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearIdentity()
   }, [clearIdentity])
 
+  // Secrétaire : le code ouvre le compte technique partagé ; l'identité (nom) est conservée.
+  const loginSecretary = useCallback(async (pin: string) => {
+    await signInSecretary(pin)
+  }, [])
+
   const logout = useCallback(async () => {
     clearIdentity()
     await fbSignOut(auth)
@@ -161,11 +168,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIdentity,
       clearIdentity,
       loginStaff,
+      loginSecretary,
       ensureAnonymous,
       logout,
       actorFor: (players: Player[]) => {
-        if (staff) return { uid: staff.id, name: staff.displayName || staff.email, role: staff.role }
         const p = players.find((x) => x.id === effectiveIdentity?.playerId)
+        if (staff) return { uid: staff.id, name: p ? `${p.firstName} ${p.lastName}` : staff.displayName || staff.email, role: staff.role }
         return {
           uid: user?.uid ?? 'anonymous',
           name: p ? `${p.firstName} ${p.lastName}` : 'Membre',
@@ -173,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
     }
-  }, [authReady, staffReady, bootstrapped, user, staff, identity, setIdentity, clearIdentity, loginStaff, ensureAnonymous, logout])
+  }, [authReady, staffReady, bootstrapped, user, staff, identity, setIdentity, clearIdentity, loginStaff, loginSecretary, ensureAnonymous, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

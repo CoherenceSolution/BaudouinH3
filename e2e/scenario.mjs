@@ -55,6 +55,16 @@ await admin.getByRole('button', { name: 'Mon vote', exact: true }).click()
 await admin.getByText('Vous votez en tant que Bruno Huberty').waitFor()
 await shot(admin, '03b-admin-ticket')
 
+// 2c. Code des secrétaires + droits à Jarne
+await admin.goto(BASE + '/admin/staff')
+await admin.getByLabel('Code (4 à 8 chiffres)').fill('2468')
+await admin.getByRole('button', { name: 'Définir le code' }).click()
+await admin.getByText('Un code est défini').waitFor({ timeout: 20000 })
+await admin.getByPlaceholder('Rechercher un joueur…').fill('Jarne')
+await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
+await admin.getByText('est maintenant secrétaire').waitFor()
+await shot(admin, '03c-droits')
+
 // 3. Amende : retard 20 min -> 15 €
 await admin.goto(BASE + '/amendes')
 await admin.getByRole('button', { name: 'Infliger une amende' }).click()
@@ -101,18 +111,27 @@ await admin.waitForTimeout(400)
 await shot(admin, '07-stats-duos')
 
 // 5. Votants
-async function login(name, firstName, lastName, mode = 'public') {
+async function login(name, firstName, lastName, mode = 'public', pin = null) {
   const p = await ctx('voter-' + name)
   await p.goto(BASE)
   await p.getByRole('button', { name: mode === 'speaker' ? /orateur/ : /Je vote/ }).click()
   await p.getByLabel('Prénom').fill(firstName)
   await p.getByLabel('Nom', { exact: true }).fill(lastName)
   await p.getByRole('button', { name: mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer' }).click()
+  if (pin) {
+    await p.getByText('Code des secrétaires').waitFor()
+    await p.getByLabel('Code').fill('0000')
+    await p.getByRole('button', { name: 'Valider' }).click()
+    await p.getByText('Code incorrect.').waitFor({ timeout: 15000 })
+    await p.getByLabel('Code').fill(pin)
+    await p.getByRole('button', { name: 'Valider' }).click()
+    await p.getByRole('link', { name: 'Gestion' }).first().waitFor({ timeout: 20000 })
+  }
   return p
 }
-async function vote(name, best, worst, moment, comment) {
+async function vote(name, best, worst, moment, comment, pin = null) {
   const [firstName, lastName] = name
-  const p = await login(firstName, firstName, lastName)
+  const p = await login(firstName, firstName, lastName, 'public', pin)
   await p.goto(BASE + `/votes/${matchId}`)
   await p.getByText('Vous votez en tant que').waitFor()
   const bestBlock = p.locator('.card').filter({ hasText: '🏆' }).first()
@@ -135,7 +154,8 @@ await shot(ronny, '09-ticket-sent')
 const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
 await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await mathis.getByText('Vote envoyé', { exact: true }).waitFor()
-const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.')
+const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.', '2468')
+await shot(jarne, '07b-secretaire-par-code')
 // Jarne garde un brouillon (ne pas envoyer)
 await jarne.waitForTimeout(1500)
 

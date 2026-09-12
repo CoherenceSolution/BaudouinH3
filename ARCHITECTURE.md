@@ -23,15 +23,18 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 |---|---|---|
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote, suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
 | **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
-| **Secrétaire** | E-mail + mot de passe (Firebase Auth), rôle `secretary` dans `staff/{uid}`, relié à un joueur (`playerId`) pour voter sous son nom. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, consulter le journal d'activité. |
-| **Administrateur** | Idem secrétaire, rôle `admin`. | Tout ce que fait le secrétaire + créer/supprimer des comptes staff et changer leurs rôles. |
+| **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité. |
+| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, définir ou changer le code commun. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
 « Première installation » qui crée le compte admin, le document `config/bootstrap` et précharge l'équipe
 (21 joueurs), le barème d'amendes et deux catégories maison, en une seule écriture atomique.
 
-Les comptes secrétaires sont créés par l'admin depuis l'application via une **instance Firebase secondaire**,
-ce qui évite de déconnecter l'admin et rend les Cloud Functions inutiles.
+Le compte technique des secrétaires est créé par l'admin depuis l'application via une **instance Firebase
+secondaire** (sans déconnecter l'admin, sans Cloud Functions). Le code est le mot de passe de ce compte
+(préfixé), stocké nulle part en clair ; en cas d'oubli, l'admin crée un nouvel accès et l'ancien code cesse de
+fonctionner. Ce choix garde les règles Firestore verrouillées : sans le code, aucune écriture n'est possible même
+en connaissant le nom d'un secrétaire.
 
 ## 3. Modèle de données Firestore
 
@@ -39,7 +42,8 @@ ce qui évite de déconnecter l'admin et rend les Cloud Functions inutiles.
 config/bootstrap              { claimedBy, at }
 staff/{uid}                   { email, displayName, role: 'admin'|'secretary', playerId, createdAt }
 config/settings               { categories: { best|worst|moment: { label, emoji } } }
-players/{id}                  { firstName, lastName, active, createdAt }
+config/secretaryAccess        { email, uid, updatedAt }   ← compte technique courant des secrétaires
+players/{id}                  { firstName, lastName, active, role: 'secretary'|null, createdAt }
 matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
                                 status: 'voting'|'reading'|'closed',
                                 speakerName, speakerUid, readingStartedAt, closedAt, createdBy, createdAt, updatedAt }
@@ -84,7 +88,8 @@ Points de conception :
 
 - Lecture de toutes les données métier : utilisateur connecté (anonyme compris).
 - Écriture joueurs, matchs, amendes, barème, buts, catégories, statistiques : **staff uniquement**
-  (`exists(staff/{uid})`). L'admin seul gère `staff`.
+  (`exists(staff/{uid})`, c'est-à-dire l'admin ou le compte technique ouvert par le code). L'admin seul gère
+  `staff`, `config/secretaryAccess` et le champ `players.role`.
 - Tickets et coups de cœur : tout utilisateur connecté (modèle de confiance : l'identité du votant est déclarative,
   comme demandé, sans adresse e-mail).
 - Cycle de vie d'un match par l'orateur anonyme : autorisé uniquement pour les champs

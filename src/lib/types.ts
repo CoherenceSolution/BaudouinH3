@@ -9,7 +9,16 @@ export interface StaffMember {
   role: Role
   /** Joueur de l'équipe auquel ce compte est relié (nom, avatar, votes). */
   playerId?: string | null
+  /** Compte technique partagé des secrétaires (ouvert par le code PIN). */
+  shared?: boolean
   createdAt?: Timestamp
+}
+
+/** config/secretaryAccess : compte technique courant des secrétaires. */
+export interface SecretaryAccess {
+  email: string
+  uid: string
+  updatedAt?: Timestamp
 }
 
 export interface Player {
@@ -17,6 +26,8 @@ export interface Player {
   firstName: string
   lastName: string
   active: boolean
+  /** Droits accordés par l'admin : le membre qui se connecte sous ce nom devient secrétaire. */
+  role?: 'secretary' | null
   createdAt?: Timestamp
 }
 

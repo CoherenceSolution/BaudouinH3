@@ -41,7 +41,7 @@ export function ChooseIdentity({ players }: { players: Player[] }) {
         <div>
           <p className="font-semibold">Quel joueur êtes-vous ?</p>
           <p className="text-[13px] text-muted">
-            Votre compte {staff?.role === 'admin' ? 'administrateur' : 'secrétaire'} n’est pas encore relié à un joueur de l’équipe. Choisissez votre nom : vos votes, votre avatar et vos statistiques seront liés à votre compte sur tous vos appareils. L’admin peut modifier ce lien dans Gestion → Staff.
+            Votre compte administrateur n’est pas encore relié à un joueur de l’équipe. Choisissez votre nom : vos votes, votre avatar et vos statistiques seront liés à votre compte sur tous vos appareils. L’admin peut modifier ce lien dans Gestion → Staff.
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { Mic, ShieldCheck, UserRound, ArrowLeft } from 'lucide-react'
 import { useAuth, type Mode } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
 import { normalize } from '@/components/PlayerPicker'
+import { PinDialog } from '@/components/PinDialog'
 import type { Player } from '@/lib/types'
 import { Button, Input } from '@/components/ui'
 import { cx } from '@/lib/format'
@@ -33,7 +34,7 @@ export function LoginPage() {
           <div className="rise space-y-3">
             <RoleCard icon={UserRound} title="Je vote" desc="J’entre mon nom et je remplis mon vote." onClick={() => setStep('public')} />
             <RoleCard icon={Mic} title="Je suis l’orateur" desc="Je lis les votes et j’anime la soirée." onClick={() => setStep('speaker')} accent />
-            <RoleCard icon={ShieldCheck} title="Secrétaire / Admin" desc="Amendes, buts, joueurs, gestion." onClick={() => setStep('staff')} />
+            <RoleCard icon={ShieldCheck} title="Administrateur" desc="Compte protégé par mot de passe." onClick={() => setStep('staff')} />
           </div>
         )}
         {(step === 'public' || step === 'speaker') && (
@@ -71,6 +72,7 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [error, setError] = useState('')
+  const [pinFor, setPinFor] = useState<Player | null>(null)
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -84,6 +86,11 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
       setError('Plusieurs joueurs correspondent. Indiquez le nom complet.')
       return
     }
+    // Joueur avec droits de secrétaire : le code commun active les droits sur cet appareil.
+    if (match.role === 'secretary') {
+      setPinFor(match)
+      return
+    }
     onPick(match.id)
   }
 
@@ -93,7 +100,7 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
         <ArrowLeft className="size-4" /> Retour
       </button>
       <h2 className="text-lg font-bold">{mode === 'speaker' ? 'Qui est l’orateur ce soir ?' : 'Qui êtes-vous ?'}</h2>
-      <p className="mb-4 text-[13px] text-muted">Entrez votre prénom et votre nom tels qu’ils figurent dans l’équipe. Vous resterez connecté sur cet appareil.</p>
+      <p className="mb-4 text-[13px] text-muted">Entrez votre prénom et votre nom tels qu’ils figurent dans l’équipe. Vous resterez connecté sur cet appareil. Si l’admin vous a donné des droits de secrétaire, ils s’appliquent automatiquement.</p>
       {players.error ? (
         <ErrorNotice error={players.error} title="Impossible de charger la liste des joueurs" />
       ) : (
@@ -105,6 +112,14 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
       <Button type="submit" block size="lg" className="mt-4" variant={mode === 'speaker' ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
         {mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer'}
       </Button>
+      {pinFor && (
+        <PinDialog
+          open
+          playerLabel={`${pinFor.firstName} ${pinFor.lastName}`}
+          onClose={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
+          onSuccess={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
+        />
+      )}
     </form>
   )
 }
@@ -147,8 +162,8 @@ function StaffLogin({ onBack, onLogin }: { onBack: () => void; onLogin: (e: stri
       <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
         <ArrowLeft className="size-4" /> Retour
       </button>
-      <h2 className="text-lg font-bold">Connexion staff</h2>
-      <p className="mb-4 text-[13px] text-muted">Réservé aux secrétaires et à l’administrateur.</p>
+      <h2 className="text-lg font-bold">Connexion administrateur</h2>
+      <p className="mb-4 text-[13px] text-muted">Les secrétaires n’ont pas de mot de passe : ils se connectent avec « Je vote » et leurs droits suivent leur nom.</p>
       <Input label="Adresse e-mail" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="mb-3" />
       <Input label="Mot de passe" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required error={error} />
       <Button type="submit" block size="lg" className="mt-4" loading={loading}>
@@ -160,7 +175,7 @@ function StaffLogin({ onBack, onLogin }: { onBack: () => void; onLogin: (e: stri
 
 export function humanizeAuthError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? ''
-  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) return 'E-mail ou mot de passe incorrect.'
+  if (code.includes('invalid-credential') || code.includes('invalid-login') || code.includes('wrong-password') || code.includes('user-not-found')) return 'E-mail ou mot de passe incorrect.'
   if (code.includes('too-many-requests')) return 'Trop de tentatives, réessayez dans quelques minutes.'
   if (code.includes('network')) return 'Pas de connexion réseau.'
   if (code.includes('admin-restricted-operation') || code.includes('operation-not-allowed')) return 'Méthode de connexion non activée dans la console Firebase (voir README).'
