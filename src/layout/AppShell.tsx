@@ -4,6 +4,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
 import { cx, playerName } from '@/lib/format'
 import { Avatar } from '@/components/ui'
+import { ErrorBoundary } from '@/components/ErrorNotice'
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: Home, end: true },
@@ -68,7 +69,9 @@ export function AppShell() {
           <IdentityCard compact me={me ? playerName(me) : staff?.displayName || staff?.email || ''} player={me} mode={isStaff ? staff!.role : identity?.mode ?? 'public'} onLogout={handleLogout} />
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

@@ -7,12 +7,13 @@ import { useAuth } from '@/auth/AuthProvider'
 
 export function usePlayers(includeInactive = false) {
   const { user } = useAuth()
-  const res = useCollection<Player>(
-    () => (user ? query(collection(db, 'players'), orderBy('lastName'), orderBy('firstName')) : null),
-    [user?.uid],
-  )
+  // Un seul orderBy : deux champs exigeraient un index composite en production.
+  const res = useCollection<Player>(() => (user ? query(collection(db, 'players'), orderBy('lastName')) : null), [user?.uid])
   const data = useMemo(
-    () => (includeInactive ? res.data : res.data.filter((p) => p.active !== false)),
+    () =>
+      res.data
+        .filter((p) => includeInactive || p.active !== false)
+        .sort((a, b) => a.lastName.localeCompare(b.lastName, 'fr') || a.firstName.localeCompare(b.firstName, 'fr')),
     [res.data, includeInactive],
   )
   const byId = useMemo(() => new Map(res.data.map((p) => [p.id, p])), [res.data])

@@ -5,6 +5,7 @@ import { usePlayers } from '@/hooks/useData'
 import { PlayerPicker } from '@/components/PlayerPicker'
 import { Button, Input } from '@/components/ui'
 import { cx } from '@/lib/format'
+import { ErrorNotice } from '@/components/ErrorNotice'
 
 type Step = 'choose' | 'public' | 'speaker' | 'staff'
 
@@ -76,6 +77,10 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
       <p className="mb-4 text-[13px] text-muted">Choisissez votre nom complet dans la liste.</p>
       {players.loading ? (
         <p className="py-6 text-center text-[13px] text-muted">Chargement des joueurs…</p>
+      ) : players.error ? (
+        <ErrorNotice error={players.error} title="Impossible de charger la liste des joueurs" />
+      ) : players.data.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-muted">Aucun joueur enregistré. Un secrétaire ou l’admin doit d’abord ajouter les joueurs dans Gestion → Joueurs.</p>
       ) : (
         <PlayerPicker players={players.data} value={value} onChange={setValue} />
       )}

@@ -32,7 +32,10 @@ export function useCollection<T extends { id: string }>(
         const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<T, 'id'>) }) as T)
         setState({ data, loading: false, error: null })
       },
-      (error) => setState({ data: [], loading: false, error }),
+      (error) => {
+        console.error('Firestore :', error)
+        setState({ data: [], loading: false, error })
+      },
     )
   }, [query])
 
