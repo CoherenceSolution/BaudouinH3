@@ -100,12 +100,15 @@ bash e2e/reset-emulators.sh && node e2e/scenario.mjs   # terminal 3, captures da
 ## Déploiement automatique (GitHub Actions)
 
 Chaque push sur `main` (ou sur la branche de développement) construit et déploie le site sur Firebase via
-`.github/workflows/deploy.yml`. Configuration unique :
+`.github/workflows/deploy.yml`, **sans aucune clé stockée** : GitHub s'authentifie auprès de Google par
+fédération d'identité (Workload Identity Federation), ce qui respecte les organisations qui interdisent les
+clés de compte de service.
 
-1. Console Google Cloud → IAM → Comptes de service → créer un compte `github-deploy` avec le rôle **Éditeur**
-   sur le projet, puis **Clés → Ajouter une clé → JSON**.
-2. GitHub → Settings → Secrets and variables → Actions → New repository secret :
-   - `FIREBASE_SERVICE_ACCOUNT` : le contenu du fichier JSON téléchargé
-   - `VITE_FIREBASE_PROJECT_ID` : l'identifiant du projet
-3. Les autres clés web (`apiKey`, `authDomain`…) sont publiques : elles peuvent être committées dans
-   `.env.production` ou fournies comme secrets du même nom.
+Mise en place unique, par le propriétaire du projet Firebase :
+
+1. Ouvrir https://shell.cloud.google.com (Cloud Shell, dans le navigateur, rien à installer).
+2. Coller et exécuter le contenu de `scripts/setup-github-deploy.sh`.
+3. C'est tout : le prochain push déclenche le déploiement. L'onglet **Actions** du dépôt GitHub montre le résultat.
+
+Repli : si un secret GitHub `FIREBASE_SERVICE_ACCOUNT` (clé JSON d'un compte de service) existe, le workflow
+l'utilise à la place de la fédération.

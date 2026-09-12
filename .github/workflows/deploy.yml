@@ -3,21 +3,29 @@
 # Se déclenche à chaque push sur main ou sur la branche de développement,
 # ou à la main depuis l'onglet Actions de GitHub.
 #
-# Secrets à créer une seule fois dans GitHub : Settings → Secrets and variables → Actions
-#   FIREBASE_SERVICE_ACCOUNT   contenu JSON complet de la clé du compte de service (obligatoire)
-#   VITE_FIREBASE_PROJECT_ID   identifiant du projet Firebase (obligatoire)
-#   VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_STORAGE_BUCKET,
-#   VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID
-#       facultatifs si ces valeurs sont déjà dans le fichier .env.production du dépôt
+# Authentification sans clé (Workload Identity Federation) : GitHub prouve son identité à Google
+# et endosse le compte de service github-deploy. Aucun secret à stocker.
+# Mise en place : voir README, section « Déploiement automatique ».
+#
+# Solution de repli : si un secret FIREBASE_SERVICE_ACCOUNT (clé JSON) existe, il est utilisé à la place.
 name: Deploy
 on:
   push:
     branches: [main, claude/wonderful-heisenberg-3b07bp]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: deploy
   cancel-in-progress: false
+
+env:
+  PROJECT_ID: baudouinheren3
+  PROJECT_NUMBER: "456086247"
+  DEPLOY_SERVICE_ACCOUNT: github-deploy@baudouinheren3.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -30,43 +38,36 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - name: Configuration Firebase (les secrets non vides priment sur .env.production)
-        env:
-          S_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          S_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          S_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          S_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          S_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          S_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
-        run: |
-          [ -n "$S_API_KEY" ] && echo "VITE_FIREBASE_API_KEY=$S_API_KEY" >> "$GITHUB_ENV"
-          [ -n "$S_AUTH_DOMAIN" ] && echo "VITE_FIREBASE_AUTH_DOMAIN=$S_AUTH_DOMAIN" >> "$GITHUB_ENV"
-          [ -n "$S_PROJECT_ID" ] && echo "VITE_FIREBASE_PROJECT_ID=$S_PROJECT_ID" >> "$GITHUB_ENV"
-          [ -n "$S_STORAGE_BUCKET" ] && echo "VITE_FIREBASE_STORAGE_BUCKET=$S_STORAGE_BUCKET" >> "$GITHUB_ENV"
-          [ -n "$S_SENDER_ID" ] && echo "VITE_FIREBASE_MESSAGING_SENDER_ID=$S_SENDER_ID" >> "$GITHUB_ENV"
-          [ -n "$S_APP_ID" ] && echo "VITE_FIREBASE_APP_ID=$S_APP_ID" >> "$GITHUB_ENV"
-          echo "VITE_USE_EMULATORS=false" >> "$GITHUB_ENV"
-          true
-
       - name: Vérification et build
+        env:
+          VITE_USE_EMULATORS: "false"
         run: npm run build
 
-      - name: Identifiant du projet
-        id: project
+      - name: Mode d'authentification
+        id: mode
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          ID="${VITE_FIREBASE_PROJECT_ID:-}"
-          if [ -z "$ID" ] && [ -f .env.production ]; then
-            ID=$(grep -E '^VITE_FIREBASE_PROJECT_ID=' .env.production | cut -d= -f2- | tr -d '"' | tr -d "'")
-          fi
-          if [ -z "$ID" ]; then echo "VITE_FIREBASE_PROJECT_ID manquant (secret ou .env.production)"; exit 1; fi
-          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          if [ -n "$KEY" ]; then echo "mode=key" >> "$GITHUB_OUTPUT"; else echo "mode=wif" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Authentification Google sans clé
+        if: steps.mode.outputs.mode == 'wif'
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github/providers/github
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Authentification par clé (repli)
+        if: steps.mode.outputs.mode == 'key'
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
 
       - name: Déploiement Firebase
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then echo "Secret FIREBASE_SERVICE_ACCOUNT manquant"; exit 1; fi
-          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          npx --yes firebase-tools@latest deploy --only hosting,firestore:rules --project "${{ steps.project.outputs.id }}" --non-interactive --force
-          rm -f "$RUNNER_TEMP/sa.json"
+        run: npx --yes firebase-tools@latest deploy --only hosting,firestore:rules --project "$PROJECT_ID" --non-interactive --force
+
+      - name: Adresse du site
+        run: echo "https://$PROJECT_ID.web.app"
