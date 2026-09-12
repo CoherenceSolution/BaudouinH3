@@ -96,3 +96,16 @@ VITE_USE_EMULATORS=true npm run dev    # terminal 2
 npx playwright install chromium        # une fois
 bash e2e/reset-emulators.sh && node e2e/scenario.mjs   # terminal 3, captures dans e2e/shots/
 ```
+
+## Déploiement automatique (GitHub Actions)
+
+Chaque push sur `main` (ou sur la branche de développement) construit et déploie le site sur Firebase via
+`.github/workflows/deploy.yml`. Configuration unique :
+
+1. Console Google Cloud → IAM → Comptes de service → créer un compte `github-deploy` avec le rôle **Éditeur**
+   sur le projet, puis **Clés → Ajouter une clé → JSON**.
+2. GitHub → Settings → Secrets and variables → Actions → New repository secret :
+   - `FIREBASE_SERVICE_ACCOUNT` : le contenu du fichier JSON téléchargé
+   - `VITE_FIREBASE_PROJECT_ID` : l'identifiant du projet
+3. Les autres clés web (`apiKey`, `authDomain`…) sont publiques : elles peuvent être committées dans
+   `.env.production` ou fournies comme secrets du même nom.
