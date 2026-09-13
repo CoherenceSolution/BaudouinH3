@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react'
-import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
 import type { LikeCounts } from '@/lib/rankings'
-import { Badge } from '@/components/ui'
+import { Badge, Button } from '@/components/ui'
 
 interface Props {
   ticket: Ticket
@@ -12,11 +12,19 @@ interface Props {
   likes?: LikeCounts
   /** Affiche le nom de l'auteur (révélé par l'orateur, ou vue staff) */
   showAuthor: boolean
-  /** Vue orateur (réservé, sans effet visuel) */
+  /**
+   * Vue orateur : sur les votes « commentaire d'abord », le nom attend que l'orateur
+   * appuie sur « Annoncer le nom ». Ce repli est local à sa console : les autres écrans
+   * (lecture en direct, classements) affichent le vote normalement.
+   */
   speakerView?: boolean
   actions?: ReactNode
   myLikes?: Partial<Record<VoteCategory, string>>
   onLike?: (category: VoteCategory) => void
+  /** Prévient la console qu'un nom vient d'être annoncé (consigne vue). */
+  onReveal?: (category: VoteCategory) => void
+  /** Affiche la consigne de lecture à côté du bouton d'annonce (première fois). */
+  revealHint?: boolean
   index?: number
   className?: string
 }
@@ -27,8 +35,10 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, index, className }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, onReveal, revealHint, index, className }: Props) {
   const categories = useCategories()
+  // Noms déjà annoncés par l'orateur pendant cette lecture (état local, rien n'est écrit).
+  const [announced, setAnnounced] = useState<VoteCategory[]>([])
   const author = players.get(ticket.authorPlayerId)
   const counts = likes?.get(ticket.id)
   const multiDevice = (ticket.authorUids?.length ?? 0) > 1
@@ -56,13 +66,35 @@ export function TicketCard({ ticket, players, likes, showAuthor, actions, myLike
           const n = counts?.[c.key] ?? 0
           const mine = myLikes?.[c.key] === ticket.id
           const text = [e?.proposal, e?.comment].filter(Boolean).join(' — ')
+          // Consigne du votant : dans la console de l'orateur, le nom attend l'annonce.
+          const guided = Boolean(speakerView && c.pickPlayer && e?.commentFirst && e?.playerId)
+          const waiting = guided && !announced.includes(c.key)
+          const pick = c.pickPlayer && (
+            waiting ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="accent"
+                  icon={<Megaphone className="size-4" />}
+                  title="Lisez d’abord le commentaire, puis annoncez le nom voté."
+                  onClick={() => { setAnnounced((a) => [...a, c.key]); onReveal?.(c.key) }}
+                >
+                  Annoncer le nom
+                </Button>
+                {revealHint && <span className="text-[12px] font-medium text-violet-700">Lisez d’abord le commentaire, puis annoncez le nom voté.</span>}
+              </div>
+            ) : (
+              <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>
+            )
+          )
+          const comment = text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>
           return (
             <div key={c.key} className="flex gap-3 px-4 py-3">
               <span className={cx('mt-0.5 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold uppercase tracking-wide', catTone[c.key])} title={c.label}>{c.emoji}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</div>
-                {c.pickPlayer && <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>}
-                {text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>}
+                {/* Dans la console, le commentaire passe avant le nom : c'est l'ordre de lecture demandé. */}
+                {guided ? <>{comment}{pick}</> : <>{pick}{comment}</>}
               </div>
               {(onLike || n > 0) && (
                 <button

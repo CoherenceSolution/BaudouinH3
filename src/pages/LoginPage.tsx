@@ -2,11 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Mic, ShieldCheck, UserRound, ArrowLeft } from 'lucide-react'
 import { useAuth, type Mode } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
-import { normalize } from '@/components/PlayerPicker'
 import { PinDialog } from '@/components/PinDialog'
 import type { Player } from '@/lib/types'
 import { Button, Input } from '@/components/ui'
-import { cx } from '@/lib/format'
+import { cx, fullName, normalize, nickname } from '@/lib/format'
 import { ErrorNotice } from '@/components/ErrorNotice'
 
 type Step = 'choose' | 'public' | 'speaker' | 'staff'
@@ -79,7 +78,11 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
     setError('')
     const match = findPlayerByName(players.data, firstName, lastName)
     if (match === 'none') {
-      setError('Aucun joueur ne porte ce nom. Vérifiez l’orthographe ou demandez au secrétaire de vous ajouter.')
+      setError(
+        lastName.trim()
+          ? 'Aucun joueur ne porte ce nom ni ce surnom. Vérifiez l’orthographe ou demandez au secrétaire de vous ajouter.'
+          : 'Aucun joueur ne porte ce surnom. Ajoutez votre nom de famille, ou demandez au secrétaire de vous ajouter.',
+      )
       return
     }
     if (match === 'ambiguous') {
@@ -100,22 +103,22 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
         <ArrowLeft className="size-4" /> Retour
       </button>
       <h2 className="text-lg font-bold">{mode === 'speaker' ? 'Qui est l’orateur ce soir ?' : 'Qui êtes-vous ?'}</h2>
-      <p className="mb-4 text-[13px] text-muted">Entrez votre prénom et votre nom tels qu’ils figurent dans l’équipe. Vous resterez connecté sur cet appareil. Si l’admin vous a donné des droits de secrétaire, ils s’appliquent automatiquement.</p>
+      <p className="mb-4 text-[13px] text-muted">Entrez votre prénom et votre nom tels qu’ils figurent dans l’équipe — ou simplement votre surnom. Vous resterez connecté sur cet appareil. Si l’admin vous a donné des droits de secrétaire, ils s’appliquent automatiquement.</p>
       {players.error ? (
         <ErrorNotice error={players.error} title="Impossible de charger la liste des joueurs" />
       ) : (
         <>
-          <Input label="Prénom" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" autoFocus required className="mb-3" />
-          <Input label="Nom" value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" required error={error} />
+          <Input label="Prénom ou surnom" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" autoFocus required className="mb-3" />
+          <Input label="Nom" value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" error={error} hint={error ? undefined : 'Inutile si vous avez entré votre surnom'} />
         </>
       )}
-      <Button type="submit" block size="lg" className="mt-4" variant={mode === 'speaker' ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
+      <Button type="submit" block size="lg" className="mt-4" variant={mode === 'speaker' ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim()} loading={players.loading}>
         {mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer'}
       </Button>
       {pinFor && (
         <PinDialog
           open
-          playerLabel={`${pinFor.firstName} ${pinFor.lastName}`}
+          playerLabel={fullName(pinFor)}
           onClose={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
           onSuccess={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
         />
@@ -124,10 +127,22 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
   )
 }
 
-/** Retrouve un joueur par prénom + nom, sans tenir compte des accents, de la casse ni de l'ordre. */
+/**
+ * Retrouve un joueur par surnom, ou par prénom + nom, sans tenir compte des accents,
+ * de la casse ni de l'ordre. Le surnom seul suffit (« Bubu ») : le nom reste facultatif.
+ */
 export function findPlayerByName(players: Player[], firstName: string, lastName: string): Player | 'none' | 'ambiguous' {
   const a = normalize(firstName)
   const b = normalize(lastName)
+  if (!a && !b) return 'none'
+  const typed = [a, b].filter(Boolean).join(' ')
+  // Surnom : seul (« Bubu »), en deux morceaux (« Le » + « Chat ») ou suivi du nom de famille.
+  const byNickname = players.filter((p) => {
+    const n = normalize(nickname(p))
+    return n !== '' && (n === typed || (n === a && (!b || normalize(p.lastName) === b)))
+  })
+  if (byNickname.length === 1) return byNickname[0]
+  if (byNickname.length > 1) return 'ambiguous'
   if (!a || !b) return 'none'
   const exact = players.filter((p) => (normalize(p.firstName) === a && normalize(p.lastName) === b) || (normalize(p.firstName) === b && normalize(p.lastName) === a))
   if (exact.length === 1) return exact[0]

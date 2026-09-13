@@ -35,7 +35,7 @@ export function SetupPage() {
         INITIAL_PLAYERS.forEach((p, i) => {
           const ref = doc(collection(db, 'players'))
           if (String(i) === playerIndex) adminPlayerId = ref.id
-          batch.set(ref, { ...p, active: true, createdAt: serverTimestamp() })
+          batch.set(ref, { nickname: null, ...p, active: true, createdAt: serverTimestamp() })
         })
         INITIAL_FINE_TYPES.forEach((t, i) => batch.set(doc(collection(db, 'fineTypes')), { description: '', unitLabel: '', freeUnits: 0, cap: null, ...t, active: true, order: i, createdAt: serverTimestamp() }))
         INITIAL_STAT_CATEGORIES.forEach((c, i) => batch.set(doc(collection(db, 'statCategories')), { ...c, active: true, order: i }))

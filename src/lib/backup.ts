@@ -2,6 +2,7 @@ import { collection, getDocs, Timestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import { buildZip, type ZipEntry } from './zip'
 import type { Player } from './types'
+import { playerFullLabel } from './format'
 
 /** Collections exportées, dans l'ordre d'apparition dans l'archive. */
 export const BACKUP_COLLECTIONS = [
@@ -87,7 +88,7 @@ export async function buildBackup(onProgress?: (step: string) => void): Promise<
   }
 
   const players = new Map<string, string>()
-  for (const p of data.players as unknown as Player[]) players.set(p.id, `${p.firstName} ${p.lastName}`)
+  for (const p of data.players as unknown as Player[]) players.set(p.id, playerFullLabel(p))
   const matches = new Map<string, string>()
   for (const m of data.matches) matches.set(String(m.id), `${m.date} ${m.opponent}`)
 

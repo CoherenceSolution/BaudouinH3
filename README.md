@@ -58,13 +58,30 @@ et deux catégories maison sont préchargés. Cet écran n'apparaît plus ensuit
 
 Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires et choisit quels joueurs ont les droits.
 
+### Surnoms
+
+Chaque joueur peut recevoir un **surnom** (Gestion → Joueurs, champ « Surnom » à l'ajout ou via le crayon).
+Le surnom remplace alors le nom partout à l'écran — listes de vote, classements, amendes, statistiques — le nom
+complet restant affiché en petit dessous dans les écrans de gestion et les sélecteurs. Les recherches acceptent
+indifféremment le prénom, le nom ou le surnom, et le surnom seul suffit pour se connecter.
+
+### Vote « commentaire d'abord »
+
+Dans le formulaire de vote, chaque catégorie porte une case **« Demander à l'orateur de lire le commentaire avant
+le nom »**. Quand elle est cochée, la console de l'orateur place le commentaire au-dessus et remplace le nom par
+un bouton **« Annoncer le nom »**, avec la consigne, la première fois : « Lisez d'abord le commentaire, puis
+annoncez le nom voté. » Un appui affiche le nom dans sa console.
+
+C'est un simple guide de lecture : rien n'est caché ailleurs. La lecture en direct, les classements et la
+rétrospective affichent le vote normalement pour tout le monde.
+
 ## Utilisation
 
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
-| Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
-| Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture, révélation d'auteur, clôture |
-| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
+| Votant | « Je vote » puis prénom et nom, ou simplement son surnom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
+| Orateur | « Je suis l'orateur » puis prénom et nom, ou son surnom | Console : ordre, mélange, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, clôture |
+| Secrétaire | « Je vote », nom ou surnom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
 
 ## Scripts
@@ -89,8 +106,9 @@ Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires e
 
 ## Test de bout en bout
 
-`e2e/scenario.mjs` rejoue une soirée complète (installation, match, amendes, buts, votants, orateur, lecture,
-coups de cœur, rétrospective, vue mobile) avec Playwright contre les émulateurs :
+`e2e/scenario.mjs` rejoue une soirée complète (installation, match, amendes, buts, surnoms, votants, vote
+« commentaire d'abord », orateur, lecture guidée, coups de cœur, rétrospective, vue mobile) avec Playwright
+contre les émulateurs :
 
 ```bash
 npm run emulators                      # terminal 1

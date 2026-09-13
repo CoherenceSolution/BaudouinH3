@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Player } from '@/lib/types'
-import { playerName } from '@/lib/format'
+import { playerFullLabel } from '@/lib/format'
 import { PlayerPicker } from '@/components/PlayerPicker'
 import { Button, Card } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
@@ -24,7 +24,7 @@ export function ChooseIdentity({ players }: { players: Player[] }) {
     setLoading(true)
     try {
       await updateDoc(doc(db, 'staff', staff.id), { playerId: value })
-      await logActivity(actor, 'update', 'staff', staff.id, `Compte ${staff.displayName} relié au joueur ${playerName(players.find((p) => p.id === value))}`)
+      await logActivity(actor, 'update', 'staff', staff.id, `Compte ${staff.displayName} relié au joueur ${playerFullLabel(players.find((p) => p.id === value))}`)
       toast('Compte relié, vous pouvez voter')
     } catch (e) {
       console.error(e)
