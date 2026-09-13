@@ -11,6 +11,7 @@ export const BACKUP_COLLECTIONS = [
   'tickets',
   'likes',
   'goals',
+  'coums',
   'fineTypes',
   'fines',
   'statCategories',
@@ -67,6 +68,7 @@ const NAME_FIELDS: Record<string, string[]> = {
   tickets: ['authorPlayerId', 'coAuthorPlayerId', 'best_playerId', 'worst_playerId', 'moment_playerId'],
   likes: ['voterPlayerId'],
   goals: ['scorerPlayerId', 'assistPlayerId'],
+  coums: ['playerId'],
   fines: ['playerId'],
   statEntries: ['playerId'],
 }

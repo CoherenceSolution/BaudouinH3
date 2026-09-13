@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
-import { DEFAULT_CATEGORIES, type CategoryDef, type Settings, type VoteCategory } from '@/lib/types'
+import { DEFAULT_CATEGORIES, DEFAULT_LIVE_ALERT_THRESHOLD, type CategoryDef, type Settings, type VoteCategory } from '@/lib/types'
 import { useAuth } from '@/auth/AuthProvider'
 
 interface SettingsState {
@@ -44,4 +44,10 @@ export function useSettings() {
 /** Les trois catégories de vote avec leurs libellés personnalisés. */
 export function useCategories(): CategoryDef[] {
   return useContext(Ctx).categories
+}
+
+/** Nombre de voix dans une catégorie à partir duquel le direct signale un joueur (3 par défaut). */
+export function useLiveAlertThreshold(): number {
+  const n = useContext(Ctx).settings.liveAlertThreshold
+  return typeof n === 'number' && n > 0 ? Math.round(n) : DEFAULT_LIVE_ALERT_THRESHOLD
 }

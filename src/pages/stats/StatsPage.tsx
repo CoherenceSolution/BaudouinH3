@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { Plus, Handshake, Pencil, Trash2, ClipboardList, Settings2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
@@ -9,8 +9,9 @@ import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Match, Player, StatCategory, StatEntry } from '@/lib/types'
 import { goalTotals } from '@/lib/rankings'
-import { currentSeason, cx, formatDate, matchTitle, playerName, seasonOf, todayIso } from '@/lib/format'
+import { currentSeason, formatDate, matchTitle, playerName, seasonOf, todayIso } from '@/lib/format'
 import { Avatar, Button, Card, EmptyState, Input, Modal, PageHeader, SectionTitle, Select, Spinner, Stat, Chip } from '@/components/ui'
+import { StatCategoryModal } from '@/components/StatCategoryModal'
 import { RankingList } from '@/components/RankingList'
 import { PlayerPicker } from '@/components/PlayerPicker'
 import { useToast } from '@/components/ui/Toast'
@@ -49,7 +50,7 @@ export function StatsPage() {
       <PageHeader
         title="Buts & passes"
         subtitle="Buteurs, passeurs décisifs, duos et catégories maison."
-        actions={isStaff && <Button variant="secondary" icon={<Settings2 className="size-4" />} onClick={() => setEditCat('new')}>Nouvelle catégorie</Button>}
+        actions={isStaff && <Button variant="secondary" icon={<Settings2 className="size-4" />} onClick={() => setEditCat('new')}>Nouvelle liste</Button>}
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Chip active={tab === 'scorers'} onClick={() => setTab('scorers')}>⚽ Buteurs</Chip>
@@ -114,7 +115,14 @@ export function StatsPage() {
       )}
 
       {addEntry && <AddEntryModal category={addEntry} players={players.data} matches={matches.data} onClose={() => setAddEntry(null)} />}
-      <CategoryModal open={editCat !== null} category={editCat === 'new' ? null : editCat} nextOrder={cats.data.length} onClose={() => setEditCat(null)} onDeleted={() => setTab('scorers')} />
+      <StatCategoryModal
+        open={editCat !== null}
+        category={editCat === 'new' ? null : editCat}
+        nextOrder={cats.data.length}
+        entryCount={editCat && editCat !== 'new' ? entries.data.filter((e) => e.categoryId === editCat.id).length : 0}
+        onClose={() => setEditCat(null)}
+        onDeleted={() => setTab('scorers')}
+      />
     </div>
   )
 }
@@ -168,7 +176,7 @@ function CategoryView({ category, entries, players, isStaff, onAdd, onEdit }: { 
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Card className="p-5">
-        <SectionTitle right={isStaff && <div className="flex gap-1"><Button size="sm" variant="ghost" icon={<Pencil className="size-4" />} onClick={onEdit}>Catégorie</Button><Button size="sm" icon={<Plus className="size-4" />} onClick={onAdd}>Ajouter</Button></div>}>
+        <SectionTitle right={isStaff && <div className="flex gap-1"><Button size="sm" variant="ghost" icon={<Pencil className="size-4" />} onClick={onEdit}>Modifier la liste</Button><Button size="sm" icon={<Plus className="size-4" />} onClick={onAdd}>Ajouter</Button></div>}>
           {category.emoji} {category.label}
         </SectionTitle>
         <RankingList rows={rows} players={players} tone="gold" unit="fois" max={30} empty="Aucune entrée cette saison." />
@@ -236,70 +244,3 @@ function AddEntryModal({ category, players, matches, onClose }: { category: Stat
     </Modal>
   )
 }
-
-function CategoryModal({ open, category, nextOrder, onClose, onDeleted }: { open: boolean; category: StatCategory | null; nextOrder: number; onClose: () => void; onDeleted: () => void }) {
-  const actor = useActor()
-  const toast = useToast()
-  const [label, setLabel] = useState('')
-  const [emoji, setEmoji] = useState('🏅')
-  const [active, setActive] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [key, setKey] = useState<string | null>(null)
-  const openKey = open ? (category?.id ?? 'new') : null
-  if (openKey !== key) {
-    setKey(openKey)
-    setLabel(category?.label ?? '')
-    setEmoji(category?.emoji ?? '🏅')
-    setActive(category?.active ?? true)
-  }
-
-  async function submit() {
-    setLoading(true)
-    try {
-      if (category) {
-        await updateDoc(doc(db, 'statCategories', category.id), { label: label.trim(), emoji: emoji.trim() || '🏅', active })
-        await logActivity(actor, 'update', 'statCategory', category.id, `Catégorie modifiée : ${label.trim()}`)
-      } else {
-        const ref = await addDoc(collection(db, 'statCategories'), { label: label.trim(), emoji: emoji.trim() || '🏅', active, order: nextOrder })
-        await logActivity(actor, 'create', 'statCategory', ref.id, `Catégorie créée : ${label.trim()}`)
-      }
-      toast('Catégorie enregistrée')
-      onClose()
-    } catch (e) {
-      console.error(e)
-      toast('Enregistrement impossible', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function remove() {
-    if (!category || !confirm(`Supprimer la catégorie « ${category.label} » ? Les entrées existantes ne seront plus affichées.`)) return
-    try {
-      await deleteDoc(doc(db, 'statCategories', category.id))
-      await logActivity(actor, 'delete', 'statCategory', category.id, `Catégorie supprimée : ${category.label}`)
-      toast('Catégorie supprimée')
-      onDeleted()
-      onClose()
-    } catch (e) {
-      console.error(e)
-      toast('Suppression impossible', 'error')
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={category ? 'Modifier la catégorie' : 'Nouvelle catégorie'} footer={<>{category && <Button variant="danger" className="mr-auto" icon={<Trash2 className="size-4" />} onClick={remove}>Supprimer</Button>}<Button variant="ghost" onClick={onClose}>Annuler</Button><Button loading={loading} disabled={!label.trim()} onClick={submit}>Enregistrer</Button></>}>
-      <div className="space-y-3">
-        <div className="grid grid-cols-[80px_1fr] gap-3">
-          <Input label="Emoji" value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={4} />
-          <Input label="Nom" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex. : Papa dans l’année" />
-        </div>
-        <label className={cx('flex items-center gap-2 text-[14px]')}>
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="size-4 accent-lime-500" /> Visible pour tous
-        </label>
-      </div>
-    </Modal>
-  )
-}
-
-

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone } from 'lucide-react'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Flame } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
@@ -19,6 +19,10 @@ interface Props {
   onLike?: (category: VoteCategory) => void
   index?: number
   className?: string
+  /** Voix cumulées du joueur désigné, catégorie par catégorie, au moment de cette lecture. */
+  nominationCounts?: Partial<Record<VoteCategory, number>>
+  /** Seuil à partir duquel on signale le joueur (3 voix par défaut). */
+  alertThreshold?: number
 }
 
 const catTone: Record<VoteCategory, string> = {
@@ -27,7 +31,7 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, index, className }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, index, className, nominationCounts, alertThreshold }: Props) {
   const categories = useCategories()
   const author = players.get(ticket.authorPlayerId)
   const counts = likes?.get(ticket.id)
@@ -56,12 +60,24 @@ export function TicketCard({ ticket, players, likes, showAuthor, actions, myLike
           const n = counts?.[c.key] ?? 0
           const mine = myLikes?.[c.key] === ticket.id
           const text = [e?.proposal, e?.comment].filter(Boolean).join(' — ')
+          const reached = nominationCounts?.[c.key]
+          const alert = alertThreshold != null && reached != null && reached >= alertThreshold
           return (
             <div key={c.key} className="flex gap-3 px-4 py-3">
               <span className={cx('mt-0.5 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold uppercase tracking-wide', catTone[c.key])} title={c.label}>{c.emoji}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</div>
-                {c.pickPlayer && <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>}
+                {c.pickPlayer && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</span>
+                    {alert && (
+                      <Badge tone="gold" className="font-semibold">
+                        <Flame className="size-3" />
+                        <span>{reached}<sup>e</sup> voix</span>
+                      </Badge>
+                    )}
+                  </div>
+                )}
                 {text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>}
               </div>
               {(onLike || n > 0) && (

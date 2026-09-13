@@ -10,6 +10,7 @@ rules_version = '2';
 //    code PIN commun un compte technique partagé (staff/{uid}, role 'secretary') : la base reste
 //    verrouillée pour quiconque n'a pas le code.
 //    Seul le staff peut écrire joueurs, matchs, amendes, buts, statistiques.
+//  - La coum (mise commune d'un match) est visible par tous, encaissée par le staff uniquement.
 //  - Le journal d'activité est en ajout seul.
 
 service cloud.firestore {
@@ -108,6 +109,13 @@ service cloud.firestore {
 
     // ---- Buts (avec passeur) ----
     match /goals/{goalId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ---- La coum : mise commune de chaque match ----
+    // Tout le monde voit qui a coumé ; seul le staff (trésorier) encaisse, marque les absents et recoume.
+    match /coums/{id} {
       allow read: if signedIn();
       allow write: if isStaff();
     }

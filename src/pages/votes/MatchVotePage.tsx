@@ -4,19 +4,21 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { ArrowLeft } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
-import { useLikes, usePlayers, useTickets } from '@/hooks/useData'
+import { useCoums, useLikes, usePlayers, useTickets } from '@/hooks/useData'
 import type { Match } from '@/lib/types'
 import { formatDate, matchTitle } from '@/lib/format'
 import { Spinner, Tabs } from '@/components/ui'
 import { MatchStatusBadge, ResultPill } from '@/components/MatchCard'
+import { VoteCountdown } from '@/components/VoteTimer'
 import { TicketForm } from './TicketForm'
 import { SpeakerConsole } from './SpeakerConsole'
 import { LiveReading } from './LiveReading'
 import { Rankings } from './Rankings'
 import { Participation } from './Participation'
 import { ChooseIdentity } from './ChooseIdentity'
+import { CoumPanel } from './CoumPanel'
 
-type Tab = 'ticket' | 'console' | 'participation' | 'live' | 'rankings'
+type Tab = 'ticket' | 'console' | 'participation' | 'live' | 'rankings' | 'coum'
 
 export function MatchVotePage() {
   const { matchId } = useParams<{ matchId: string }>()
@@ -24,6 +26,7 @@ export function MatchVotePage() {
   const players = usePlayers()
   const tickets = useTickets(matchId)
   const likes = useLikes(matchId)
+  const coums = useCoums(matchId)
   const [match, setMatch] = useState<Match | null | undefined>(undefined)
 
   const isSpeaker = identity?.mode === 'speaker'
@@ -38,7 +41,7 @@ export function MatchVotePage() {
     const list: { key: Tab; label: string }[] = []
     if (!isSpeaker) list.push({ key: 'ticket', label: 'Mon vote' })
     if (canAnimate) list.push({ key: 'console', label: 'Console' }, { key: 'participation', label: 'Participation' })
-    list.push({ key: 'live', label: 'En direct' }, { key: 'rankings', label: 'Classement' })
+    list.push({ key: 'live', label: 'En direct' }, { key: 'rankings', label: 'Classement' }, { key: 'coum', label: 'Coum' })
     return list
   }, [identity, isSpeaker, canAnimate])
 
@@ -52,6 +55,9 @@ export function MatchVotePage() {
     if (match?.status === 'reading' && !canAnimate && tab === 'ticket') setTab('live')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match?.status])
+
+  const myTicket = identity ? tickets.data.find((t) => t.id === `${matchId}_${identity.playerId}`) : undefined
+  const votePending = Boolean(identity) && myTicket?.status !== 'submitted'
 
   if (match === undefined || players.loading) return <Spinner />
   if (match === null)
@@ -82,11 +88,15 @@ export function MatchVotePage() {
         </div>
       </div>
 
+      {/* La console a son propre bloc minuteur : inutile d'y répéter le bandeau. */}
+      {tab !== 'console' && <VoteCountdown match={match} pending={votePending} />}
+
       {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
       {tab === 'console' && <SpeakerConsole match={match} players={players.byId} tickets={tickets.data} likes={likes.data} />}
       {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}
       {tab === 'live' && <LiveReading match={match} players={players.byId} tickets={tickets.data} likes={likes.data} myPlayerId={identity?.playerId ?? null} />}
       {tab === 'rankings' && <Rankings players={players.byId} tickets={tickets.data} likes={likes.data} />}
+      {tab === 'coum' && <CoumPanel match={match} players={players.data} coums={coums.data} loading={coums.loading} />}
     </div>
   )
 }

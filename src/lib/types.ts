@@ -46,12 +46,22 @@ export interface Match {
   speakerUid?: string | null
   readingStartedAt?: Timestamp | null
   closedAt?: Timestamp | null
+  /** Minuteur des votes : instant de fin affiché en compte à rebours (posé par le staff). */
+  voteDeadline?: Timestamp | null
+  /** Durée choisie pour le minuteur, en minutes (mémorisée pour le bouton « relancer »). */
+  voteTimerMinutes?: number | null
+  /** Nom de la personne qui a lancé le minuteur. */
+  voteTimerBy?: string | null
+  /** Coum : montant par personne pour ce match (par défaut, le montant des paramètres). */
+  coumAmount?: number | null
   createdBy: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
 
 export type VoteCategory = 'best' | 'worst' | 'moment'
+
+export const VOTE_CATEGORIES: VoteCategory[] = ['best', 'worst', 'moment']
 
 export interface CategoryDef {
   key: VoteCategory
@@ -70,7 +80,17 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 
 export interface Settings {
   categories?: Partial<Record<VoteCategory, { label?: string; emoji?: string }>>
+  /** Coum : montant par personne et par match (10 € par défaut). */
+  coum?: { amount?: number }
+  /** Nombre de voix dans une catégorie à partir duquel le direct signale un joueur. */
+  liveAlertThreshold?: number
 }
+
+/** Montant par défaut de la coum, en euros. */
+export const DEFAULT_COUM_AMOUNT = 10
+
+/** Seuil par défaut de l'alerte « ce joueur revient souvent » pendant la lecture. */
+export const DEFAULT_LIVE_ALERT_THRESHOLD = 3
 
 export interface VoteEntry {
   playerId: string | null
@@ -106,6 +126,28 @@ export interface Like {
   category: VoteCategory
   ticketId: string
   createdAt?: Timestamp
+}
+
+/**
+ * La coum : à chaque match, chacun met la même somme au pot.
+ * Un document par joueur et par match ; le trésorier (staff) indique ce qu'il a encaissé.
+ * « Recoumer » = redemander une coum aux présents : `rounds` augmente d'une unité.
+ */
+export interface Coum {
+  id: string // = `${matchId}_${playerId}`
+  matchId: string
+  playerId: string
+  /** Nombre de coums demandées : 1 au départ, +1 à chaque recoum. */
+  rounds: number
+  /** Nombre de coums encaissées par le trésorier. */
+  paid: number
+  /** Joueur absent : il ne doit rien pour ce match. */
+  absent: boolean
+  lastPaidAt?: Timestamp | null
+  collectedBy?: string
+  collectedByName?: string
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
 }
 
 export type FineKind = 'fixed' | 'perUnit'

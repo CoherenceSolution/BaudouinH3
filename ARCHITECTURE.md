@@ -1,7 +1,8 @@
 # Baudouin H3 — Architecture
 
 Application web légère pour l'équipe Baudouin H3 : votes d'après-match (meilleur joueur, pire joueur,
-geste marquant), gestion des amendes, statistiques de buts et passes décisives, journal d'activité.
+geste marquant), la coum (mise commune de chaque match), gestion des amendes, statistiques de buts et
+passes décisives, journal d'activité.
 
 ## 1. Choix techniques
 
@@ -23,7 +24,8 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 |---|---|---|
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote, suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
 | **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
-| **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité. |
+| **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité.
+Tient aussi le rôle de **trésorier** : encaisse la coum, note les absents, « recoume », lance le minuteur des votes. |
 | **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, définir ou changer le code commun. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
@@ -46,12 +48,16 @@ config/secretaryAccess        { email, uid, updatedAt }   ← compte technique c
 players/{id}                  { firstName, lastName, active, role: 'secretary'|null, createdAt }
 matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
                                 status: 'voting'|'reading'|'closed',
-                                speakerName, speakerUid, readingStartedAt, closedAt, createdBy, createdAt, updatedAt }
+                                speakerName, speakerUid, readingStartedAt, closedAt,
+                                voteDeadline, voteTimerMinutes, voteTimerBy, coumAmount,
+                                createdBy, createdAt, updatedAt }
 tickets/{matchId_authorId}    { matchId, authorPlayerId, authorUids[],
                                 best:{playerId, proposal, comment}, worst:{…}, moment:{…},
                                 status: 'draft'|'submitted', readAt, readOrder, starred, saved, revealAuthor,
                                 createdAt, updatedAt }
 likes/{matchId_voterId_cat}   { matchId, voterPlayerId, category, ticketId, createdAt }
+coums/{matchId_playerId}      { matchId, playerId, rounds, paid, absent, lastPaidAt,
+                                collectedBy, collectedByName, createdAt, updatedAt }
 goals/{id}                    { matchId, scorerPlayerId, assistPlayerId, minute, order, createdAt }
 fineTypes/{id}                { label, description, kind: 'fixed'|'perUnit', amount, unitLabel, freeUnits, cap, active, order }
 fines/{id}                    { playerId, fineTypeId, label, matchId, date, quantity, amount, note, paid, paidAt,
@@ -76,12 +82,27 @@ Points de conception :
 - **Classements en temps réel** : seuls les tickets `submitted` **et** `readAt != null` comptent. Le compteur bouge
   donc exactement au moment où l'orateur annonce une lecture.
 - **Coup de cœur** : un seul choix par votant et par catégorie (identifiant `matchId_voterId_category`), modifiable.
+- **La coum** : à chaque match, chacun met la même somme au pot (10 € par défaut, réglable globalement dans
+  Gestion → Paramètres et match par match). Un document par joueur et par match : `rounds` compte les coums
+  demandées, `paid` celles que le trésorier a encaissées, `absent` exclut le joueur du match. Trois états en
+  découlent : **a coumé**, **à payer**, **absent**. « **Recoumer** » ajoute une coum à tous les présents (ou à
+  un joueur précis) : `rounds` passe à 2, 3… et ceux qui avaient payé repassent « à payer ». Tout le monde voit
+  qui a coumé ; seul le staff écrit (règles Firestore).
+- **Minuteur des votes** : l'admin ou un secrétaire pose une échéance (`matches.voteDeadline`) depuis la console.
+  Tous les appareils affichent le même compte à rebours, avec un message adapté à ceux qui n'ont pas encore envoyé
+  leur vote. Rien ne se ferme tout seul : la clôture reste un geste de l'orateur, et l'échéance est effacée à la clôture.
+- **Alerte du direct** : pendant la lecture, le décompte des nominations est refait lecture par lecture
+  (`nominationProgress`). Dès qu'un joueur atteint le seuil (3 voix par défaut, réglable) dans une catégorie,
+  un bandeau le signale en direct et le vote lu porte un badge « 3ᵉ voix ».
 - **Collections de premier niveau** pour tickets, likes et buts (plutôt que des sous-collections) : la rétrospective
   de saison lit tout en une requête simple, sans index composites ni requêtes de groupe de collections.
 - **Montant d'une amende** calculé côté client depuis le barème (`(quantité − unités offertes) × tarif`, plafonné) et
   figé dans le document `fines` avec le libellé, pour que l'historique reste exact si le barème change.
 - **Passes décisives liées aux buts** : chaque but porte son passeur ; le classement des duos (« Mathis a fait
   17 assists à Max Vigne ») est une agrégation `assistPlayerId → scorerPlayerId`.
+- **Listes maison** (« Papa de l'année », « Homme du match »…) : collections `statCategories` / `statEntries`,
+  créées, renommées, masquées ou **supprimées** depuis Gestion → Listes (ou depuis la page Stats). La suppression
+  d'une liste efface aussi toutes ses entrées, par lots de 400 écritures.
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
 - **Journal d'activité** en ajout seul : chaque action de création/modification/suppression du staff ou de l'orateur
   écrit une ligne lisible (« Amende infligée : Retard 15,00 € — Ronny Verast »). Rien ne peut y être modifié.
@@ -89,13 +110,16 @@ Points de conception :
 ## 4. Règles de sécurité (firestore.rules)
 
 - Lecture de toutes les données métier : utilisateur connecté (anonyme compris).
-- Écriture joueurs, matchs, amendes, barème, buts, catégories, statistiques : **staff uniquement**
+- Écriture joueurs, matchs, amendes, barème, buts, coums, catégories, statistiques : **staff uniquement**
   (`exists(staff/{uid})`, c'est-à-dire l'admin ou le compte technique ouvert par le code). L'admin seul gère
   `staff`, `config/secretaryAccess` et le champ `players.role`.
 - Tickets et coups de cœur : tout utilisateur connecté (modèle de confiance : l'identité du votant est déclarative,
   comme demandé, sans adresse e-mail).
 - Cycle de vie d'un match par l'orateur anonyme : autorisé uniquement pour les champs
   `status, speakerName, speakerUid, readingStartedAt, closedAt, updatedAt` (`diff().affectedKeys().hasOnly`).
+  Le minuteur (`voteDeadline`…) et le montant de la coum n'en font pas partie : ils restent réservés au staff,
+  comme demandé (« déclenchement par un admin ou un secrétaire »).
+- Coums : lecture par tout utilisateur connecté (tout le monde voit qui a coumé), écriture par le staff seul.
 - Bootstrap : création de l'admin et des données initiales autorisée seulement tant que `config/bootstrap` n'existe pas ;
   ce document ne peut être créé que par un compte e-mail et jamais modifié ni supprimé.
 - Journal : création par tout connecté, lecture par le staff, aucune modification ni suppression.
@@ -113,6 +137,8 @@ src/
     firebase.ts              Initialisation (cache persistant, émulateurs en dev)
     types.ts                 Types du modèle de données
     fines.ts                 Calcul et formatage des amendes
+    coums.ts                 La coum : états, totaux d'un match, récapitulatif de saison
+    statCategories.ts        Suppression d'une liste maison et de ses entrées
     rankings.ts              Classements (nominations, coups de cœur, buts, duos), complétion des tickets
     format.ts                Dates, noms, saisons, titres de match
     activity.ts              Journal d'activité
@@ -125,27 +151,33 @@ src/
   components/
     ui/                      Kit d'interface (Button, Input, Select, Modal, Tabs, Badge, Avatar, Stat, Toast…)
     PlayerPicker.tsx         Sélecteur de joueur avec recherche et ajout à la volée (staff)
+    VoteTimer.tsx            Compte à rebours des votes (bandeau public + réglage staff)
+    StatCategoryModal.tsx    Création / renommage / suppression d'une liste maison
     MatchFormModal.tsx       Création / édition d'un match
     MatchCard.tsx, RankingList.tsx
   layout/AppShell.tsx        Barre latérale (desktop) + barre du bas (mobile)
   pages/
     LoginPage, SetupPage, HomePage, ConfigMissingPage
-    votes/                   Liste des matchs, page match (TicketForm, SpeakerConsole, Participation, LiveReading, Rankings, TicketCard)
-    fines/                   Amendes par joueur, historique, barème, modale d'ajout
+    votes/                   Liste des matchs, page match (TicketForm, SpeakerConsole, Participation, LiveReading, Rankings, TicketCard, CoumPanel)
+    fines/                   Amendes par joueur, historique, coums de la saison, barème, modale d'ajout
     stats/                   Buteurs, passeurs, duos, catégories maison, feuille de match (buts)
     history/                 Rétrospective de saison
-    admin/                   Joueurs, matchs, staff, journal d'activité
+    admin/                   Joueurs, matchs, staff, listes maison, paramètres, journal d'activité
 ```
 
 ## 6. Déroulement d'une soirée
 
-1. Le secrétaire crée le match (date, adversaire, score facultatif) : les votes s'ouvrent.
+1. Le secrétaire crée le match (date, adversaire, score facultatif) : les votes s'ouvrent. Il peut lancer un
+   **minuteur** (5, 10, 15 minutes ou une durée libre) : tout le monde voit le compte à rebours.
 2. Chaque membre présent choisit son nom, remplit son ticket (3 catégories, commentaire lu à voix haute),
    éventuellement à deux, puis l'envoie. Il peut le modifier tant que la lecture n'a pas commencé.
 3. L'orateur suit la participation (envoyés / en cours / sans vote), prépare l'ordre (manuel ou mélangé) et les étoiles.
 4. Il clôture les votes : les tickets sont figés. Il annonce chaque lecture ; le ticket apparaît en direct chez tous,
-   les classements se mettent à jour, les membres votent leur coup de cœur par catégorie.
+   les classements se mettent à jour, les membres votent leur coup de cœur par catégorie. Dès qu'un joueur atteint
+   3 voix dans une catégorie, le direct le signale.
 5. Il peut afficher le nom de l'auteur d'un ticket, conserver un ticket, puis termine la soirée.
+   Pendant ce temps, le trésorier encaisse **la coum** dans l'onglet du même nom : une ligne par joueur
+   (a coumé / à payer / absent), un bouton « Recoumer les présents » pour un tour supplémentaire.
 6. En fin d'année, la rétrospective compile tout : meilleur/pire joueur cumulés, buteurs, passeurs, duo de la saison,
    caisse des amendes, petites étoiles et tickets conservés, contributions préférées du public.
 

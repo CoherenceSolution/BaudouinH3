@@ -1,4 +1,5 @@
 import type { Goal, Like, Ticket, VoteCategory } from './types'
+import { VOTE_CATEGORIES } from './types'
 
 export interface RankRow {
   playerId: string
@@ -35,6 +36,49 @@ export function nominationRanking(tickets: Ticket[], category: VoteCategory): Ra
     if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
   }
   return [...counts.entries()].map(([playerId, count]) => ({ playerId, count })).sort((a, b) => b.count - a.count)
+}
+
+/** Un joueur qui atteint le seuil de voix dans une catégorie pendant la lecture. */
+export interface NominationAlert {
+  category: VoteCategory
+  playerId: string
+  count: number
+}
+
+export interface NominationProgress {
+  /** Voix par catégorie et par joueur sur les votes déjà lus. */
+  counts: Record<VoteCategory, Map<string, number>>
+  /** Voix du joueur désigné au moment de cette lecture : clé `${ticketId}:${category}`. */
+  running: Map<string, number>
+  /** Joueurs ayant atteint le seuil (3 voix par défaut), du plus cité au moins cité. */
+  alerts: NominationAlert[]
+}
+
+/**
+ * Décompte des nominations au fil des lectures : permet d'indiquer en direct
+ * qu'un joueur vient d'atteindre 3 voix dans une catégorie.
+ */
+export function nominationProgress(tickets: Ticket[], threshold: number): NominationProgress {
+  const counts: Record<VoteCategory, Map<string, number>> = { best: new Map(), worst: new Map(), moment: new Map() }
+  const running = new Map<string, number>()
+  const ordered = [...tickets].sort((a, b) => (a.readAt?.toMillis() ?? 0) - (b.readAt?.toMillis() ?? 0))
+  for (const t of ordered) {
+    for (const category of VOTE_CATEGORIES) {
+      const playerId = t[category]?.playerId
+      if (!playerId) continue
+      const n = (counts[category].get(playerId) ?? 0) + 1
+      counts[category].set(playerId, n)
+      running.set(`${t.id}:${category}`, n)
+    }
+  }
+  const alerts: NominationAlert[] = []
+  for (const category of VOTE_CATEGORIES) {
+    for (const [playerId, count] of counts[category]) {
+      if (count >= threshold) alerts.push({ category, playerId, count })
+    }
+  }
+  alerts.sort((a, b) => b.count - a.count || VOTE_CATEGORIES.indexOf(a.category) - VOTE_CATEGORIES.indexOf(b.category))
+  return { counts, running, alerts }
 }
 
 export type LikeCounts = Map<string, Record<VoteCategory, number>>
