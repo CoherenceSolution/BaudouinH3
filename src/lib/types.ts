@@ -25,6 +25,8 @@ export interface Player {
   id: string
   firstName: string
   lastName: string
+  /** Surnom du vestiaire : affiché partout à la place du nom, et reconnu à la connexion et dans les recherches. */
+  nickname?: string | null
   active: boolean
   /** Droits accordés par l'admin : le membre qui se connecte sous ce nom devient secrétaire. */
   role?: 'secretary' | null
@@ -89,6 +91,8 @@ export interface VoteEntry {
   playerId: string | null
   proposal: string // conservé pour compatibilité, non utilisé dans le formulaire
   comment: string
+  /** Le votant demande que l'orateur lise le commentaire avant d'annoncer le nom. */
+  commentFirst?: boolean
 }
 
 export type TicketStatus = 'draft' | 'submitted'

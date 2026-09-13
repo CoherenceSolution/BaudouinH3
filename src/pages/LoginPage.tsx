@@ -2,11 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Mic, ShieldCheck, UserRound, ArrowLeft } from 'lucide-react'
 import { useAuth, type Mode } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
-import { normalize } from '@/components/PlayerPicker'
 import { PinDialog } from '@/components/PinDialog'
 import type { Player } from '@/lib/types'
 import { Button, Input } from '@/components/ui'
-import { cx } from '@/lib/format'
+import { cx, fullName, normalize } from '@/lib/format'
 import { ErrorNotice } from '@/components/ErrorNotice'
 
 type Step = 'choose' | 'public' | 'speaker' | 'staff'
@@ -115,7 +114,7 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
       {pinFor && (
         <PinDialog
           open
-          playerLabel={`${pinFor.firstName} ${pinFor.lastName}`}
+          playerLabel={fullName(pinFor)}
           onClose={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
           onSuccess={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
         />
@@ -124,7 +123,10 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
   )
 }
 
-/** Retrouve un joueur par prénom + nom, sans tenir compte des accents, de la casse ni de l'ordre. */
+/**
+ * Retrouve un joueur par prénom + nom, sans tenir compte des accents, de la casse ni de l'ordre.
+ * Le surnom sert à l'affichage et à la recherche, jamais à la connexion.
+ */
 export function findPlayerByName(players: Player[], firstName: string, lastName: string): Player | 'none' | 'ambiguous' {
   const a = normalize(firstName)
   const b = normalize(lastName)

@@ -7,7 +7,7 @@ import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Coum, Match, Player } from '@/lib/types'
 import { coumId, coumRows, coumTotals, type CoumRow } from '@/lib/coums'
-import { cx, playerName } from '@/lib/format'
+import { cx, playerFullLabel, playerName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, SectionTitle, Spinner, Stat } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 
@@ -68,17 +68,17 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
     write(
       row,
       { paid: Math.min(row.rounds, row.paid + 1), absent: false, lastPaidAt: serverTimestamp(), collectedBy: actor.uid, collectedByName: actor.name },
-      `Coum reçue : ${playerName(row.player)}`,
+      `Coum reçue : ${playerFullLabel(row.player)}`,
     )
 
   const cancel = (row: CoumRow) =>
-    write(row, { paid: Math.max(0, row.paid - 1) }, `Coum annulée : ${playerName(row.player)}`)
+    write(row, { paid: Math.max(0, row.paid - 1) }, `Coum annulée : ${playerFullLabel(row.player)}`)
 
   const toggleAbsent = (row: CoumRow) =>
-    write(row, { absent: !row.absent }, row.absent ? `${playerName(row.player)} n'est plus noté absent` : `${playerName(row.player)} noté absent (pas de coum)`)
+    write(row, { absent: !row.absent }, row.absent ? `${playerFullLabel(row.player)} n'est plus noté absent` : `${playerFullLabel(row.player)} noté absent (pas de coum)`)
 
   const recoumOne = (row: CoumRow) =>
-    write(row, { rounds: row.rounds + 1, absent: false }, `Recoum : une coum de plus demandée à ${playerName(row.player)}`)
+    write(row, { rounds: row.rounds + 1, absent: false }, `Recoum : une coum de plus demandée à ${playerFullLabel(row.player)}`)
 
   /** Recoumer : une coum de plus pour tous les présents. */
   async function recoumAll() {

@@ -22,10 +22,9 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 
 | Rôle | Connexion | Peut |
 |---|---|---|
-| **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote, suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
-| **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
-| **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité.
-Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume », lance le minuteur des votes. |
+| **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture et le compte à rebours, voter « coup de cœur », voir qui a coumé, consulter amendes et stats. |
+| **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, suivre la consigne « commentaire avant le nom », afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
+| **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume », lance le minuteur des votes. |
 | **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, définir ou changer le code commun. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
@@ -45,14 +44,14 @@ config/bootstrap              { claimedBy, at }
 staff/{uid}                   { email, displayName, role: 'admin'|'secretary', playerId, createdAt }
 config/settings               { categories: { best|worst|moment: { label, emoji } } }
 config/secretaryAccess        { email, uid, updatedAt }   ← compte technique courant des secrétaires
-players/{id}                  { firstName, lastName, active, role: 'secretary'|null, createdAt }
+players/{id}                  { firstName, lastName, nickname, active, role: 'secretary'|null, createdAt }
 matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
                                 status: 'voting'|'reading'|'closed',
                                 speakerName, speakerUid, readingStartedAt, closedAt,
                                 voteDeadline, voteTimerMinutes, voteTimerBy,
                                 createdBy, createdAt, updatedAt }
 tickets/{matchId_authorId}    { matchId, authorPlayerId, authorUids[],
-                                best:{playerId, proposal, comment}, worst:{…}, moment:{…},
+                                best:{playerId, proposal, comment, commentFirst}, worst:{…}, moment:{…},
                                 status: 'draft'|'submitted', readAt, readOrder, starred, saved, revealAuthor,
                                 createdAt, updatedAt }
 likes/{matchId_voterId_cat}   { matchId, voterPlayerId, category, ticketId, createdAt }
@@ -77,6 +76,14 @@ Points de conception :
   (Gestion → Paramètres) ; chacune désigne un joueur et porte un commentaire lu à voix haute.
 - **Anonymat** : les votes lus sont anonymes pour tout le monde, staff compris. Seul l'orateur peut, vote par vote,
   consulter le nom de l'auteur dans sa console (`revealAuthor`), sans que ce nom soit montré ailleurs.
+- **Surnoms** : `players.nickname` (facultatif) devient le nom affiché partout (`playerName`), le nom d'état civil
+  restant disponible (`fullName`) pour les écrans de gestion, le journal d'activité et les exports (`playerFullLabel`).
+  Les recherches de joueur comparent prénom, nom **et** surnom, sans accents ni majuscules (`playerMatches`) ;
+  la connexion, elle, reste sur prénom + nom (`findPlayerByName`), le surnom n'y donne pas accès.
+- **« Commentaire d'abord »** : le votant coche `commentFirst` sur une catégorie. C'est une consigne de lecture,
+  pas un secret : elle n'agit que dans la console de l'orateur (`speakerView`), où le commentaire passe au-dessus
+  et où le nom attend un appui sur « Annoncer le nom ». Ce repli est un simple état local du composant — rien
+  n'est écrit dans la base, rien ne change pour la salle, les classements ni la rétrospective.
 - **Brouillon auto-sauvegardé** : chaque modification écrit un `draft` après 800 ms ; l'orateur et le staff voient
   ainsi la complétion (0/3, 1/3, 2/3) des votes ouverts mais non envoyés.
 - **Classements en temps réel** : seuls les tickets `submitted` **et** `readAt != null` comptent. Le compteur bouge
@@ -141,7 +148,7 @@ src/
     coums.ts                 La coum : états (a coumé / pas encore / absent) et comptes d'un match
     statCategories.ts        Suppression d'une liste maison et de ses entrées
     rankings.ts              Classements (nominations, coups de cœur, buts, duos), complétion des tickets
-    format.ts                Dates, noms, saisons, titres de match
+    format.ts                Dates, noms et surnoms, recherche de joueur, saisons, titres de match
     activity.ts              Journal d'activité
     players.ts               Ajout rapide d'un joueur
     initialPlayers.ts        Données de première installation
@@ -149,6 +156,7 @@ src/
     useCollection.ts         Abonnement temps réel générique à une requête Firestore
     useData.ts               Un hook par collection (players, matches, tickets, likes, goals, fines…)
     useActor.ts              Acteur courant pour le journal
+    useLocalFlag.ts          Indicateur mémorisé sur l'appareil (consignes affichées une seule fois)
   components/
     ui/                      Kit d'interface (Button, Input, Select, Modal, Tabs, Badge, Avatar, Stat, Toast…)
     PlayerPicker.tsx         Sélecteur de joueur avec recherche et ajout à la volée (staff)
@@ -170,12 +178,14 @@ src/
 
 1. Le secrétaire crée le match (date, adversaire, score facultatif) : les votes s'ouvrent. Il peut lancer un
    **minuteur** (5, 10, 15 minutes ou une durée libre) : tout le monde voit le compte à rebours.
-2. Chaque membre présent choisit son nom, remplit son ticket (3 catégories, commentaire lu à voix haute),
-   éventuellement à deux, puis l'envoie. Il peut le modifier tant que la lecture n'a pas commencé.
+2. Chaque membre présent choisit son nom, remplit son ticket (3 catégories, commentaire lu à voix
+   haute), éventuellement à deux, puis l'envoie. Il peut demander, catégorie par catégorie, que l'orateur lise son
+   commentaire avant d'annoncer le nom. Il peut modifier son vote tant que la lecture n'a pas commencé.
 3. L'orateur suit la participation (envoyés / en cours / sans vote), prépare l'ordre (manuel ou mélangé) et les étoiles.
 4. Il clôture les votes : les tickets sont figés. Il annonce chaque lecture ; le ticket apparaît en direct chez tous,
-   les classements se mettent à jour, les membres votent leur coup de cœur par catégorie. Dès qu'un joueur atteint
-   3 voix dans une catégorie, le direct le signale.
+   les classements se mettent à jour, les membres votent leur coup de cœur par catégorie. Quand un votant l'a
+   demandé, sa console lui présente le commentaire avant le nom et lui rappelle de le lire en premier. Dès qu'un
+   joueur atteint 3 voix dans une catégorie, le direct le signale.
 5. Il peut afficher le nom de l'auteur d'un ticket, conserver un ticket, puis termine la soirée.
    Pendant ce temps, le trésorier note **la coum** dans l'onglet du même nom : une ligne par joueur
    (a coumé / pas encore / absent), un bouton « Recoumer les présents » pour un tour supplémentaire.

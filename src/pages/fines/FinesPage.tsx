@@ -8,7 +8,7 @@ import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Fine, Player } from '@/lib/types'
 import { formatEuro } from '@/lib/fines'
-import { currentSeason, cx, formatDate, playerName, seasonOf } from '@/lib/format'
+import { currentSeason, cx, formatDate, playerFullLabel, playerName, seasonOf } from '@/lib/format'
 import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Select, Spinner, Stat, Tabs } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 import { AddFineModal } from './AddFineModal'
@@ -81,7 +81,7 @@ function useFineActions() {
   async function togglePaid(f: Fine) {
     try {
       await updateDoc(doc(db, 'fines', f.id), { paid: !f.paid, paidAt: f.paid ? null : serverTimestamp() })
-      await logActivity(actor, 'update', 'fine', f.id, `${f.paid ? 'Paiement annulé' : 'Amende payée'} : ${f.label} ${formatEuro(f.amount)} — ${playerName(players.byId.get(f.playerId))}`)
+      await logActivity(actor, 'update', 'fine', f.id, `${f.paid ? 'Paiement annulé' : 'Amende payée'} : ${f.label} ${formatEuro(f.amount)} — ${playerFullLabel(players.byId.get(f.playerId))}`)
     } catch (e) {
       console.error(e)
       toast('Action impossible', 'error')
@@ -91,7 +91,7 @@ function useFineActions() {
     if (!confirm(`Supprimer l’amende « ${f.label} » de ${formatEuro(f.amount)} ?`)) return
     try {
       await deleteDoc(doc(db, 'fines', f.id))
-      await logActivity(actor, 'delete', 'fine', f.id, `Amende supprimée : ${f.label} ${formatEuro(f.amount)} — ${playerName(players.byId.get(f.playerId))}`)
+      await logActivity(actor, 'delete', 'fine', f.id, `Amende supprimée : ${f.label} ${formatEuro(f.amount)} — ${playerFullLabel(players.byId.get(f.playerId))}`)
       toast('Amende supprimée')
     } catch (e) {
       console.error(e)

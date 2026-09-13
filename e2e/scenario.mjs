@@ -1,7 +1,8 @@
 // Scénario de bout en bout joué contre les émulateurs Firebase (npm run emulators) et le serveur Vite (npm run dev, .env avec VITE_USE_EMULATORS=true).
 // Prérequis : npx playwright install chromium. Lancer : bash e2e/reset-emulators.sh && node e2e/scenario.mjs
-// Il couvre : installation, création de match, la coum, amendes, buts, minuteur des votes, trois votants, orateur,
-// lecture en direct (alerte à 3 voix), coups de cœur, listes maison, rétrospective, mobile.
+// Il couvre : installation, création de match, surnoms, la coum, amendes, buts, minuteur des votes, trois votants,
+// vote « commentaire d'abord », orateur, lecture guidée dans la console, lecture en direct (alerte à 3 voix),
+// coups de cœur, listes maison, rétrospective, mobile.
 import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:5173'
@@ -61,13 +62,15 @@ await admin.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await admin.getByText('Vote envoyé', { exact: true }).waitFor()
 
 // Remplit les trois catégories du formulaire de vote affiché.
-async function fillTicket(p, best, worst, moment, comment) {
+async function fillTicket(p, best, worst, moment, comment, commentFirst = false) {
   const blocks = [['🏆', best, comment], ['🥴', worst, 'Il a raté un but tout fait à la 12e.'], ['⚡', best, moment]]
   for (const [emoji, who, text] of blocks) {
     const block = p.locator('.card').filter({ hasText: emoji }).first()
-    await block.locator('input[placeholder="Rechercher un joueur…"]').fill(who)
+    await block.locator('input[placeholder^="Rechercher un joueur"]').fill(who)
     await block.getByRole('button', { name: new RegExp(who) }).first().click()
     await block.locator('textarea').fill(text)
+    // Consigne : l'orateur devra lire le commentaire avant d'annoncer le nom.
+    if (commentFirst && emoji === '🏆') await block.getByRole('checkbox').check()
   }
 }
 
@@ -76,12 +79,26 @@ await admin.goto(BASE + '/admin/staff')
 await admin.getByLabel('Code (4 à 8 chiffres)').fill('2468')
 await admin.getByRole('button', { name: 'Définir le code' }).click()
 await admin.getByText('Un code est défini').waitFor({ timeout: 20000 })
-await admin.getByPlaceholder('Rechercher un joueur…').fill('Jarne')
+await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Jarne')
 await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
 await admin.getByText('est maintenant secrétaire').waitFor()
 await shot(admin, '03c-droits')
 
-// 2d. La coum : encaissements, absent, recoum
+
+// 2d. Surnom : « Sniper » pour Maxime Vigne (affiché à la place du nom, et retrouvé par la recherche)
+await admin.goto(BASE + '/admin/joueurs')
+await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Vigne')
+await admin.getByTitle('Renommer').first().click()
+const renameDlg = admin.getByRole('dialog')
+await renameDlg.getByLabel('Surnom').fill('Sniper')
+await renameDlg.getByRole('button', { name: 'Enregistrer' }).click()
+await renameDlg.waitFor({ state: 'hidden' })
+await admin.getByText('Joueur renommé').waitFor()
+await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('sniper')
+await admin.getByText('Maxime Vigne').waitFor()
+await shot(admin, '03d-surnom')
+
+// 2e. La coum : qui a payé, absent, recoum
 await admin.goto(BASE + `/votes/${matchId}`)
 await admin.getByRole('button', { name: 'Coum', exact: true }).click()
 await admin.getByText('La coum du match').waitFor()
@@ -140,10 +157,10 @@ for (const [scorer, assist] of [['Vigne', 'Leyder'], ['Vigne', 'Leyder'], ['Vera
   await dlg.locator('div').filter({ hasText: /^⚽ Buteur/ }).first().waitFor()
   const pickers = dlg.locator('label.label')
   // buteur
-  await dlg.locator('input[placeholder="Rechercher un joueur…"]').nth(0).fill(scorer)
+  await dlg.locator('input[placeholder^="Rechercher un joueur"]').nth(0).fill(scorer)
   await dlg.getByRole('button', { name: new RegExp(scorer) }).first().click()
   if (assist) {
-    await dlg.locator('input[placeholder="Rechercher un joueur…"]').nth(0).fill(assist)
+    await dlg.locator('input[placeholder^="Rechercher un joueur"]').nth(0).fill(assist)
     await dlg.getByRole('button', { name: new RegExp(assist) }).first().click()
   }
   await dlg.getByRole('button', { name: 'Enregistrer', exact: true }).click()
@@ -185,19 +202,23 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
   }
   return p
 }
-async function vote(name, best, worst, moment, comment, pin = null) {
+async function vote(name, best, worst, moment, comment, pin = null, commentFirst = false) {
   const [firstName, lastName] = name
   const p = await login(firstName, firstName, lastName, 'public', pin)
   await p.goto(BASE + `/votes/${matchId}`)
   await p.getByText('Vous votez en tant que').waitFor()
   await p.getByText(/Il vous reste du temps pour voter/).waitFor()
-  await fillTicket(p, best, worst, moment, comment)
+  await fillTicket(p, best, worst, moment, comment, commentFirst)
   return p
 }
-const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.')
+const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', null, true)
 await shot(ronny, '08-ticket-form')
 await ronny.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await ronny.getByText('Vote envoyé', { exact: true }).waitFor()
+await ronny.getByText('L’orateur lira le commentaire avant d’annoncer le nom').waitFor()
+// Le surnom remplace le nom partout à l'affichage
+await ronny.getByText('Sniper').first().waitFor()
+if (await ronny.getByText('Maxime Vigne').count() !== 0) throw new Error('Le surnom devrait remplacer le nom à l’affichage')
 await shot(ronny, '09-ticket-sent')
 const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
 await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
@@ -241,7 +262,17 @@ await shot(speaker, '12b-console-nom-orateur')
 await speaker.waitForTimeout(400)
 if (await ronny.getByText('Vote anonyme').count() < 2) throw new Error('Les votes lus devraient être anonymes pour un votant')
 
-// 7b. Troisième lecture : Maxime Vigne atteint 3 voix, le direct le signale
+// 7b. Consigne « commentaire d'abord » : elle ne concerne que la console de l'orateur
+if (await ronny.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0) throw new Error('La consigne ne doit rien changer pour la salle')
+if (await ronny.getByText('Deux buts, une masterclass.').count() !== 1) throw new Error('Le vote devrait être lisible en entier pour la salle')
+await speaker.getByText('Lisez d’abord le commentaire, puis annoncez le nom voté.').waitFor()
+await shot(speaker, '12c-console-consigne')
+await speaker.getByRole('button', { name: 'Annoncer le nom' }).first().click()
+await speaker.waitForTimeout(600)
+if (await speaker.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0) throw new Error('Le nom devrait s’afficher dans la console après l’annonce')
+await shot(speaker, '12d-console-nom-annonce')
+
+// 7c. Troisième lecture : le même joueur atteint 3 voix, le direct le signale
 await speaker.getByRole('button', { name: 'Lire' }).first().click()
 await speaker.getByText('Lecture annoncée').first().waitFor()
 await ronny.getByText('3 / 3 votes lus').waitFor()

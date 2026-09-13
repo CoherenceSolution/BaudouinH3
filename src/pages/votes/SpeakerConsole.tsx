@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react'
 import { doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore'
-import { AlarmClock, ArrowDown, ArrowUp, Bookmark, BookOpenCheck, Eye, EyeOff, Mic, Play, RotateCcw, Shuffle, Star, Flag } from 'lucide-react'
+import { AlarmClock, ArrowDown, ArrowUp, Bookmark, BookOpenCheck, Eye, EyeOff, Megaphone, Mic, Play, RotateCcw, Shuffle, Star, Flag } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Like, Match, Player, Ticket } from '@/lib/types'
-import { likeCounts, submittedTickets } from '@/lib/rankings'
+import { commentFirstPicks, likeCounts, submittedTickets } from '@/lib/rankings'
 import { cx, playerName } from '@/lib/format'
 import { Button, Card, SectionTitle } from '@/components/ui'
 import { VoteTimerControl } from '@/components/VoteTimer'
 import { useToast } from '@/components/ui/Toast'
+import { useLocalFlag } from '@/hooks/useLocalFlag'
 import { TicketCard } from './TicketCard'
 
 interface Props {
@@ -28,6 +29,8 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
   const actor = useActor()
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
+  // La consigne de lecture ne s'affiche que la première fois, sur cet appareil.
+  const [revealHintSeen, setRevealHintSeen] = useLocalFlag('h3.revealHintSeen')
 
   const submitted = useMemo(() => submittedTickets(tickets), [tickets])
   const unread = useMemo(
@@ -37,6 +40,9 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
   const read = useMemo(() => submitted.filter((t) => t.readAt).sort((a, b) => (a.readAt!.toMillis() ?? 0) - (b.readAt!.toMillis() ?? 0)), [submitted])
   const counts = useMemo(() => likeCounts(likes), [likes])
   const drafts = tickets.filter((t) => t.status === 'draft').length
+  // Votes dont l'auteur demande que le commentaire soit lu avant le nom.
+  const guidedCount = useMemo(() => submitted.reduce((n, t) => n + commentFirstPicks(t).length, 0), [submitted])
+  const hintTicketId = useMemo(() => [...read, ...unread].find((t) => commentFirstPicks(t).length > 0)?.id ?? null, [read, unread])
 
   const me = identity ? allPlayers.byId.get(identity.playerId) : null
   const speakerName = me ? playerName(me) : actor.name
@@ -75,7 +81,7 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
 
   async function announce(t: Ticket) {
     await patchTicket(t, { readAt: serverTimestamp(), readOrder: t.readOrder ?? read.length + 1 })
-    toast('Lecture annoncée, classements mis à jour')
+    toast(commentFirstPicks(t).length ? 'Lecture annoncée. Lisez le commentaire, puis annoncez le nom.' : 'Lecture annoncée, classements mis à jour')
   }
 
   async function move(t: Ticket, dir: -1 | 1) {
@@ -135,6 +141,12 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
         </div>
         {match.status === 'voting' && <p className="mt-3 text-[13px] text-muted">Vous pouvez déjà préparer l’ordre de lecture et les étoiles. Les votes restent modifiables par leurs auteurs jusqu’à la clôture.</p>}
         <p className="mt-3 text-[13px] text-muted">Les votes sont anonymes. L’icône œil affiche le nom de l’auteur d’un vote pour vous seul, dans cette console.</p>
+        {guidedCount > 0 && (
+          <p className="mt-2 flex items-start gap-2 rounded-xl bg-violet-soft px-3 py-2 text-[13px] font-medium text-violet-700">
+            <Megaphone className="mt-0.5 size-4 shrink-0" />
+            <span>{guidedCount} vote{guidedCount > 1 ? 's' : ''} demande{guidedCount > 1 ? 'nt' : ''} que vous lisiez le commentaire avant le nom : le nom s’affiche ici quand vous appuyez sur « Annoncer le nom ».</span>
+          </p>
+        )}
       </Card>
 
       {/* Minuteur des votes : déclenché par l'admin ou un secrétaire, visible par tous les votants. */}
@@ -165,6 +177,8 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                 showAuthor={t.revealAuthor}
                 speakerView
                 index={i + 1}
+                onReveal={() => setRevealHintSeen(true)}
+                revealHint={!revealHintSeen && t.id === hintTicketId}
                 actions={
                   <>
                     <IconBtn title="Monter" disabled={i === 0} onClick={() => move(t, -1)}><ArrowUp className="size-4" /></IconBtn>
@@ -197,6 +211,8 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
                 showAuthor={t.revealAuthor}
                 speakerView
                 index={i + 1}
+                onReveal={() => setRevealHintSeen(true)}
+                revealHint={!revealHintSeen && t.id === hintTicketId}
                 actions={
                   <>
                     <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />

@@ -1,5 +1,5 @@
 // Liste initiale de l'équipe, chargée lors de la première installation.
-export const INITIAL_PLAYERS: { firstName: string; lastName: string }[] = [
+export const INITIAL_PLAYERS: { firstName: string; lastName: string; nickname?: string }[] = [
   { firstName: 'Maxim', lastName: 'Leonard' },
   { firstName: 'Jeremy', lastName: 'De Maeyer' },
   { firstName: 'Ronny', lastName: 'Verast' },

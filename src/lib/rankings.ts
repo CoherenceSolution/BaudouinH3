@@ -28,6 +28,11 @@ export function isTicketComplete(t: Ticket): boolean {
   return ticketCompletion(t) === 3
 }
 
+/** Les catégories où le votant demande que le commentaire soit lu avant le nom. */
+export function commentFirstPicks(t: Ticket): VoteCategory[] {
+  return (['best', 'worst', 'moment'] as VoteCategory[]).filter((c) => t[c]?.commentFirst && t[c]?.playerId)
+}
+
 /** Classement des nominations (meilleur / pire joueur) sur un ensemble de tickets. */
 export function nominationRanking(tickets: Ticket[], category: VoteCategory): RankRow[] {
   const counts = new Map<string, number>()

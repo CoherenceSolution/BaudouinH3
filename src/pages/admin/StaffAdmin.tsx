@@ -10,7 +10,7 @@ import { usePlayers, useStaffList } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Player, StaffMember } from '@/lib/types'
-import { cx, playerName } from '@/lib/format'
+import { cx, playerFullLabel, playerMatches, playerName, playerRealName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, Input, Select, Spinner } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 import { ErrorNotice } from '@/components/ErrorNotice'
@@ -30,15 +30,12 @@ export function StaffAdmin() {
   const [q, setQ] = useState('')
 
   const secretaries = useMemo(() => players.data.filter((p) => p.role === 'secretary'), [players.data])
-  const list = useMemo(() => {
-    const n = q.trim().toLowerCase()
-    return players.data.filter((p) => !n || playerName(p).toLowerCase().includes(n))
-  }, [players.data, q])
+  const list = useMemo(() => players.data.filter((p) => playerMatches(p, q)), [players.data, q])
 
   async function setSecretary(p: Player, grant: boolean) {
     try {
       await updateDoc(doc(db, 'players', p.id), { role: grant ? 'secretary' : null })
-      await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerName(p)}` : `Droits de secrétaire retirés à ${playerName(p)}`)
+      await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerFullLabel(p)}` : `Droits de secrétaire retirés à ${playerFullLabel(p)}`)
       toast(grant ? `${playerName(p)} est maintenant secrétaire` : `Droits retirés à ${playerName(p)}`)
     } catch (err) {
       console.error(err)
@@ -49,7 +46,7 @@ export function StaffAdmin() {
   async function linkPlayer(s: StaffMember, pid: string) {
     try {
       await updateDoc(doc(db, 'staff', s.id), { playerId: pid || null })
-      await logActivity(actor, 'update', 'staff', s.id, pid ? `${s.displayName} relié au joueur ${playerName(players.byId.get(pid))}` : `${s.displayName} : lien joueur retiré`)
+      await logActivity(actor, 'update', 'staff', s.id, pid ? `${s.displayName} relié au joueur ${playerFullLabel(players.byId.get(pid))}` : `${s.displayName} : lien joueur retiré`)
     } catch (err) {
       console.error(err)
       toast('Action impossible', 'error')
@@ -78,14 +75,17 @@ export function StaffAdmin() {
             ))}
           </div>
         )}
-        <Input placeholder="Rechercher un joueur…" value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />
+        <Input placeholder="Rechercher un nom ou un surnom…" value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />
         <Card className="divide-y divide-line">
           {list.map((p) => {
             const isSec = p.role === 'secretary'
             return (
               <div key={p.id} className={cx('flex items-center gap-3 px-4 py-2.5', p.active === false && 'opacity-60')}>
                 <Avatar player={p} size="sm" />
-                <span className="flex-1 text-[14px] font-medium">{playerName(p)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-medium">{playerName(p)}</span>
+                  {playerRealName(p) && <span className="block truncate text-[12px] text-muted">{playerRealName(p)}</span>}
+                </span>
                 {isSec && <Badge tone="accent"><ShieldCheck className="size-3" /> Secrétaire</Badge>}
                 <Button size="sm" variant={isSec ? 'ghost' : 'secondary'} icon={isSec ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />} onClick={() => setSecretary(p, !isSec)}>
                   {isSec ? 'Retirer' : 'Rendre secrétaire'}
@@ -105,13 +105,13 @@ export function StaffAdmin() {
               {s.playerId && players.byId.get(s.playerId) ? <Avatar player={players.byId.get(s.playerId)} /> : <span className="flex size-9 items-center justify-center rounded-full bg-ink text-white"><ShieldCheck className="size-4" /></span>}
               <div className="min-w-0 flex-1">
                 <div className="text-[14px] font-semibold">{s.displayName || s.email} {s.id === user?.uid && <Badge tone="accent">Vous</Badge>}</div>
-                <div className="text-[12px] text-muted">{s.email} · {s.role === 'admin' ? 'administrateur' : 'secrétaire'}{s.playerId ? ` · joueur : ${playerName(players.byId.get(s.playerId))}` : ' · non relié à un joueur'}</div>
+                <div className="text-[12px] text-muted">{s.email} · {s.role === 'admin' ? 'administrateur' : 'secrétaire'}{s.playerId ? ` · joueur : ${playerFullLabel(players.byId.get(s.playerId))}` : ' · non relié à un joueur'}</div>
               </div>
               <div className="flex items-center gap-2">
                 <Link2 className="size-4 text-muted" />
                 <Select value={s.playerId ?? ''} onChange={(e) => linkPlayer(s, e.target.value)} className="w-48" title="Joueur relié">
                   <option value="">— Joueur —</option>
-                  {players.data.map((p) => <option key={p.id} value={p.id}>{playerName(p)}</option>)}
+                  {players.data.map((p) => <option key={p.id} value={p.id}>{playerFullLabel(p)}</option>)}
                 </Select>
               </div>
             </div>

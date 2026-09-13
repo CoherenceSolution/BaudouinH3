@@ -8,7 +8,7 @@ import { useGoals, usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Goal, Match } from '@/lib/types'
-import { formatDate, matchTitle, playerName } from '@/lib/format'
+import { formatDate, matchTitle, playerFullLabel, playerName } from '@/lib/format'
 import { Avatar, Button, Card, EmptyState, Input, Modal, Spinner } from '@/components/ui'
 import { ResultPill } from '@/components/MatchCard'
 import { PlayerPicker } from '@/components/PlayerPicker'
@@ -36,7 +36,7 @@ export function MatchStatsPage() {
     if (!match || !confirm('Supprimer ce but ?')) return
     try {
       await deleteDoc(doc(db, 'goals', g.id))
-      await logActivity(actor, 'delete', 'goal', g.id, `But supprimé (${playerName(players.byId.get(g.scorerPlayerId))}) — ${match.opponent}`)
+      await logActivity(actor, 'delete', 'goal', g.id, `But supprimé (${playerFullLabel(players.byId.get(g.scorerPlayerId))}) — ${match.opponent}`)
       toast('But supprimé')
     } catch (e) {
       console.error(e)
@@ -107,7 +107,7 @@ function AddGoalModal({ match, nextOrder, onClose }: { match: Match; nextOrder: 
       })
       const s = players.byId.get(scorer)
       const a = assist ? players.byId.get(assist) : null
-      await logActivity(actor, 'create', 'goal', ref.id, `But de ${playerName(s)}${a ? ` sur passe de ${playerName(a)}` : ''} — ${match.opponent}`)
+      await logActivity(actor, 'create', 'goal', ref.id, `But de ${playerFullLabel(s)}${a ? ` sur passe de ${playerFullLabel(a)}` : ''} — ${match.opponent}`)
       toast(`But de ${playerName(s)} enregistré`)
       if (again) {
         setScorer(null); setAssist(null); setMinute(''); setOrder((o) => o + 1)
