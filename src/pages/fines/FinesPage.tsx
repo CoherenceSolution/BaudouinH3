@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { Plus, Euro, Check, Trash2, ChevronDown, ChevronUp, Settings2, Coins } from 'lucide-react'
+import { Plus, Euro, Check, Trash2, ChevronDown, ChevronUp, Settings2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
-import { useAllCoums, useFines, useFineTypes, useMatches, usePlayers } from '@/hooks/useData'
+import { useFines, useFineTypes, useMatches, usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Fine, Player } from '@/lib/types'
@@ -11,11 +11,10 @@ import { formatEuro } from '@/lib/fines'
 import { currentSeason, cx, formatDate, playerName, seasonOf } from '@/lib/format'
 import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Select, Spinner, Stat, Tabs } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
-import { CoumsSeason } from './CoumsSeason'
 import { AddFineModal } from './AddFineModal'
 import { FineTypesEditor } from './FineTypesEditor'
 
-type Tab = 'players' | 'all' | 'coums' | 'types'
+type Tab = 'players' | 'all' | 'types'
 
 export function FinesPage() {
   const { isStaff } = useAuth()
@@ -23,19 +22,16 @@ export function FinesPage() {
   const fines = useFines()
   const types = useFineTypes()
   const matches = useMatches()
-  const coums = useAllCoums()
   const [tab, setTab] = useState<Tab>('players')
   const [add, setAdd] = useState(false)
   const [season, setSeason] = useState(currentSeason())
 
   const seasons = useMemo(() => {
     const s = new Set(fines.data.map((f) => seasonOf(f.date)))
-    for (const m of matches.data) s.add(seasonOf(m.date))
     s.add(currentSeason())
     return [...s].sort().reverse()
-  }, [fines.data, matches.data])
+  }, [fines.data])
   const list = useMemo(() => fines.data.filter((f) => seasonOf(f.date) === season), [fines.data, season])
-  const seasonMatches = useMemo(() => matches.data.filter((m) => seasonOf(m.date) === season), [matches.data, season])
   const total = list.reduce((s, f) => s + f.amount, 0)
   const unpaid = list.filter((f) => !f.paid).reduce((s, f) => s + f.amount, 0)
 
@@ -43,20 +39,11 @@ export function FinesPage() {
     <div>
       <PageHeader
         title="Amendes"
-        subtitle="Le barème et les coums sont publics. Seuls les secrétaires et l’admin les tiennent à jour."
+        subtitle="Le barème est public. Seuls les secrétaires et l’admin peuvent infliger une amende."
         actions={isStaff && <Button icon={<Plus className="size-4" />} onClick={() => setAdd(true)}>Infliger une amende</Button>}
       />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          items={[
-            { key: 'players', label: 'Par joueur' },
-            { key: 'all', label: 'Historique' },
-            { key: 'coums', label: <span className="inline-flex items-center gap-1"><Coins className="size-3.5" /> Coums</span> },
-            { key: 'types', label: <span className="inline-flex items-center gap-1"><Settings2 className="size-3.5" /> Barème</span> },
-          ]}
-        />
+        <Tabs value={tab} onChange={setTab} items={[{ key: 'players', label: 'Par joueur' }, { key: 'all', label: 'Historique' }, { key: 'types', label: <span className="inline-flex items-center gap-1"><Settings2 className="size-3.5" /> Barème</span> }]} />
         {tab !== 'types' && (
           <Select value={season} onChange={(e) => setSeason(e.target.value)} className="w-48">
             {seasons.map((s) => <option key={s} value={s}>Saison {s}</option>)}
@@ -64,7 +51,7 @@ export function FinesPage() {
         )}
       </div>
 
-      {tab !== 'types' && tab !== 'coums' && (
+      {tab !== 'types' && (
         <div className="mb-5 grid grid-cols-3 gap-3">
           <Stat label="Total saison" value={formatEuro(total)} />
           <Stat label="Impayé" value={formatEuro(unpaid)} tone="rose" />
@@ -78,8 +65,6 @@ export function FinesPage() {
         <ByPlayer fines={list} players={players.data} isStaff={isStaff} />
       ) : tab === 'all' ? (
         <AllFines fines={list} players={players.byId} isStaff={isStaff} />
-      ) : tab === 'coums' ? (
-        <CoumsSeason matches={seasonMatches} players={players.data} coums={coums.data} loading={coums.loading || matches.loading} />
       ) : (
         <FineTypesEditor types={types.data} isStaff={isStaff} />
       )}

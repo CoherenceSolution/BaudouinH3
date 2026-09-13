@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
-import { Check, Coins, RefreshCw, RotateCcw, UserRoundX, UserRoundCheck } from 'lucide-react'
+import { Check, CheckCheck, Coins, RefreshCw, RotateCcw, UserRoundX, UserRoundCheck } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
@@ -20,8 +20,8 @@ interface Props {
 
 /**
  * La coum d'un match : qui a payé, qui doit encore, qui est absent.
- * L'application ne suit que le geste (pas les montants) : le trésorier (staff) coche ce qu'il a reçu,
- * tout le monde voit qui a coumé.
+ * C'est une feuille du moment, pour les présents du jour — ni montants, ni caisse, ni historique :
+ * le trésorier (staff) coche ce qu'il a reçu, tout le monde voit qui a coumé.
  */
 export function CoumPanel({ match, players, coums, loading }: Props) {
   const { isStaff } = useAuth()
@@ -35,6 +35,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
   )
   const totals = useMemo(() => coumTotals(rows), [rows])
   const pct = totals.roundsDue ? Math.round((Math.min(totals.roundsPaid, totals.roundsDue) / totals.roundsDue) * 100) : 0
+  const done = totals.present > 0 && totals.pendingPlayers === 0
 
   /** Écrit la coum d'un joueur (le document est créé au premier geste du trésorier). */
   async function write(row: CoumRow, patch: Record<string, unknown>, summary: string) {
@@ -123,7 +124,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
             <span className="flex size-11 items-center justify-center rounded-xl bg-ink text-accent"><Coins className="size-5" /></span>
             <div>
               <div className="font-semibold">La coum du match</div>
-              <div className="text-[13px] text-muted">Chacun paie la même chose : on note simplement qui a coumé.</div>
+              <div className="text-[13px] text-muted">Chacun paie la même chose : on note simplement qui a coumé, parmi les présents.</div>
             </div>
           </div>
           {isStaff && (
@@ -133,11 +134,20 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
           )}
         </div>
 
-        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
-        </div>
-        {totals.recoumed && (
-          <div className="mt-2 text-[12px] text-muted">{totals.roundsPaid} coum{totals.roundsPaid > 1 ? 's' : ''} reçue{totals.roundsPaid > 1 ? 's' : ''} sur {totals.roundsDue} demandée{totals.roundsDue > 1 ? 's' : ''} (recoum en cours)</div>
+        {done ? (
+          <div className="mt-4 flex items-center gap-2 rounded-xl bg-accent-soft px-4 py-3 text-[14px] font-semibold text-accent-strong">
+            <CheckCheck className="size-4 shrink-0" />
+            Tout le monde a coumé. Rien à relancer.
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
+            </div>
+            {totals.recoumed && (
+              <div className="mt-2 text-[12px] text-muted">{totals.roundsPaid} coum{totals.roundsPaid > 1 ? 's' : ''} reçue{totals.roundsPaid > 1 ? 's' : ''} sur {totals.roundsDue} demandée{totals.roundsDue > 1 ? 's' : ''} (recoum en cours)</div>
+            )}
+          </>
         )}
 
         <div className="mt-4 grid grid-cols-3 gap-3">

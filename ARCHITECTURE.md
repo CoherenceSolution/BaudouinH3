@@ -82,12 +82,13 @@ Points de conception :
 - **Classements en temps réel** : seuls les tickets `submitted` **et** `readAt != null` comptent. Le compteur bouge
   donc exactement au moment où l'orateur annonce une lecture.
 - **Coup de cœur** : un seul choix par votant et par catégorie (identifiant `matchId_voterId_category`), modifiable.
-- **La coum** : à chaque match, chacun paie la même chose ; l'application ne suit que le geste, **jamais les
-  montants ni une caisse**. Un document par joueur et par match : `rounds` compte les coums demandées, `paid`
-  celles que le trésorier a reçues, `absent` exclut le joueur du match. Trois états en découlent : **a coumé**,
-  **pas encore**, **absent**. « **Recoumer** » ajoute une coum à tous les présents (ou à un joueur précis) :
-  `rounds` passe à 2, 3… et ceux qui avaient payé repassent « pas encore ». Tout le monde voit qui a coumé ;
-  seul le staff écrit (règles Firestore).
+- **La coum** : feuille du moment, pour les présents d'un match. L'application ne suit que le geste —
+  **ni montants, ni caisse, ni historique de saison** : une fois que tous les présents ont payé, la feuille est
+  simplement bouclée. Elle est indépendante des amendes (page Amendes inchangée). Un document par joueur et par
+  match : `rounds` compte les coums demandées, `paid` celles que le trésorier a reçues, `absent` exclut le joueur
+  du match. Trois états en découlent : **a coumé**, **pas encore**, **absent**. « **Recoumer** » ajoute une coum
+  à tous les présents (ou à un joueur précis) : `rounds` passe à 2, 3… et ceux qui avaient payé repassent
+  « pas encore ». Tout le monde voit qui a coumé ; seul le staff écrit (règles Firestore).
 - **Minuteur des votes** : l'admin ou un secrétaire pose une échéance (`matches.voteDeadline`) depuis la console.
   Tous les appareils affichent le même compte à rebours, avec un message adapté à ceux qui n'ont pas encore envoyé
   leur vote. Rien ne se ferme tout seul : la clôture reste un geste de l'orateur, et l'échéance est effacée à la clôture.
@@ -137,7 +138,7 @@ src/
     firebase.ts              Initialisation (cache persistant, émulateurs en dev)
     types.ts                 Types du modèle de données
     fines.ts                 Calcul et formatage des amendes
-    coums.ts                 La coum : états (a coumé / pas encore / absent), comptes d'un match et de la saison
+    coums.ts                 La coum : états (a coumé / pas encore / absent) et comptes d'un match
     statCategories.ts        Suppression d'une liste maison et de ses entrées
     rankings.ts              Classements (nominations, coups de cœur, buts, duos), complétion des tickets
     format.ts                Dates, noms, saisons, titres de match
@@ -159,7 +160,7 @@ src/
   pages/
     LoginPage, SetupPage, HomePage, ConfigMissingPage
     votes/                   Liste des matchs, page match (TicketForm, SpeakerConsole, Participation, LiveReading, Rankings, TicketCard, CoumPanel)
-    fines/                   Amendes par joueur, historique, coums de la saison, barème, modale d'ajout
+    fines/                   Amendes par joueur, historique, barème, modale d'ajout
     stats/                   Buteurs, passeurs, duos, catégories maison, feuille de match (buts)
     history/                 Rétrospective de saison
     admin/                   Joueurs, matchs, staff, listes maison, paramètres, journal d'activité

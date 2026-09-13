@@ -69,15 +69,15 @@ Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires e
 
 ### La coum
 
-Onglet **Coum** de chaque match : chacun paie la même chose, l'application garde simplement la trace de qui a
-coumé — pas de montants, pas de caisse.
+Onglet **Coum** de chaque match : une feuille du moment, pour les présents du jour. On garde simplement la trace
+de qui a coumé — pas de montants, pas de caisse, pas d'historique de saison, et rien à voir avec les amendes.
 
 - Le trésorier (secrétaire ou admin) clique **A payé** quand un joueur lui donne sa coum.
 - Un joueur peut être noté **absent** : il ne doit rien pour ce match.
 - **Recoumer les présents** redemande une coum à tous ceux qui sont là (ou joueur par joueur avec l'icône ↻) :
   ceux qui avaient déjà payé repassent « pas encore » pour le tour suivant.
+- Quand tous les présents ont payé, la feuille affiche « Tout le monde a coumé » : c'est terminé.
 - Tout le monde voit qui a coumé ; seuls le secrétaire et l'admin tiennent la liste à jour.
-- Le récapitulatif de la saison (qui a coumé, qui reste à relancer, match par match) est dans **Amendes → Coums**.
 
 ### Minuteur des votes
 

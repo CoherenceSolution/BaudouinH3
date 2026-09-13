@@ -41,19 +41,13 @@ export function useLikes(matchId: string | undefined) {
   )
 }
 
-/** Les coums d'un match (qui a payé, qui doit encore, qui est absent). Lisible par tout le monde. */
+/** Les coums d'un match : qui a payé, qui doit encore, qui est absent. Lisible par tout le monde. */
 export function useCoums(matchId: string | undefined) {
   const { user } = useAuth()
   return useCollection<Coum>(
     () => (user && matchId ? query(collection(db, 'coums'), where('matchId', '==', matchId)) : null),
     [user?.uid, matchId],
   )
-}
-
-/** Toutes les coums, pour le récapitulatif de saison. */
-export function useAllCoums() {
-  const { user } = useAuth()
-  return useCollection<Coum>(() => (user ? query(collection(db, 'coums')) : null), [user?.uid])
 }
 
 export function useGoals(matchId: string | undefined) {

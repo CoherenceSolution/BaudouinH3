@@ -103,6 +103,15 @@ if ((await admin.getByText('A coumé', { exact: true }).count()) !== 0) throw ne
 await admin.getByText(/2 coums reçues sur \d+ demandées/).waitFor()
 await shot(admin, '03f-coum-recoum')
 
+// Tous les présents finissent par payer : la feuille est bouclée, il n'y a rien à conserver après.
+const payer = admin.getByRole('button', { name: 'A payé' })
+for (let i = 0; i < 60 && (await payer.count()) > 0; i++) {
+  await payer.first().click()
+  await admin.waitForTimeout(250)
+}
+await admin.getByText('Tout le monde a coumé. Rien à relancer.').waitFor()
+await shot(admin, '03g-coum-bouclee')
+
 // 3. Amende : retard 20 min -> 15 €
 await admin.goto(BASE + '/amendes')
 await admin.getByRole('button', { name: 'Infliger une amende' }).click()
@@ -282,15 +291,6 @@ await admin.getByTitle('Supprimer la liste').nth(1).click()
 await admin.getByText('Liste supprimée').first().waitFor()
 await admin.waitForTimeout(600)
 if ((await admin.getByText('Homme du match', { exact: true }).count()) !== 0) throw new Error('La liste devrait avoir disparu')
-
-// 8d. Récapitulatif des coums de la saison
-await admin.goto(BASE + '/amendes')
-await admin.getByRole('button', { name: /Coums/ }).click()
-await admin.getByText('Par joueur').waitFor()
-await admin.getByText('Par match').waitFor()
-// Les deux joueurs qui ont coumé avant la recoum doivent encore une coum sur les deux demandées.
-if ((await admin.getByText('1 coum sur 2 demandées').count()) !== 2) throw new Error('le récapitulatif devrait refléter les coums reçues')
-await shot(admin, '17d-coums-saison')
 
 // 9. Mobile
 const m = await ctx('mobile', true)
