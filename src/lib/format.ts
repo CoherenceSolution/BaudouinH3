@@ -1,13 +1,61 @@
 import type { Player, Match } from './types'
 
-export function playerName(p: Player | undefined | null): string {
+/** Nom d'état civil : « Bruno Huberty ». */
+export function fullName(p: Player | undefined | null): string {
   if (!p) return 'Inconnu'
   return `${p.firstName} ${p.lastName}`.trim()
 }
 
+/** Surnom épuré, ou chaîne vide si le joueur n'en a pas. */
+export function nickname(p: Player | undefined | null): string {
+  return p?.nickname?.trim() ?? ''
+}
+
+/** Nom affiché partout dans l'application : le surnom s'il existe, sinon le nom complet. */
+export function playerName(p: Player | undefined | null): string {
+  return nickname(p) || fullName(p)
+}
+
+/** Nom complet à afficher en second, sous le surnom ; vide si le joueur n'a pas de surnom. */
+export function playerRealName(p: Player | undefined | null): string {
+  return nickname(p) ? fullName(p) : ''
+}
+
+/** « Bubu (Bruno Huberty) » pour les écrans de gestion, les journaux et les exports. */
+export function playerFullLabel(p: Player | undefined | null): string {
+  return nickname(p) ? `${nickname(p)} (${fullName(p)})` : fullName(p)
+}
+
 export function initials(p: Player | undefined | null): string {
   if (!p) return '?'
+  const nick = nickname(p)
+  if (nick) {
+    const words = nick.split(/\s+/).filter(Boolean)
+    return (words.length > 1 ? `${words[0][0]}${words[1][0]}` : nick.slice(0, 2)).toUpperCase()
+  }
   return `${p.firstName[0] ?? ''}${p.lastName[0] ?? ''}`.toUpperCase()
+}
+
+/** Minuscules, sans accents, espaces normalisés : « Jérôme  Fetu » → « jerome fetu ». */
+export function normalize(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[-']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Texte de recherche d'un joueur : prénom, nom et surnom, normalisés. */
+export function playerSearchText(p: Player): string {
+  return normalize(`${p.firstName} ${p.lastName} ${nickname(p)}`)
+}
+
+/** true si la saisie (nom, prénom ou surnom, même partiels) correspond au joueur. */
+export function playerMatches(p: Player, query: string): boolean {
+  const q = normalize(query)
+  return !q || playerSearchText(p).includes(q)
 }
 
 export function formatDate(iso: string | undefined | null, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }): string {

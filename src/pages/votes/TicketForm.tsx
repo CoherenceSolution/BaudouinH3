@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { arrayUnion, doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { CheckCircle2, Lock, Pencil, Send, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, Lock, Pencil, Send, AlertTriangle, Megaphone } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useCategories } from '@/hooks/useSettings'
 import type { CategoryDef, Match, Player, Ticket, VoteCategory, VoteEntry } from '@/lib/types'
 import { cx, playerName } from '@/lib/format'
-import { isTicketComplete } from '@/lib/rankings'
+import { isTicketComplete, pickRevealed } from '@/lib/rankings'
 import { PlayerPicker } from '@/components/PlayerPicker'
-import { Button, Card, Textarea } from '@/components/ui'
+import { Button, Card, Checkbox, Textarea } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 import { logActivity } from '@/lib/activity'
 import { useActor } from '@/hooks/useActor'
@@ -22,7 +22,7 @@ interface Props {
   myPlayerId: string
 }
 
-const emptyEntry = (): VoteEntry => ({ playerId: null, proposal: '', comment: '' })
+const emptyEntry = (): VoteEntry => ({ playerId: null, proposal: '', comment: '', commentFirst: false })
 
 /** Formulaire de vote (une entrée par catégorie) avec brouillon auto-sauvegardé. */
 export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Props) {
@@ -197,6 +197,15 @@ function CategoryBlock({ category, entry, players, onChange }: { category: Categ
           value={entry.comment}
           onChange={(e) => onChange({ comment: e.target.value })}
         />
+        {category.pickPlayer && (
+          <Checkbox
+            checked={Boolean(entry.commentFirst)}
+            onChange={(v) => onChange({ commentFirst: v })}
+            label="Garder le suspense : le commentaire d’abord, le nom ensuite"
+            hint="L’orateur lit votre commentaire, puis appuie sur un bouton pour annoncer le nom. Le nom reste caché pour tout le monde jusque-là."
+            className="rounded-xl bg-slate-50 p-3"
+          />
+        )}
       </div>
     </Card>
   )
@@ -209,6 +218,12 @@ export function TicketSummaryRow({ category, entry, players }: { category: Categ
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{category.emoji} {category.label}</div>
       {category.pickPlayer && <div className="mt-0.5 text-[14px] font-semibold">{p ? playerName(p) : '—'}</div>}
       {(entry?.comment || entry?.proposal) && <p className="mt-0.5 whitespace-pre-line text-[14px] text-ink-2">{[entry?.proposal, entry?.comment].filter(Boolean).join(' — ')}</p>}
+      {entry?.commentFirst && (
+        <p className="mt-1 inline-flex items-center gap-1 text-[12px] font-medium text-violet-700">
+          <Megaphone className="size-3.5" />
+          {pickRevealed(entry) ? 'Nom annoncé après le commentaire' : 'L’orateur lira le commentaire avant d’annoncer le nom'}
+        </p>
+      )}
     </div>
   )
 }

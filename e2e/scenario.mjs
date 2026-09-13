@@ -1,6 +1,7 @@
 // Scénario de bout en bout joué contre les émulateurs Firebase (npm run emulators) et le serveur Vite (npm run dev, .env avec VITE_USE_EMULATORS=true).
 // Prérequis : npx playwright install chromium. Lancer : bash e2e/reset-emulators.sh && node e2e/scenario.mjs
-// Il couvre : installation, création de match, amendes, buts, trois votants, orateur, lecture en direct, coups de cœur, rétrospective, mobile.
+// Il couvre : installation, création de match, amendes, buts, surnoms, trois votants, vote « commentaire d'abord »,
+// orateur, lecture en direct, annonce du nom en suspense, coups de cœur, rétrospective, mobile.
 import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:5173'
@@ -60,10 +61,23 @@ await admin.goto(BASE + '/admin/staff')
 await admin.getByLabel('Code (4 à 8 chiffres)').fill('2468')
 await admin.getByRole('button', { name: 'Définir le code' }).click()
 await admin.getByText('Un code est défini').waitFor({ timeout: 20000 })
-await admin.getByPlaceholder('Rechercher un joueur…').fill('Jarne')
+await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Jarne')
 await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
 await admin.getByText('est maintenant secrétaire').waitFor()
 await shot(admin, '03c-droits')
+
+// 2d. Surnom : « Sniper » pour Maxime Vigne (affiché à la place du nom, et suffit pour se connecter)
+await admin.goto(BASE + '/admin/joueurs')
+await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Vigne')
+await admin.getByTitle('Renommer').first().click()
+const renameDlg = admin.getByRole('dialog')
+await renameDlg.getByLabel('Surnom').fill('Sniper')
+await renameDlg.getByRole('button', { name: 'Enregistrer' }).click()
+await renameDlg.waitFor({ state: 'hidden' })
+await admin.getByText('Joueur renommé').waitFor()
+await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('sniper')
+await admin.getByText('Maxime Vigne').waitFor()
+await shot(admin, '03d-surnom')
 
 // 3. Amende : retard 20 min -> 15 €
 await admin.goto(BASE + '/amendes')
@@ -93,10 +107,10 @@ for (const [scorer, assist] of [['Vigne', 'Leyder'], ['Vigne', 'Leyder'], ['Vera
   await dlg.locator('div').filter({ hasText: /^⚽ Buteur/ }).first().waitFor()
   const pickers = dlg.locator('label.label')
   // buteur
-  await dlg.locator('input[placeholder="Rechercher un joueur…"]').nth(0).fill(scorer)
+  await dlg.locator('input[placeholder^="Rechercher un joueur"]').nth(0).fill(scorer)
   await dlg.getByRole('button', { name: new RegExp(scorer) }).first().click()
   if (assist) {
-    await dlg.locator('input[placeholder="Rechercher un joueur…"]').nth(0).fill(assist)
+    await dlg.locator('input[placeholder^="Rechercher un joueur"]').nth(0).fill(assist)
     await dlg.getByRole('button', { name: new RegExp(assist) }).first().click()
   }
   await dlg.getByRole('button', { name: 'Enregistrer', exact: true }).click()
@@ -129,29 +143,32 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
   }
   return p
 }
-async function vote(name, best, worst, moment, comment, pin = null) {
+async function vote(name, best, worst, moment, comment, pin = null, suspense = false) {
   const [firstName, lastName] = name
   const p = await login(firstName, firstName, lastName, 'public', pin)
   await p.goto(BASE + `/votes/${matchId}`)
   await p.getByText('Vous votez en tant que').waitFor()
   const bestBlock = p.locator('.card').filter({ hasText: '🏆' }).first()
-  await bestBlock.locator('input[placeholder="Rechercher un joueur…"]').fill(best)
+  await bestBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(best)
   await bestBlock.getByRole('button', { name: new RegExp(best) }).first().click()
   await bestBlock.locator('textarea').fill(comment)
+  // Suspense : l'orateur devra lire le commentaire avant d'annoncer le nom.
+  if (suspense) await bestBlock.getByRole('checkbox').check()
   const worstBlock = p.locator('.card').filter({ hasText: '🥴' }).first()
-  await worstBlock.locator('input[placeholder="Rechercher un joueur…"]').fill(worst)
+  await worstBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(worst)
   await worstBlock.getByRole('button', { name: new RegExp(worst) }).first().click()
   await worstBlock.locator('textarea').fill('Il a raté un but tout fait à la 12e.')
   const momentBlock = p.locator('.card').filter({ hasText: '⚡' }).first()
-  await momentBlock.locator('input[placeholder="Rechercher un joueur…"]').fill(best)
+  await momentBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(best)
   await momentBlock.getByRole('button', { name: new RegExp(best) }).first().click()
   await momentBlock.locator('textarea').fill(moment)
   return p
 }
-const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.')
+const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', null, true)
 await shot(ronny, '08-ticket-form')
 await ronny.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await ronny.getByText('Vote envoyé', { exact: true }).waitFor()
+await ronny.getByText('L’orateur lira le commentaire avant d’annoncer le nom').waitFor()
 await shot(ronny, '09-ticket-sent')
 const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
 await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
@@ -160,6 +177,12 @@ const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissa
 await shot(jarne, '07b-secretaire-par-code')
 // Jarne garde un brouillon (ne pas envoyer)
 await jarne.waitForTimeout(1500)
+
+// 5b. Connexion par le seul surnom : « Sniper » suffit, et c'est ce nom qui s'affiche
+const sniper = await login('sniper', 'Sniper', '')
+await sniper.goto(BASE + `/votes/${matchId}`)
+await sniper.getByText('Vous votez en tant que Sniper').waitFor()
+await shot(sniper, '09b-connexion-surnom')
 
 // 6. Orateur
 const speaker = await login('speaker', 'Maxim', 'Leonard', 'speaker')
@@ -194,6 +217,15 @@ await speaker.waitForTimeout(300)
 await shot(speaker, '12b-console-nom-orateur')
 await speaker.waitForTimeout(400)
 if (await ronny.getByText('Vote anonyme').count() < 2) throw new Error('Les votes lus devraient être anonymes pour un votant')
+
+// 7b. Le nom mis en suspense reste caché jusqu'à l'annonce de l'orateur
+if (await ronny.getByText('Nom annoncé par l’orateur après le commentaire').count() !== 1) throw new Error('Le nom mis en suspense devrait rester caché pour la salle')
+await speaker.getByText('Lisez d’abord le commentaire, puis annoncez le nom voté.').waitFor()
+await shot(speaker, '12c-console-suspense')
+await speaker.getByRole('button', { name: 'Annoncer le nom' }).first().click()
+await speaker.waitForTimeout(800)
+if (await ronny.getByText('Nom annoncé par l’orateur après le commentaire').count() !== 0) throw new Error('Le nom devrait apparaître après l’annonce')
+await shot(ronny, '13b-nom-annonce')
 await ronny.getByRole('button', { name: 'Classement' }).click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '14-classement')

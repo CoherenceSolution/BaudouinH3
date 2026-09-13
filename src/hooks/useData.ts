@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { useCollection } from './useCollection'
 import type { Fine, FineType, Goal, Like, Match, Player, StaffMember, StatCategory, StatEntry, Ticket, ActivityLog } from '@/lib/types'
+import { playerName } from '@/lib/format'
 import { useAuth } from '@/auth/AuthProvider'
 
 export function usePlayers(includeInactive = false) {
@@ -13,7 +14,8 @@ export function usePlayers(includeInactive = false) {
     () =>
       res.data
         .filter((p) => includeInactive || p.active !== false)
-        .sort((a, b) => a.lastName.localeCompare(b.lastName, 'fr') || a.firstName.localeCompare(b.firstName, 'fr')),
+        // Tri sur le nom affiché : un joueur surnommé se trouve sous son surnom.
+        .sort((a, b) => playerName(a).localeCompare(playerName(b), 'fr')),
     [res.data, includeInactive],
   )
   const byId = useMemo(() => new Map(res.data.map((p) => [p.id, p])), [res.data])

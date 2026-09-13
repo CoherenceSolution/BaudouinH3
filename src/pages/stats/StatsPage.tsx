@@ -9,7 +9,7 @@ import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Match, Player, StatCategory, StatEntry } from '@/lib/types'
 import { goalTotals } from '@/lib/rankings'
-import { currentSeason, cx, formatDate, matchTitle, playerName, seasonOf, todayIso } from '@/lib/format'
+import { currentSeason, cx, formatDate, matchTitle, playerFullLabel, playerName, seasonOf, todayIso } from '@/lib/format'
 import { Avatar, Button, Card, EmptyState, Input, Modal, PageHeader, SectionTitle, Select, Spinner, Stat, Chip } from '@/components/ui'
 import { RankingList } from '@/components/RankingList'
 import { PlayerPicker } from '@/components/PlayerPicker'
@@ -157,7 +157,7 @@ function CategoryView({ category, entries, players, isStaff, onAdd, onEdit }: { 
     if (!confirm('Supprimer cette entrée ?')) return
     try {
       await deleteDoc(doc(db, 'statEntries', e.id))
-      await logActivity(actor, 'delete', 'statEntry', e.id, `${category.label} : entrée supprimée pour ${playerName(players.get(e.playerId))}`)
+      await logActivity(actor, 'delete', 'statEntry', e.id, `${category.label} : entrée supprimée pour ${playerFullLabel(players.get(e.playerId))}`)
       toast('Entrée supprimée')
     } catch (err) {
       console.error(err)
@@ -208,7 +208,7 @@ function AddEntryModal({ category, players, matches, onClose }: { category: Stat
       const ref = await addDoc(collection(db, 'statEntries'), {
         categoryId: category.id, playerId, matchId: matchId || null, date, value: Number(value || 1), note: note.trim(), createdBy: actor.uid, createdAt: serverTimestamp(),
       })
-      await logActivity(actor, 'create', 'statEntry', ref.id, `${category.label} : +${value} pour ${playerName(players.find((p) => p.id === playerId))}`)
+      await logActivity(actor, 'create', 'statEntry', ref.id, `${category.label} : +${value} pour ${playerFullLabel(players.find((p) => p.id === playerId))}`)
       toast('Entrée ajoutée')
       onClose()
     } catch (e) {

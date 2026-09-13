@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import { Heart } from 'lucide-react'
+import { Heart, Megaphone } from 'lucide-react'
 import type { Like, Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
-import { likeCounts, nominationRanking, readTickets } from '@/lib/rankings'
+import { likeCounts, nominationRanking, pickRevealed, readTickets } from '@/lib/rankings'
 import { playerName } from '@/lib/format'
 import { Card, SectionTitle } from '@/components/ui'
 import { RankingList } from '@/components/RankingList'
@@ -18,8 +18,9 @@ export function Rankings({ players, tickets, likes }: Props) {
   const categories = useCategories()
   const [cBest, cWorst, cMoment] = categories
   const read = useMemo(() => readTickets(tickets), [tickets])
-  const best = useMemo(() => nominationRanking(read, 'best'), [read])
-  const worst = useMemo(() => nominationRanking(read, 'worst'), [read])
+  // Un nom encore en suspense ne compte qu'une fois annoncé par l'orateur.
+  const best = useMemo(() => nominationRanking(read, 'best', true), [read])
+  const worst = useMemo(() => nominationRanking(read, 'worst', true), [read])
   const counts = useMemo(() => likeCounts(likes), [likes])
 
   const favourites = useMemo(() => {
@@ -33,7 +34,7 @@ export function Rankings({ players, tickets, likes }: Props) {
     return out
   }, [read, counts])
 
-  const moment = useMemo(() => nominationRanking(read, 'moment'), [read])
+  const moment = useMemo(() => nominationRanking(read, 'moment', true), [read])
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -61,7 +62,13 @@ export function Rankings({ players, tickets, likes }: Props) {
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.emoji} {c.label}</div>
                 {top ? (
                   <>
-                    {c.pickPlayer && <div className="mt-1 text-[14px] font-semibold">{playerName(p)}</div>}
+                    {c.pickPlayer && (
+                      entry?.playerId && !pickRevealed(entry) ? (
+                        <div className="mt-1 inline-flex items-center gap-1 text-[13px] font-medium text-violet-700"><Megaphone className="size-3.5" /> Nom à annoncer</div>
+                      ) : (
+                        <div className="mt-1 text-[14px] font-semibold">{playerName(p)}</div>
+                      )
+                    )}
                     {(entry?.comment || entry?.proposal) && <p className="mt-0.5 line-clamp-3 text-[13px] text-ink-2">{[entry?.proposal, entry?.comment].filter(Boolean).join(' — ')}</p>}
                     <div className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold text-rose"><Heart className="size-3 fill-current" /> {top.n}</div>
                   </>

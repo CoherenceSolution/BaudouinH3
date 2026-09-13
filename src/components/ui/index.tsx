@@ -111,6 +111,25 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   )
 })
 
+/** Case à cocher lisible au doigt, avec un libellé cliquable et une explication facultative. */
+export function Checkbox({ checked, onChange, label, hint, disabled, className }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; hint?: ReactNode; disabled?: boolean; className?: string }) {
+  return (
+    <label className={cx('flex cursor-pointer items-start gap-2.5 select-none', disabled && 'cursor-not-allowed opacity-50', className)}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 size-5 shrink-0 cursor-pointer rounded-md border border-line accent-accent-strong"
+      />
+      <span className="min-w-0">
+        <span className="block text-[14px] font-medium text-ink">{label}</span>
+        {hint && <span className="mt-0.5 block text-[12px] text-muted">{hint}</span>}
+      </span>
+    </label>
+  )
+}
+
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button

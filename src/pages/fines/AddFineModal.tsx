@@ -5,7 +5,7 @@ import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { FineType, Match, Player } from '@/lib/types'
 import { computeFineAmount, describeFineType, formatEuro } from '@/lib/fines'
-import { formatDate, matchTitle, playerName, todayIso } from '@/lib/format'
+import { formatDate, matchTitle, playerFullLabel, playerName, todayIso } from '@/lib/format'
 import { PlayerPicker } from '@/components/PlayerPicker'
 import { Button, Input, Modal, Select } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
@@ -64,7 +64,7 @@ export function AddFineModal({ open, onClose, players, types, matches }: Props) 
         createdAt: serverTimestamp(),
       })
       const p = players.find((x) => x.id === playerId)
-      await logActivity(actor, 'create', 'fine', ref.id, `Amende infligée : ${type.label} ${formatEuro(amount)} — ${playerName(p)} (${formatDate(date)})`)
+      await logActivity(actor, 'create', 'fine', ref.id, `Amende infligée : ${type.label} ${formatEuro(amount)} — ${playerFullLabel(p)} (${formatDate(date)})`)
       toast(`Amende de ${formatEuro(amount)} infligée à ${playerName(p)}`)
       onClose()
     } catch (e) {

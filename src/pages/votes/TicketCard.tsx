@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
-import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone } from 'lucide-react'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
-import type { LikeCounts } from '@/lib/rankings'
-import { Badge } from '@/components/ui'
+import { pickPending, type LikeCounts } from '@/lib/rankings'
+import { Badge, Button } from '@/components/ui'
 
 interface Props {
   ticket: Ticket
@@ -17,6 +17,10 @@ interface Props {
   actions?: ReactNode
   myLikes?: Partial<Record<VoteCategory, string>>
   onLike?: (category: VoteCategory) => void
+  /** Orateur : annonce le nom d'une catégorie mise « en suspense » par le votant. */
+  onReveal?: (category: VoteCategory) => void
+  /** Affiche la consigne de lecture à côté du premier bouton d'annonce (première fois). */
+  revealHint?: boolean
   index?: number
   className?: string
 }
@@ -27,7 +31,7 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, index, className }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, onReveal, revealHint, index, className }: Props) {
   const categories = useCategories()
   const author = players.get(ticket.authorPlayerId)
   const counts = likes?.get(ticket.id)
@@ -56,13 +60,35 @@ export function TicketCard({ ticket, players, likes, showAuthor, actions, myLike
           const n = counts?.[c.key] ?? 0
           const mine = myLikes?.[c.key] === ticket.id
           const text = [e?.proposal, e?.comment].filter(Boolean).join(' — ')
+          // Suspense demandé par le votant : le nom n'apparaît qu'une fois annoncé par l'orateur.
+          const pending = pickPending(e)
+          const pick = c.pickPlayer && (
+            pending ? (
+              onReveal ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="accent" icon={<Megaphone className="size-4" />} onClick={() => onReveal(c.key)}
+                          title="Lisez d’abord le commentaire, puis annoncez le nom voté.">
+                    Annoncer le nom
+                  </Button>
+                  {revealHint && <span className="text-[12px] font-medium text-violet-700">Lisez d’abord le commentaire, puis annoncez le nom voté.</span>}
+                </div>
+              ) : (
+                <div className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-violet-soft px-2 py-1 text-[13px] font-medium text-violet-700">
+                  <Megaphone className="size-3.5" /> Nom annoncé par l’orateur après le commentaire
+                </div>
+              )
+            ) : (
+              <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>
+            )
+          )
+          const comment = text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>
           return (
             <div key={c.key} className="flex gap-3 px-4 py-3">
               <span className={cx('mt-0.5 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold uppercase tracking-wide', catTone[c.key])} title={c.label}>{c.emoji}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</div>
-                {c.pickPlayer && <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>}
-                {text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>}
+                {/* Suspense : le commentaire passe avant le nom, comme demandé par le votant. */}
+                {e?.commentFirst ? <>{comment}{pick}</> : <>{pick}{comment}</>}
               </div>
               {(onLike || n > 0) && (
                 <button
