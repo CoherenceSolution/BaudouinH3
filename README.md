@@ -63,7 +63,8 @@ Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires e
 Chaque joueur peut recevoir un **surnom** (Gestion → Joueurs, champ « Surnom » à l'ajout ou via le crayon).
 Le surnom remplace alors le nom partout à l'écran — listes de vote, classements, amendes, statistiques — le nom
 complet restant affiché en petit dessous dans les écrans de gestion et les sélecteurs. Les recherches acceptent
-indifféremment le prénom, le nom ou le surnom, et le surnom seul suffit pour se connecter.
+indifféremment le prénom, le nom ou le surnom. La connexion, elle, se fait toujours par le prénom et le nom :
+le surnom n'y est pas accepté.
 
 ### Vote « commentaire d'abord »
 
@@ -79,9 +80,9 @@ rétrospective affichent le vote normalement pour tout le monde.
 
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
-| Votant | « Je vote » puis prénom et nom, ou simplement son surnom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
-| Orateur | « Je suis l'orateur » puis prénom et nom, ou son surnom | Console : ordre, mélange, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, clôture |
-| Secrétaire | « Je vote », nom ou surnom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
+| Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
+| Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, clôture |
+| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
 
 ## Scripts

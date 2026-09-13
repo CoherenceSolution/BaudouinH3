@@ -66,7 +66,7 @@ await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
 await admin.getByText('est maintenant secrétaire').waitFor()
 await shot(admin, '03c-droits')
 
-// 2d. Surnom : « Sniper » pour Maxime Vigne (affiché à la place du nom, et suffit pour se connecter)
+// 2d. Surnom : « Sniper » pour Maxime Vigne (affiché à la place du nom, et retrouvé par la recherche)
 await admin.goto(BASE + '/admin/joueurs')
 await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Vigne')
 await admin.getByTitle('Renommer').first().click()
@@ -169,6 +169,9 @@ await shot(ronny, '08-ticket-form')
 await ronny.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await ronny.getByText('Vote envoyé', { exact: true }).waitFor()
 await ronny.getByText('L’orateur lira le commentaire avant d’annoncer le nom').waitFor()
+// Le surnom remplace le nom partout à l'affichage
+await ronny.getByText('Sniper').first().waitFor()
+if (await ronny.getByText('Maxime Vigne').count() !== 0) throw new Error('Le surnom devrait remplacer le nom à l’affichage')
 await shot(ronny, '09-ticket-sent')
 const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
 await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
@@ -177,12 +180,6 @@ const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissa
 await shot(jarne, '07b-secretaire-par-code')
 // Jarne garde un brouillon (ne pas envoyer)
 await jarne.waitForTimeout(1500)
-
-// 5b. Connexion par le seul surnom : « Sniper » suffit, et c'est ce nom qui s'affiche
-const sniper = await login('sniper', 'Sniper', '')
-await sniper.goto(BASE + `/votes/${matchId}`)
-await sniper.getByText('Vous votez en tant que Sniper').waitFor()
-await shot(sniper, '09b-connexion-surnom')
 
 // 6. Orateur
 const speaker = await login('speaker', 'Maxim', 'Leonard', 'speaker')

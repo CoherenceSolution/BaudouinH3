@@ -21,7 +21,7 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 
 | Rôle | Connexion | Peut |
 |---|---|---|
-| **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, ou de son seul surnom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
+| **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
 | **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, suivre la consigne « commentaire avant le nom », afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
 | **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité. |
 | **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, définir ou changer le code commun. |
@@ -73,7 +73,8 @@ Points de conception :
   consulter le nom de l'auteur dans sa console (`revealAuthor`), sans que ce nom soit montré ailleurs.
 - **Surnoms** : `players.nickname` (facultatif) devient le nom affiché partout (`playerName`), le nom d'état civil
   restant disponible (`fullName`) pour les écrans de gestion, le journal d'activité et les exports (`playerFullLabel`).
-  Les recherches et la connexion comparent prénom, nom **et** surnom, sans accents ni majuscules (`playerMatches`).
+  Les recherches de joueur comparent prénom, nom **et** surnom, sans accents ni majuscules (`playerMatches`) ;
+  la connexion, elle, reste sur prénom + nom (`findPlayerByName`), le surnom n'y donne pas accès.
 - **« Commentaire d'abord »** : le votant coche `commentFirst` sur une catégorie. C'est une consigne de lecture,
   pas un secret : elle n'agit que dans la console de l'orateur (`speakerView`), où le commentaire passe au-dessus
   et où le nom attend un appui sur « Annoncer le nom ». Ce repli est un simple état local du composant — rien
@@ -148,7 +149,7 @@ src/
 ## 6. Déroulement d'une soirée
 
 1. Le secrétaire crée le match (date, adversaire, score facultatif) : les votes s'ouvrent.
-2. Chaque membre présent choisit son nom (ou son surnom), remplit son ticket (3 catégories, commentaire lu à voix
+2. Chaque membre présent choisit son nom, remplit son ticket (3 catégories, commentaire lu à voix
    haute), éventuellement à deux, puis l'envoie. Il peut demander, catégorie par catégorie, que l'orateur lise son
    commentaire avant d'annoncer le nom. Il peut modifier son vote tant que la lecture n'a pas commencé.
 3. L'orateur suit la participation (envoyés / en cours / sans vote), prépare l'ordre (manuel ou mélangé) et les étoiles.
