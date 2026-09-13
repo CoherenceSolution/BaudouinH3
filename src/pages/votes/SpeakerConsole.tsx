@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore'
-import { ArrowDown, ArrowUp, Bookmark, BookOpenCheck, Eye, EyeOff, Megaphone, Mic, Play, RotateCcw, Shuffle, Star, Flag } from 'lucide-react'
+import { AlarmClock, ArrowDown, ArrowUp, Bookmark, BookOpenCheck, Eye, EyeOff, Megaphone, Mic, Play, RotateCcw, Shuffle, Star, Flag } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
@@ -10,6 +10,7 @@ import type { Like, Match, Player, Ticket } from '@/lib/types'
 import { commentFirstPicks, likeCounts, submittedTickets } from '@/lib/rankings'
 import { cx, playerName } from '@/lib/format'
 import { Button, Card, SectionTitle } from '@/components/ui'
+import { VoteTimerControl } from '@/components/VoteTimer'
 import { useToast } from '@/components/ui/Toast'
 import { useLocalFlag } from '@/hooks/useLocalFlag'
 import { TicketCard } from './TicketCard'
@@ -23,7 +24,7 @@ interface Props {
 
 /** Console de l'orateur : ordre de lecture, étoiles, annonce des lectures, révélation d'auteur. */
 export function SpeakerConsole({ match, players, tickets, likes }: Props) {
-  const { identity, user } = useAuth()
+  const { identity, user, isStaff } = useAuth()
   const allPlayers = usePlayers(true)
   const actor = useActor()
   const toast = useToast()
@@ -52,6 +53,8 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
       const patch: Record<string, unknown> = { status, updatedAt: serverTimestamp() }
       if (status === 'reading') Object.assign(patch, { speakerName, speakerUid: user?.uid ?? null, readingStartedAt: serverTimestamp() })
       if (status === 'closed') patch.closedAt = serverTimestamp()
+      // Le minuteur n'a plus de sens hors phase de vote. Seul le staff peut écrire ces champs.
+      if (status !== 'voting' && isStaff) Object.assign(patch, { voteDeadline: null, voteTimerBy: null })
       await updateDoc(doc(db, 'matches', match.id), patch)
       await logActivity(actor, 'update', 'match', match.id, status === 'reading' ? `Votes clôturés, lecture commencée par ${speakerName}` : status === 'closed' ? 'Soirée terminée' : 'Votes réouverts')
       toast(status === 'reading' ? 'Votes clôturés. Bonne lecture !' : status === 'closed' ? 'Soirée terminée' : 'Votes réouverts')
@@ -145,6 +148,17 @@ export function SpeakerConsole({ match, players, tickets, likes }: Props) {
           </p>
         )}
       </Card>
+
+      {/* Minuteur des votes : déclenché par l'admin ou un secrétaire, visible par tous les votants. */}
+      {match.status === 'voting' &&
+        (isStaff ? (
+          <VoteTimerControl match={match} />
+        ) : (
+          <Card className="flex items-start gap-3 p-4 text-[13px] text-muted sm:p-5">
+            <AlarmClock className="mt-0.5 size-4 shrink-0" />
+            <span>Besoin d’un compte à rebours pour les retardataires ? Demandez à l’admin ou à un secrétaire de lancer le minuteur des votes.</span>
+          </Card>
+        ))}
 
       {/* À lire */}
       <section>

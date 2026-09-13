@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone } from 'lucide-react'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone, Flame } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
@@ -27,6 +27,10 @@ interface Props {
   revealHint?: boolean
   index?: number
   className?: string
+  /** Voix cumulées du joueur désigné, catégorie par catégorie, au moment de cette lecture. */
+  nominationCounts?: Partial<Record<VoteCategory, number>>
+  /** Seuil à partir duquel on signale le joueur (3 voix par défaut). */
+  alertThreshold?: number
 }
 
 const catTone: Record<VoteCategory, string> = {
@@ -35,7 +39,7 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, onReveal, revealHint, index, className }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, onReveal, revealHint, index, className, nominationCounts, alertThreshold }: Props) {
   const categories = useCategories()
   // Noms déjà annoncés par l'orateur pendant cette lecture (état local, rien n'est écrit).
   const [announced, setAnnounced] = useState<VoteCategory[]>([])
@@ -66,6 +70,9 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
           const n = counts?.[c.key] ?? 0
           const mine = myLikes?.[c.key] === ticket.id
           const text = [e?.proposal, e?.comment].filter(Boolean).join(' — ')
+          // Voix cumulées du joueur désigné : au-delà du seuil, la lecture le signale.
+          const reached = nominationCounts?.[c.key]
+          const alert = alertThreshold != null && reached != null && reached >= alertThreshold
           // Consigne du votant : dans la console de l'orateur, le nom attend l'annonce.
           const guided = Boolean(speakerView && c.pickPlayer && e?.commentFirst && e?.playerId)
           const waiting = guided && !announced.includes(c.key)
@@ -84,7 +91,15 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
                 {revealHint && <span className="text-[12px] font-medium text-violet-700">Lisez d’abord le commentaire, puis annoncez le nom voté.</span>}
               </div>
             ) : (
-              <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</span>
+                {alert && (
+                  <Badge tone="gold" className="font-semibold">
+                    <Flame className="size-3" />
+                    <span>{reached}<sup>e</sup> voix</span>
+                  </Badge>
+                )}
+              </div>
             )
           )
           const comment = text ? <p className={cx('whitespace-pre-line text-[14px]', c.pickPlayer ? 'mt-1 text-ink-2' : 'text-[15px] font-medium text-ink')}>{text}</p> : !c.pickPlayer && <span className="text-muted">—</span>

@@ -1,7 +1,8 @@
 // Scénario de bout en bout joué contre les émulateurs Firebase (npm run emulators) et le serveur Vite (npm run dev, .env avec VITE_USE_EMULATORS=true).
 // Prérequis : npx playwright install chromium. Lancer : bash e2e/reset-emulators.sh && node e2e/scenario.mjs
-// Il couvre : installation, création de match, amendes, buts, surnoms, trois votants, vote « commentaire d'abord »,
-// orateur, lecture en direct, lecture guidée dans la console, coups de cœur, rétrospective, mobile.
+// Il couvre : installation, création de match, surnoms, la coum, amendes, buts, minuteur des votes, trois votants,
+// vote « commentaire d'abord », orateur, lecture guidée dans la console, lecture en direct (alerte à 3 voix),
+// coups de cœur, listes maison, rétrospective, mobile.
 import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:5173'
@@ -13,6 +14,7 @@ async function ctx(name, mobile = false) {
   const p = await c.newPage()
   p.on('console', (m) => { if (m.type() === 'error') errors.push(`[${name}] ${m.text()}`) })
   p.on('pageerror', (e) => errors.push(`[${name}] pageerror ${e.message}`))
+  p.on('dialog', (d) => d.accept())
   return p
 }
 const shot = (p, n) => p.screenshot({ path: `${S}/${n}.png`, fullPage: true })
@@ -55,6 +57,22 @@ await admin.goto(BASE + `/votes/${matchId}`)
 await admin.getByRole('button', { name: 'Mon vote', exact: true }).click()
 await admin.getByText('Vous votez en tant que Bruno Huberty').waitFor()
 await shot(admin, '03b-admin-ticket')
+await fillTicket(admin, 'Vigne', 'Leyder', 'Le contrôle orienté sur le corner', 'Trois passes décisives.')
+await admin.getByRole('button', { name: 'Envoyer mon vote' }).click()
+await admin.getByText('Vote envoyé', { exact: true }).waitFor()
+
+// Remplit les trois catégories du formulaire de vote affiché.
+async function fillTicket(p, best, worst, moment, comment, commentFirst = false) {
+  const blocks = [['🏆', best, comment], ['🥴', worst, 'Il a raté un but tout fait à la 12e.'], ['⚡', best, moment]]
+  for (const [emoji, who, text] of blocks) {
+    const block = p.locator('.card').filter({ hasText: emoji }).first()
+    await block.locator('input[placeholder^="Rechercher un joueur"]').fill(who)
+    await block.getByRole('button', { name: new RegExp(who) }).first().click()
+    await block.locator('textarea').fill(text)
+    // Consigne : l'orateur devra lire le commentaire avant d'annoncer le nom.
+    if (commentFirst && emoji === '🏆') await block.getByRole('checkbox').check()
+  }
+}
 
 // 2c. Code des secrétaires + droits à Jarne
 await admin.goto(BASE + '/admin/staff')
@@ -65,6 +83,7 @@ await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Jarne')
 await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
 await admin.getByText('est maintenant secrétaire').waitFor()
 await shot(admin, '03c-droits')
+
 
 // 2d. Surnom : « Sniper » pour Maxime Vigne (affiché à la place du nom, et retrouvé par la recherche)
 await admin.goto(BASE + '/admin/joueurs')
@@ -78,6 +97,37 @@ await admin.getByText('Joueur renommé').waitFor()
 await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('sniper')
 await admin.getByText('Maxime Vigne').waitFor()
 await shot(admin, '03d-surnom')
+
+// 2e. La coum : qui a payé, absent, recoum
+await admin.goto(BASE + `/votes/${matchId}`)
+await admin.getByRole('button', { name: 'Coum', exact: true }).click()
+await admin.getByText('La coum du match').waitFor()
+await shot(admin, '03d-coum-depart')
+await admin.getByRole('button', { name: 'A payé' }).first().click()
+await admin.waitForTimeout(600)
+await admin.getByRole('button', { name: 'A payé' }).first().click()
+await admin.waitForTimeout(600)
+if ((await admin.getByText('A coumé', { exact: true }).count()) !== 2) throw new Error('deux joueurs devraient avoir coumé')
+if (!(await admin.locator('.card', { hasText: 'Ont coumé' }).first().innerText()).includes('2 / 21')) throw new Error('le compteur devrait afficher 2 / 21')
+await admin.getByTitle('Noter absent (ne doit pas la coum)').first().click()
+await admin.waitForTimeout(600)
+await admin.getByText('Absent', { exact: true }).waitFor()
+await shot(admin, '03e-coum-a-paye')
+await admin.getByRole('button', { name: 'Recoumer les présents' }).click()
+await admin.getByText('Recoum lancée').first().waitFor()
+await admin.waitForTimeout(800)
+if ((await admin.getByText('A coumé', { exact: true }).count()) !== 0) throw new Error('après une recoum, tout le monde redoit une coum')
+await admin.getByText(/2 coums reçues sur \d+ demandées/).waitFor()
+await shot(admin, '03f-coum-recoum')
+
+// Tous les présents finissent par payer : la feuille est bouclée, il n'y a rien à conserver après.
+const payer = admin.getByRole('button', { name: 'A payé' })
+for (let i = 0; i < 60 && (await payer.count()) > 0; i++) {
+  await payer.first().click()
+  await admin.waitForTimeout(250)
+}
+await admin.getByText('Tout le monde a coumé. Rien à relancer.').waitFor()
+await shot(admin, '03g-coum-bouclee')
 
 // 3. Amende : retard 20 min -> 15 €
 await admin.goto(BASE + '/amendes')
@@ -124,6 +174,15 @@ await admin.getByRole('button', { name: /Duos/ }).click()
 await admin.waitForTimeout(400)
 await shot(admin, '07-stats-duos')
 
+// 4b. Minuteur des votes (admin ou secrétaire uniquement)
+await admin.goto(BASE + `/votes/${matchId}`)
+await admin.getByRole('button', { name: 'Console', exact: true }).click()
+await admin.getByText('Minuteur des votes').waitFor()
+await admin.getByRole('button', { name: '10 min' }).click()
+await admin.getByText('Minuteur lancé : 10 minutes').first().waitFor()
+await admin.getByText(/Il reste (9:5\d|10:00) aux votants/).waitFor()
+await shot(admin, '07c-minuteur')
+
 // 5. Votants
 async function login(name, firstName, lastName, mode = 'public', pin = null) {
   const p = await ctx('voter-' + name)
@@ -148,20 +207,8 @@ async function vote(name, best, worst, moment, comment, pin = null, commentFirst
   const p = await login(firstName, firstName, lastName, 'public', pin)
   await p.goto(BASE + `/votes/${matchId}`)
   await p.getByText('Vous votez en tant que').waitFor()
-  const bestBlock = p.locator('.card').filter({ hasText: '🏆' }).first()
-  await bestBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(best)
-  await bestBlock.getByRole('button', { name: new RegExp(best) }).first().click()
-  await bestBlock.locator('textarea').fill(comment)
-  // Consigne : l'orateur devra lire le commentaire avant d'annoncer le nom.
-  if (commentFirst) await bestBlock.getByRole('checkbox').check()
-  const worstBlock = p.locator('.card').filter({ hasText: '🥴' }).first()
-  await worstBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(worst)
-  await worstBlock.getByRole('button', { name: new RegExp(worst) }).first().click()
-  await worstBlock.locator('textarea').fill('Il a raté un but tout fait à la 12e.')
-  const momentBlock = p.locator('.card').filter({ hasText: '⚡' }).first()
-  await momentBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(best)
-  await momentBlock.getByRole('button', { name: new RegExp(best) }).first().click()
-  await momentBlock.locator('textarea').fill(moment)
+  await p.getByText(/Il vous reste du temps pour voter/).waitFor()
+  await fillTicket(p, best, worst, moment, comment, commentFirst)
   return p
 }
 const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', null, true)
@@ -203,7 +250,7 @@ await shot(speaker, '12-console-lecture')
 
 // 7. Votant en direct + coup de coeur
 await ronny.getByRole('button', { name: 'En direct' }).click()
-await ronny.getByText('1 / 2 votes lus').waitFor()
+await ronny.getByText('1 / 3 votes lus').waitFor()
 await ronny.locator('article button:has(svg)').first().click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '13-en-direct')
@@ -224,6 +271,14 @@ await speaker.getByRole('button', { name: 'Annoncer le nom' }).first().click()
 await speaker.waitForTimeout(600)
 if (await speaker.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0) throw new Error('Le nom devrait s’afficher dans la console après l’annonce')
 await shot(speaker, '12d-console-nom-annonce')
+
+// 7c. Troisième lecture : le même joueur atteint 3 voix, le direct le signale
+await speaker.getByRole('button', { name: 'Lire' }).first().click()
+await speaker.getByText('Lecture annoncée').first().waitFor()
+await ronny.getByText('3 / 3 votes lus').waitFor()
+await ronny.getByText('3 voix atteintes').waitFor()
+if ((await ronny.getByText('3e voix').count()) < 1) throw new Error('Le vote lu devrait porter le badge « 3e voix »')
+await shot(ronny, '13b-alerte-3-voix')
 await ronny.getByRole('button', { name: 'Classement' }).click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '14-classement')
@@ -247,12 +302,26 @@ await shot(admin, '18-home')
 // 8b. Paramètres : renommer la 3e catégorie
 await admin.goto(BASE + '/admin/parametres')
 await admin.getByLabel(/Catégorie 3/).fill('Moment de la soirée')
-await admin.getByRole('button', { name: 'Enregistrer' }).click()
-await admin.getByText('Paramètres enregistrés').waitFor()
+await admin.locator('.card', { hasText: 'Catégories de vote' }).getByRole('button', { name: 'Enregistrer' }).click()
+await admin.getByText('Paramètres enregistrés').first().waitFor()
+// Seuil de l'alerte du direct
+await admin.getByLabel('Nombre de voix').fill('3')
+await admin.locator('.card', { hasText: 'Alerte en direct' }).getByRole('button', { name: 'Enregistrer' }).click()
+await admin.getByText('Paramètres enregistrés').first().waitFor()
 await admin.goto(BASE + `/votes/${matchId}`)
 await admin.getByRole('button', { name: 'Classement' }).click()
 await admin.getByText('Moment de la soirée').first().waitFor()
 await shot(admin, '17b-parametres-renommes')
+
+// 8c. Listes maison : suppression d'une liste (« Homme du match »)
+await admin.goto(BASE + '/admin/listes')
+await admin.getByText('Papa dans l’année', { exact: true }).waitFor()
+await admin.getByText('Homme du match', { exact: true }).waitFor()
+await shot(admin, '17c-listes')
+await admin.getByTitle('Supprimer la liste').nth(1).click()
+await admin.getByText('Liste supprimée').first().waitFor()
+await admin.waitForTimeout(600)
+if ((await admin.getByText('Homme du match', { exact: true }).count()) !== 0) throw new Error('La liste devrait avoir disparu')
 
 // 9. Mobile
 const m = await ctx('mobile', true)
@@ -268,6 +337,9 @@ await shot(m, '20-mobile-home')
 await m.goto(BASE + `/votes/${matchId}`)
 await m.waitForTimeout(800)
 await shot(m, '21-mobile-match')
+await m.getByRole('button', { name: 'Coum', exact: true }).click()
+await m.getByText('La coum du match').waitFor()
+await shot(m, '21b-mobile-coum')
 await m.goto(BASE + '/amendes')
 await m.waitForTimeout(800)
 await shot(m, '22-mobile-amendes')

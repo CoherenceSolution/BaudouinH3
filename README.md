@@ -1,6 +1,6 @@
 # Baudouin H3
 
-Votes d'après-match, amendes et statistiques de buts/passes pour l'équipe Baudouin H3.
+Votes d'après-match, suivi de la coum, amendes et statistiques de buts/passes pour l'équipe Baudouin H3.
 Stack : React + Vite + TypeScript + Tailwind, données et hébergement Firebase (plan gratuit).
 
 L'architecture détaillée est dans [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -80,10 +80,40 @@ rétrospective affichent le vote normalement pour tout le monde.
 
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
-| Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
+| Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
 | Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, clôture |
-| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
+| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, **coum** (qui a payé, absents, recoum), minuteur des votes, amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
+
+### La coum
+
+Onglet **Coum** de chaque match : une feuille du moment, pour les présents du jour. On garde simplement la trace
+de qui a coumé — pas de montants, pas de caisse, pas d'historique de saison, et rien à voir avec les amendes.
+
+- Le trésorier (secrétaire ou admin) clique **A payé** quand un joueur lui donne sa coum.
+- Un joueur peut être noté **absent** : il ne doit rien pour ce match.
+- **Recoumer les présents** redemande une coum à tous ceux qui sont là (ou joueur par joueur avec l'icône ↻) :
+  ceux qui avaient déjà payé repassent « pas encore » pour le tour suivant.
+- Quand tous les présents ont payé, la feuille affiche « Tout le monde a coumé » : c'est terminé.
+- Tout le monde voit qui a coumé ; seuls le secrétaire et l'admin tiennent la liste à jour.
+
+### Minuteur des votes
+
+Dans la console, l'admin ou un secrétaire lance un compte à rebours (5, 10, 15 minutes ou une durée libre),
+le prolonge (+ 2 min) ou l'arrête. Tout le monde voit le temps restant sur les pages du match ; ceux qui n'ont
+pas encore envoyé leur vote lisent « Il vous reste du temps pour voter ». Rien ne se ferme tout seul : la clôture
+reste un geste de l'orateur.
+
+### Alerte en direct
+
+Pendant la lecture, dès qu'un joueur atteint **3 voix** dans une catégorie (seuil réglable dans Gestion →
+Paramètres), un bandeau le signale dans l'onglet « En direct » et le vote lu porte un badge « 3ᵉ voix ».
+
+### Listes maison
+
+Gestion → **Listes** rassemble les listes du genre « Papa de l'année » ou « Homme du match » : création,
+renommage, masquage et **suppression** (la suppression efface aussi les entrées de la liste). Elles s'affichent
+dans l'onglet Stats.
 
 ## Scripts
 
@@ -101,15 +131,15 @@ rétrospective affichent le vote normalement pour tout le monde.
 - Les secrétaires n'ont pas de mot de passe personnel : un code commun, fixé par l'admin, active leurs droits.
 - Les tickets restent anonymes pour l'orateur tant qu'il ne choisit pas d'afficher un nom ; le staff connecté
   voit les auteurs.
-- Seuls les comptes staff peuvent écrire amendes, buts, joueurs et matchs : c'est garanti par `firestore.rules`,
-  pas seulement par l'interface.
+- Seuls les comptes staff peuvent écrire amendes, coums, buts, joueurs et matchs : c'est garanti par `firestore.rules`,
+  pas seulement par l'interface. Le minuteur des votes est lui aussi réservé à l'admin et aux secrétaires.
 - Le journal d'activité (Gestion → Activité) est en ajout seul.
 
 ## Test de bout en bout
 
-`e2e/scenario.mjs` rejoue une soirée complète (installation, match, amendes, buts, surnoms, votants, vote
-« commentaire d'abord », orateur, lecture guidée, coups de cœur, rétrospective, vue mobile) avec Playwright
-contre les émulateurs :
+`e2e/scenario.mjs` rejoue une soirée complète (installation, match, surnoms, coum, amendes, buts, minuteur des
+votes, votants, vote « commentaire d'abord », orateur, lecture guidée, alerte à 3 voix, coups de cœur, listes
+maison, rétrospective, vue mobile) avec Playwright contre les émulateurs :
 
 ```bash
 npm run emulators                      # terminal 1

@@ -2,7 +2,7 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { useCollection } from './useCollection'
-import type { Fine, FineType, Goal, Like, Match, Player, StaffMember, StatCategory, StatEntry, Ticket, ActivityLog } from '@/lib/types'
+import type { Coum, Fine, FineType, Goal, Like, Match, Player, StaffMember, StatCategory, StatEntry, Ticket, ActivityLog } from '@/lib/types'
 import { playerName } from '@/lib/format'
 import { useAuth } from '@/auth/AuthProvider'
 
@@ -39,6 +39,15 @@ export function useLikes(matchId: string | undefined) {
   const { user } = useAuth()
   return useCollection<Like>(
     () => (user && matchId ? query(collection(db, 'likes'), where('matchId', '==', matchId)) : null),
+    [user?.uid, matchId],
+  )
+}
+
+/** Les coums d'un match : qui a payé, qui doit encore, qui est absent. Lisible par tout le monde. */
+export function useCoums(matchId: string | undefined) {
+  const { user } = useAuth()
+  return useCollection<Coum>(
+    () => (user && matchId ? query(collection(db, 'coums'), where('matchId', '==', matchId)) : null),
     [user?.uid, matchId],
   )
 }

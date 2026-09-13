@@ -5,19 +5,25 @@ import { db } from '@/lib/firebase'
 import { useSettings } from '@/hooks/useSettings'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
-import { DEFAULT_CATEGORIES, type VoteCategory } from '@/lib/types'
+import { DEFAULT_CATEGORIES, DEFAULT_LIVE_ALERT_THRESHOLD, type VoteCategory } from '@/lib/types'
 import { Button, Card, Input } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 
 /** Paramètres modifiables par le staff : libellés et emojis des trois catégories de vote. */
 export function SettingsAdmin() {
-  const { categories } = useSettings()
+  const { categories, settings } = useSettings()
   const actor = useActor()
   const toast = useToast()
   const [form, setForm] = useState<Record<VoteCategory, { label: string; emoji: string }>>({
     best: { label: '', emoji: '' }, worst: { label: '', emoji: '' }, moment: { label: '', emoji: '' },
   })
+  const [threshold, setThreshold] = useState(String(DEFAULT_LIVE_ALERT_THRESHOLD))
   const [loading, setLoading] = useState(false)
+  const [savingAlert, setSavingAlert] = useState(false)
+
+  useEffect(() => {
+    setThreshold(String(settings.liveAlertThreshold ?? DEFAULT_LIVE_ALERT_THRESHOLD))
+  }, [settings])
 
   useEffect(() => {
     setForm({
@@ -41,6 +47,22 @@ export function SettingsAdmin() {
     }
   }
 
+  async function saveAlert() {
+    const alert = Math.round(Number(threshold))
+    if (!Number.isFinite(alert) || alert < 1) return
+    setSavingAlert(true)
+    try {
+      await setDoc(doc(db, 'config', 'settings'), { liveAlertThreshold: alert }, { merge: true })
+      await logActivity(actor, 'update', 'settings', 'settings', `Alerte du direct à ${alert} voix`)
+      toast('Paramètres enregistrés')
+    } catch (e) {
+      console.error(e)
+      toast('Enregistrement impossible', 'error')
+    } finally {
+      setSavingAlert(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="p-5">
@@ -59,6 +81,28 @@ export function SettingsAdmin() {
         </div>
       </Card>
       <p className="text-[12px] text-muted">Chaque catégorie désigne un joueur, accompagné d’un commentaire lu à voix haute.</p>
+
+      <Card className="p-5">
+        <h3 className="font-semibold">Alerte en direct</h3>
+        <p className="mb-4 mt-1 text-[13px] text-muted">
+          Pendant la lecture, un joueur qui atteint ce nombre de voix dans une catégorie est signalé dans l’onglet « En direct ».
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Nombre de voix"
+            type="number"
+            min={1}
+            max={20}
+            inputMode="numeric"
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+            hint={`Par défaut : ${DEFAULT_LIVE_ALERT_THRESHOLD} voix`}
+          />
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button icon={<Save className="size-4" />} loading={savingAlert} onClick={saveAlert}>Enregistrer</Button>
+        </div>
+      </Card>
     </div>
   )
 }
