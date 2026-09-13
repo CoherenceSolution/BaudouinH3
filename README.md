@@ -1,6 +1,6 @@
 # Baudouin H3
 
-Votes d'après-match, la coum, amendes et statistiques de buts/passes pour l'équipe Baudouin H3.
+Votes d'après-match, suivi de la coum, amendes et statistiques de buts/passes pour l'équipe Baudouin H3.
 Stack : React + Vite + TypeScript + Tailwind, données et hébergement Firebase (plan gratuit).
 
 L'architecture détaillée est dans [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -64,20 +64,20 @@ Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires e
 |---|---|---|
 | Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
 | Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture, révélation d'auteur, clôture |
-| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, **coum** (encaisser, absents, recoum), minuteur des votes, amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
+| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, **coum** (qui a payé, absents, recoum), minuteur des votes, amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
 
 ### La coum
 
-Onglet **Coum** de chaque match : à chaque match, chacun met la même somme au pot (10 € par défaut ; le montant
-se règle dans Gestion → Paramètres et peut être ajusté match par match).
+Onglet **Coum** de chaque match : chacun paie la même chose, l'application garde simplement la trace de qui a
+coumé — pas de montants, pas de caisse.
 
-- Le trésorier (secrétaire ou admin) clique **Encaissé** quand il reçoit l'argent d'un joueur.
+- Le trésorier (secrétaire ou admin) clique **A payé** quand un joueur lui donne sa coum.
 - Un joueur peut être noté **absent** : il ne doit rien pour ce match.
 - **Recoumer les présents** redemande une coum à tous ceux qui sont là (ou joueur par joueur avec l'icône ↻) :
-  ceux qui avaient déjà payé repassent « à payer » pour le tour suivant.
-- Tout le monde voit qui a coumé ; seuls le secrétaire et l'admin encaissent.
-- Le récapitulatif de la saison (qui doit encore combien, match par match) est dans **Amendes → Coums**.
+  ceux qui avaient déjà payé repassent « pas encore » pour le tour suivant.
+- Tout le monde voit qui a coumé ; seuls le secrétaire et l'admin tiennent la liste à jour.
+- Le récapitulatif de la saison (qui a coumé, qui reste à relancer, match par match) est dans **Amendes → Coums**.
 
 ### Minuteur des votes
 

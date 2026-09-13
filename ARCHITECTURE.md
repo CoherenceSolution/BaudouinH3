@@ -1,7 +1,7 @@
 # Baudouin H3 — Architecture
 
 Application web légère pour l'équipe Baudouin H3 : votes d'après-match (meilleur joueur, pire joueur,
-geste marquant), la coum (mise commune de chaque match), gestion des amendes, statistiques de buts et
+geste marquant), le suivi de la coum à chaque match, gestion des amendes, statistiques de buts et
 passes décisives, journal d'activité.
 
 ## 1. Choix techniques
@@ -25,7 +25,7 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote, suivre la lecture, voter « coup de cœur », consulter amendes et stats. |
 | **Orateur** | Idem membre public, en cochant « Je suis l'orateur » à la connexion (choix libre, sur base de confiance). | Voir qui a voté et la complétion, réorganiser / mélanger l'ordre, attribuer des petites étoiles, conserver des tickets, annoncer chaque lecture, afficher le nom d'un auteur, clôturer les votes et terminer la soirée. |
 | **Secrétaire** | Aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité.
-Tient aussi le rôle de **trésorier** : encaisse la coum, note les absents, « recoume », lance le minuteur des votes. |
+Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume », lance le minuteur des votes. |
 | **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, définir ou changer le code commun. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
@@ -49,7 +49,7 @@ players/{id}                  { firstName, lastName, active, role: 'secretary'|n
 matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
                                 status: 'voting'|'reading'|'closed',
                                 speakerName, speakerUid, readingStartedAt, closedAt,
-                                voteDeadline, voteTimerMinutes, voteTimerBy, coumAmount,
+                                voteDeadline, voteTimerMinutes, voteTimerBy,
                                 createdBy, createdAt, updatedAt }
 tickets/{matchId_authorId}    { matchId, authorPlayerId, authorUids[],
                                 best:{playerId, proposal, comment}, worst:{…}, moment:{…},
@@ -82,12 +82,12 @@ Points de conception :
 - **Classements en temps réel** : seuls les tickets `submitted` **et** `readAt != null` comptent. Le compteur bouge
   donc exactement au moment où l'orateur annonce une lecture.
 - **Coup de cœur** : un seul choix par votant et par catégorie (identifiant `matchId_voterId_category`), modifiable.
-- **La coum** : à chaque match, chacun met la même somme au pot (10 € par défaut, réglable globalement dans
-  Gestion → Paramètres et match par match). Un document par joueur et par match : `rounds` compte les coums
-  demandées, `paid` celles que le trésorier a encaissées, `absent` exclut le joueur du match. Trois états en
-  découlent : **a coumé**, **à payer**, **absent**. « **Recoumer** » ajoute une coum à tous les présents (ou à
-  un joueur précis) : `rounds` passe à 2, 3… et ceux qui avaient payé repassent « à payer ». Tout le monde voit
-  qui a coumé ; seul le staff écrit (règles Firestore).
+- **La coum** : à chaque match, chacun paie la même chose ; l'application ne suit que le geste, **jamais les
+  montants ni une caisse**. Un document par joueur et par match : `rounds` compte les coums demandées, `paid`
+  celles que le trésorier a reçues, `absent` exclut le joueur du match. Trois états en découlent : **a coumé**,
+  **pas encore**, **absent**. « **Recoumer** » ajoute une coum à tous les présents (ou à un joueur précis) :
+  `rounds` passe à 2, 3… et ceux qui avaient payé repassent « pas encore ». Tout le monde voit qui a coumé ;
+  seul le staff écrit (règles Firestore).
 - **Minuteur des votes** : l'admin ou un secrétaire pose une échéance (`matches.voteDeadline`) depuis la console.
   Tous les appareils affichent le même compte à rebours, avec un message adapté à ceux qui n'ont pas encore envoyé
   leur vote. Rien ne se ferme tout seul : la clôture reste un geste de l'orateur, et l'échéance est effacée à la clôture.
@@ -117,8 +117,8 @@ Points de conception :
   comme demandé, sans adresse e-mail).
 - Cycle de vie d'un match par l'orateur anonyme : autorisé uniquement pour les champs
   `status, speakerName, speakerUid, readingStartedAt, closedAt, updatedAt` (`diff().affectedKeys().hasOnly`).
-  Le minuteur (`voteDeadline`…) et le montant de la coum n'en font pas partie : ils restent réservés au staff,
-  comme demandé (« déclenchement par un admin ou un secrétaire »).
+  Le minuteur (`voteDeadline`…) n'en fait pas partie : il reste réservé au staff, comme demandé
+  (« déclenchement par un admin ou un secrétaire »).
 - Coums : lecture par tout utilisateur connecté (tout le monde voit qui a coumé), écriture par le staff seul.
 - Bootstrap : création de l'admin et des données initiales autorisée seulement tant que `config/bootstrap` n'existe pas ;
   ce document ne peut être créé que par un compte e-mail et jamais modifié ni supprimé.
@@ -137,7 +137,7 @@ src/
     firebase.ts              Initialisation (cache persistant, émulateurs en dev)
     types.ts                 Types du modèle de données
     fines.ts                 Calcul et formatage des amendes
-    coums.ts                 La coum : états, totaux d'un match, récapitulatif de saison
+    coums.ts                 La coum : états (a coumé / pas encore / absent), comptes d'un match et de la saison
     statCategories.ts        Suppression d'une liste maison et de ses entrées
     rankings.ts              Classements (nominations, coups de cœur, buts, duos), complétion des tickets
     format.ts                Dates, noms, saisons, titres de match
@@ -176,8 +176,8 @@ src/
    les classements se mettent à jour, les membres votent leur coup de cœur par catégorie. Dès qu'un joueur atteint
    3 voix dans une catégorie, le direct le signale.
 5. Il peut afficher le nom de l'auteur d'un ticket, conserver un ticket, puis termine la soirée.
-   Pendant ce temps, le trésorier encaisse **la coum** dans l'onglet du même nom : une ligne par joueur
-   (a coumé / à payer / absent), un bouton « Recoumer les présents » pour un tour supplémentaire.
+   Pendant ce temps, le trésorier note **la coum** dans l'onglet du même nom : une ligne par joueur
+   (a coumé / pas encore / absent), un bouton « Recoumer les présents » pour un tour supplémentaire.
 6. En fin d'année, la rétrospective compile tout : meilleur/pire joueur cumulés, buteurs, passeurs, duo de la saison,
    caisse des amendes, petites étoiles et tickets conservés, contributions préférées du public.
 

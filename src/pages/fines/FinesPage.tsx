@@ -11,7 +11,6 @@ import { formatEuro } from '@/lib/fines'
 import { currentSeason, cx, formatDate, playerName, seasonOf } from '@/lib/format'
 import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Select, Spinner, Stat, Tabs } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
-import { useSettings } from '@/hooks/useSettings'
 import { CoumsSeason } from './CoumsSeason'
 import { AddFineModal } from './AddFineModal'
 import { FineTypesEditor } from './FineTypesEditor'
@@ -25,7 +24,6 @@ export function FinesPage() {
   const types = useFineTypes()
   const matches = useMatches()
   const coums = useAllCoums()
-  const { settings } = useSettings()
   const [tab, setTab] = useState<Tab>('players')
   const [add, setAdd] = useState(false)
   const [season, setSeason] = useState(currentSeason())
@@ -45,7 +43,7 @@ export function FinesPage() {
     <div>
       <PageHeader
         title="Amendes"
-        subtitle="Le barème et les coums sont publics. Seuls les secrétaires et l’admin encaissent."
+        subtitle="Le barème et les coums sont publics. Seuls les secrétaires et l’admin les tiennent à jour."
         actions={isStaff && <Button icon={<Plus className="size-4" />} onClick={() => setAdd(true)}>Infliger une amende</Button>}
       />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -81,7 +79,7 @@ export function FinesPage() {
       ) : tab === 'all' ? (
         <AllFines fines={list} players={players.byId} isStaff={isStaff} />
       ) : tab === 'coums' ? (
-        <CoumsSeason matches={seasonMatches} players={players.data} coums={coums.data} settings={settings} />
+        <CoumsSeason matches={seasonMatches} players={players.data} coums={coums.data} loading={coums.loading || matches.loading} />
       ) : (
         <FineTypesEditor types={types.data} isStaff={isStaff} />
       )}

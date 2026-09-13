@@ -1,5 +1,4 @@
-import type { Coum, Match, Player, Settings } from './types'
-import { DEFAULT_COUM_AMOUNT } from './types'
+import type { Coum, Player } from './types'
 
 /** Identifiant d'une coum : un document par joueur et par match. */
 export function coumId(matchId: string, playerId: string): string {
@@ -13,16 +12,10 @@ export interface CoumRow {
   coum: Coum | undefined
   /** Nombre de coums demandées (au moins une tant que le joueur n'est pas absent). */
   rounds: number
-  /** Nombre de coums encaissées. */
+  /** Nombre de coums reçues par le trésorier. */
   paid: number
   absent: boolean
   state: CoumState
-}
-
-/** Montant de la coum pour un match : valeur du match, sinon paramètre global, sinon 10 €. */
-export function coumAmountOf(match: Pick<Match, 'coumAmount'> | null | undefined, settings: Settings): number {
-  const value = match?.coumAmount ?? settings.coum?.amount
-  return typeof value === 'number' && value >= 0 ? value : DEFAULT_COUM_AMOUNT
 }
 
 function normalize(c: Coum | undefined): { rounds: number; paid: number; absent: boolean } {
@@ -39,7 +32,7 @@ export function coumState(c: Coum | undefined): CoumState {
 
 const stateOrder: Record<CoumState, number> = { pending: 0, paid: 1, absent: 2 }
 
-/** Une ligne par joueur : ceux qui doivent encore d'abord, puis ceux qui ont payé, puis les absents. */
+/** Une ligne par joueur : ceux qui doivent encore d'abord, puis ceux qui ont coumé, puis les absents. */
 export function coumRows(players: Player[], coums: Coum[], compareNames: (a: Player, b: Player) => number): CoumRow[] {
   const byPlayer = new Map(coums.map((c) => [c.playerId, c]))
   return players
@@ -57,16 +50,14 @@ export interface CoumTotals {
   paidPlayers: number
   pendingPlayers: number
   absent: number
-  /** Coums dues et encaissées, en nombre puis en euros. */
+  /** Coums demandées et reçues (le compte dépasse le nombre de joueurs après une recoum). */
   roundsDue: number
   roundsPaid: number
-  collected: number
-  outstanding: number
   /** true dès qu'une coum supplémentaire a été demandée à quelqu'un. */
   recoumed: boolean
 }
 
-export function coumTotals(rows: CoumRow[], amount: number): CoumTotals {
+export function coumTotals(rows: CoumRow[]): CoumTotals {
   let present = 0
   let paidPlayers = 0
   let absent = 0
@@ -76,7 +67,7 @@ export function coumTotals(rows: CoumRow[], amount: number): CoumTotals {
   for (const r of rows) {
     if (r.absent) {
       absent++
-      // Un absent qui avait déjà payé garde sa coum au pot ; il ne doit rien de plus.
+      // Un absent qui avait déjà coumé garde sa coum ; il ne doit rien de plus.
       roundsDue += r.paid
       roundsPaid += r.paid
       continue
@@ -87,54 +78,39 @@ export function coumTotals(rows: CoumRow[], amount: number): CoumTotals {
     roundsDue += r.rounds
     roundsPaid += r.paid
   }
-  return {
-    present,
-    paidPlayers,
-    pendingPlayers: present - paidPlayers,
-    absent,
-    roundsDue,
-    roundsPaid,
-    collected: roundsPaid * amount,
-    outstanding: Math.max(0, roundsDue - roundsPaid) * amount,
-    recoumed,
-  }
+  return { present, paidPlayers, pendingPlayers: present - paidPlayers, absent, roundsDue, roundsPaid, recoumed }
 }
 
 /** Résumé par joueur sur plusieurs matchs (page Amendes → onglet Coums). */
 export interface CoumSeasonRow {
   playerId: string
-  /** Montants en euros (le tarif peut changer d'un match à l'autre). */
+  /** Coums demandées et coums reçues sur la période. */
   due: number
   paid: number
-  coumsDue: number
-  coumsPaid: number
-  /** Matchs où le joueur doit encore quelque chose. */
+  /** Matchs où le joueur doit encore sa coum, et matchs où il était absent. */
   pendingMatches: number
   absentMatches: number
 }
 
 /**
- * Récapitulatif par joueur sur un ensemble de matchs, avec le tarif propre à chaque match.
+ * Récapitulatif par joueur sur un ensemble de matchs.
  * Un joueur sans document pour un match doit la coum de base : c'est ce qu'affiche aussi la feuille du match.
  */
-export function coumSeasonRows(players: Player[], matches: { id: string; amount: number }[], coums: Coum[]): CoumSeasonRow[] {
+export function coumSeasonRows(players: Player[], matchIds: string[], coums: Coum[]): CoumSeasonRow[] {
   const byKey = new Map(coums.map((c) => [coumId(c.matchId, c.playerId), c]))
   return players
     .map((player) => {
-      const row: CoumSeasonRow = { playerId: player.id, due: 0, paid: 0, coumsDue: 0, coumsPaid: 0, pendingMatches: 0, absentMatches: 0 }
-      for (const match of matches) {
-        const { rounds, paid, absent } = normalize(byKey.get(coumId(match.id, player.id)))
-        row.coumsPaid += paid
-        row.paid += paid * match.amount
+      const row: CoumSeasonRow = { playerId: player.id, due: 0, paid: 0, pendingMatches: 0, absentMatches: 0 }
+      for (const matchId of matchIds) {
+        const { rounds, paid, absent } = normalize(byKey.get(coumId(matchId, player.id)))
+        row.paid += paid
         if (absent) {
           row.absentMatches++
-          // Ce qu'il a déjà mis au pot reste acquis, mais il ne doit rien de plus.
-          row.coumsDue += paid
-          row.due += paid * match.amount
+          // Ce qu'il a déjà coumé reste acquis, mais il ne doit rien de plus.
+          row.due += paid
           continue
         }
-        row.coumsDue += rounds
-        row.due += rounds * match.amount
+        row.due += rounds
         if (paid < rounds) row.pendingMatches++
       }
       return row
@@ -142,8 +118,8 @@ export function coumSeasonRows(players: Player[], matches: { id: string; amount:
     .sort((a, b) => b.due - b.paid - (a.due - a.paid) || b.paid - a.paid)
 }
 
-export function coumSeasonTotals(rows: CoumSeasonRow[]): { due: number; paid: number; outstanding: number } {
+export function coumSeasonTotals(rows: CoumSeasonRow[]): { due: number; paid: number; pending: number } {
   const due = rows.reduce((s, r) => s + r.due, 0)
   const paid = rows.reduce((s, r) => s + r.paid, 0)
-  return { due, paid, outstanding: Math.max(0, due - paid) }
+  return { due, paid, pending: Math.max(0, due - paid) }
 }

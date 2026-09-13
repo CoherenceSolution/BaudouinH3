@@ -3,10 +3,9 @@ import { doc, setDoc } from 'firebase/firestore'
 import { Save } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useSettings } from '@/hooks/useSettings'
-import { formatEuro } from '@/lib/fines'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
-import { DEFAULT_CATEGORIES, DEFAULT_COUM_AMOUNT, DEFAULT_LIVE_ALERT_THRESHOLD, type VoteCategory } from '@/lib/types'
+import { DEFAULT_CATEGORIES, DEFAULT_LIVE_ALERT_THRESHOLD, type VoteCategory } from '@/lib/types'
 import { Button, Card, Input } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 
@@ -18,13 +17,11 @@ export function SettingsAdmin() {
   const [form, setForm] = useState<Record<VoteCategory, { label: string; emoji: string }>>({
     best: { label: '', emoji: '' }, worst: { label: '', emoji: '' }, moment: { label: '', emoji: '' },
   })
-  const [coum, setCoum] = useState(String(DEFAULT_COUM_AMOUNT))
   const [threshold, setThreshold] = useState(String(DEFAULT_LIVE_ALERT_THRESHOLD))
   const [loading, setLoading] = useState(false)
-  const [savingMatch, setSavingMatch] = useState(false)
+  const [savingAlert, setSavingAlert] = useState(false)
 
   useEffect(() => {
-    setCoum(String(settings.coum?.amount ?? DEFAULT_COUM_AMOUNT))
     setThreshold(String(settings.liveAlertThreshold ?? DEFAULT_LIVE_ALERT_THRESHOLD))
   }, [settings])
 
@@ -50,20 +47,19 @@ export function SettingsAdmin() {
     }
   }
 
-  async function saveMatchSettings() {
-    const amount = Number(coum.replace(',', '.'))
+  async function saveAlert() {
     const alert = Math.round(Number(threshold))
-    if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(alert) || alert < 1) return
-    setSavingMatch(true)
+    if (!Number.isFinite(alert) || alert < 1) return
+    setSavingAlert(true)
     try {
-      await setDoc(doc(db, 'config', 'settings'), { coum: { amount }, liveAlertThreshold: alert }, { merge: true })
-      await logActivity(actor, 'update', 'settings', 'settings', `Coum : ${formatEuro(amount)} par personne · alerte du direct à ${alert} voix`)
+      await setDoc(doc(db, 'config', 'settings'), { liveAlertThreshold: alert }, { merge: true })
+      await logActivity(actor, 'update', 'settings', 'settings', `Alerte du direct à ${alert} voix`)
       toast('Paramètres enregistrés')
     } catch (e) {
       console.error(e)
       toast('Enregistrement impossible', 'error')
     } finally {
-      setSavingMatch(false)
+      setSavingAlert(false)
     }
   }
 
@@ -87,34 +83,24 @@ export function SettingsAdmin() {
       <p className="text-[12px] text-muted">Chaque catégorie désigne un joueur, accompagné d’un commentaire lu à voix haute.</p>
 
       <Card className="p-5">
-        <h3 className="font-semibold">La coum et le direct</h3>
+        <h3 className="font-semibold">Alerte en direct</h3>
         <p className="mb-4 mt-1 text-[13px] text-muted">
-          La coum est la mise commune de chaque match : tout le monde paie la même somme. Le montant peut être ajusté match par match.
+          Pendant la lecture, un joueur qui atteint ce nombre de voix dans une catégorie est signalé dans l’onglet « En direct ».
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
-            label="Montant de la coum (€ par personne)"
-            type="number"
-            min={0}
-            step="0.5"
-            inputMode="decimal"
-            value={coum}
-            onChange={(e) => setCoum(e.target.value)}
-            hint={`Par défaut : ${formatEuro(DEFAULT_COUM_AMOUNT)}`}
-          />
-          <Input
-            label="Alerte en direct (nombre de voix)"
+            label="Nombre de voix"
             type="number"
             min={1}
             max={20}
             inputMode="numeric"
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
-            hint="Un joueur qui atteint ce nombre de voix dans une catégorie est signalé pendant la lecture."
+            hint={`Par défaut : ${DEFAULT_LIVE_ALERT_THRESHOLD} voix`}
           />
         </div>
         <div className="mt-4 flex justify-end">
-          <Button icon={<Save className="size-4" />} loading={savingMatch} onClick={saveMatchSettings}>Enregistrer</Button>
+          <Button icon={<Save className="size-4" />} loading={savingAlert} onClick={saveAlert}>Enregistrer</Button>
         </div>
       </Card>
     </div>

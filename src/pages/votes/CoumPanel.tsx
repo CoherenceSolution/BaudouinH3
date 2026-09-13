@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'react'
 import { doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
-import { Check, Coins, Pencil, RefreshCw, RotateCcw, UserRoundX, UserRoundCheck } from 'lucide-react'
+import { Check, Coins, RefreshCw, RotateCcw, UserRoundX, UserRoundCheck } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
-import { useSettings } from '@/hooks/useSettings'
 import { logActivity } from '@/lib/activity'
 import type { Coum, Match, Player } from '@/lib/types'
-import { coumAmountOf, coumId, coumRows, coumTotals, type CoumRow } from '@/lib/coums'
-import { formatEuro } from '@/lib/fines'
+import { coumId, coumRows, coumTotals, type CoumRow } from '@/lib/coums'
 import { cx, playerName } from '@/lib/format'
-import { Avatar, Badge, Button, Card, Input, SectionTitle, Spinner, Stat } from '@/components/ui'
+import { Avatar, Badge, Button, Card, SectionTitle, Spinner, Stat } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 
 interface Props {
@@ -21,22 +19,21 @@ interface Props {
 }
 
 /**
- * La coum d'un match : chacun met la même somme au pot.
- * Tout le monde voit qui a coumé ; le trésorier (staff) encaisse, marque les absents et peut « recoumer ».
+ * La coum d'un match : qui a payé, qui doit encore, qui est absent.
+ * L'application ne suit que le geste (pas les montants) : le trésorier (staff) coche ce qu'il a reçu,
+ * tout le monde voit qui a coumé.
  */
 export function CoumPanel({ match, players, coums, loading }: Props) {
   const { isStaff } = useAuth()
-  const { settings } = useSettings()
   const actor = useActor()
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
 
-  const amount = coumAmountOf(match, settings)
   const rows = useMemo(
     () => coumRows(players, coums, (a, b) => playerName(a).localeCompare(playerName(b), 'fr')),
     [players, coums],
   )
-  const totals = useMemo(() => coumTotals(rows, amount), [rows, amount])
+  const totals = useMemo(() => coumTotals(rows), [rows])
   const pct = totals.roundsDue ? Math.round((Math.min(totals.roundsPaid, totals.roundsDue) / totals.roundsDue) * 100) : 0
 
   /** Écrit la coum d'un joueur (le document est créé au premier geste du trésorier). */
@@ -70,11 +67,11 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
     write(
       row,
       { paid: Math.min(row.rounds, row.paid + 1), absent: false, lastPaidAt: serverTimestamp(), collectedBy: actor.uid, collectedByName: actor.name },
-      `Coum encaissée : ${playerName(row.player)} — ${formatEuro(amount)}`,
+      `Coum reçue : ${playerName(row.player)}`,
     )
 
   const cancel = (row: CoumRow) =>
-    write(row, { paid: Math.max(0, row.paid - 1) }, `Coum annulée : ${playerName(row.player)} — ${formatEuro(amount)}`)
+    write(row, { paid: Math.max(0, row.paid - 1) }, `Coum annulée : ${playerName(row.player)}`)
 
   const toggleAbsent = (row: CoumRow) =>
     write(row, { absent: !row.absent }, row.absent ? `${playerName(row.player)} n'est plus noté absent` : `${playerName(row.player)} noté absent (pas de coum)`)
@@ -86,7 +83,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
   async function recoumAll() {
     const present = rows.filter((r) => !r.absent)
     if (present.length === 0) return
-    if (!confirm(`Redemander une coum de ${formatEuro(amount)} à ${present.length} présent${present.length > 1 ? 's' : ''} ?`)) return
+    if (!confirm(`Redemander une coum à ${present.length} présent${present.length > 1 ? 's' : ''} ?`)) return
     setBusy('all')
     try {
       const batch = writeBatch(db)
@@ -106,7 +103,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
         )
       }
       await batch.commit()
-      await logActivity(actor, 'update', 'coum', match.id, `Recoum : une coum de plus demandée à ${present.length} présents (${formatEuro(amount)} chacun)`)
+      await logActivity(actor, 'update', 'coum', match.id, `Recoum : une coum de plus demandée à ${present.length} présents`)
       toast('Recoum lancée : une coum de plus pour les présents')
     } catch (e) {
       console.error(e)
@@ -126,7 +123,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
             <span className="flex size-11 items-center justify-center rounded-xl bg-ink text-accent"><Coins className="size-5" /></span>
             <div>
               <div className="font-semibold">La coum du match</div>
-              <AmountLine match={match} amount={amount} isStaff={isStaff} />
+              <div className="text-[13px] text-muted">Chacun paie la même chose : on note simplement qui a coumé.</div>
             </div>
           </div>
           {isStaff && (
@@ -139,22 +136,20 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
         <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
         </div>
-        <div className="mt-2 flex flex-wrap gap-4 text-[12px] text-muted">
-          <span>{totals.paidPlayers} / {totals.present} présents ont coumé</span>
-          {totals.recoumed && <span>{totals.roundsPaid} / {totals.roundsDue} coums encaissées</span>}
-          {totals.absent > 0 && <span>{totals.absent} absent{totals.absent > 1 ? 's' : ''}</span>}
-        </div>
+        {totals.recoumed && (
+          <div className="mt-2 text-[12px] text-muted">{totals.roundsPaid} coum{totals.roundsPaid > 1 ? 's' : ''} reçue{totals.roundsPaid > 1 ? 's' : ''} sur {totals.roundsDue} demandée{totals.roundsDue > 1 ? 's' : ''} (recoum en cours)</div>
+        )}
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat label="Dans le pot" value={formatEuro(totals.collected)} tone="accent" />
-          <Stat label="Reste à encaisser" value={formatEuro(totals.outstanding)} tone="rose" sub={`${totals.pendingPlayers} joueur${totals.pendingPlayers > 1 ? 's' : ''}`} />
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <Stat label="Ont coumé" value={`${totals.paidPlayers} / ${totals.present}`} tone="accent" />
+          <Stat label="Doivent encore" value={totals.pendingPlayers} tone="rose" />
           <Stat label="Absents" value={totals.absent} sub="ne doivent rien" />
         </div>
 
         <p className="mt-3 text-[13px] text-muted">
           {isStaff
-            ? 'Marquez « Encaissé » dès que vous recevez l’argent. « Recoumer » redemande une coum aux présents.'
-            : 'Le trésorier coche les coums qu’il a encaissées. Tout le monde voit qui a coumé.'}
+            ? 'Cochez « A payé » dès que vous recevez la coum d’un joueur. « Recoumer » en redemande une aux présents.'
+            : 'Le trésorier coche les coums qu’il a reçues. Tout le monde voit qui a coumé.'}
         </p>
       </Card>
 
@@ -166,7 +161,6 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
             <CoumRowView
               key={row.player.id}
               row={row}
-              amount={amount}
               isStaff={isStaff}
               busy={busy === row.player.id}
               onCollect={() => collect(row)}
@@ -181,56 +175,10 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
   )
 }
 
-function AmountLine({ match, amount, isStaff }: { match: Match; amount: number; isStaff: boolean }) {
-  const actor = useActor()
-  const toast = useToast()
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(String(amount))
-  const [loading, setLoading] = useState(false)
-
-  async function save() {
-    const n = Number(value.replace(',', '.'))
-    if (!Number.isFinite(n) || n < 0) return
-    setLoading(true)
-    try {
-      await setDoc(doc(db, 'matches', match.id), { coumAmount: n, updatedAt: serverTimestamp() }, { merge: true })
-      await logActivity(actor, 'update', 'match', match.id, `Montant de la coum : ${formatEuro(n)} par personne`)
-      toast('Montant de la coum enregistré')
-      setEditing(false)
-    } catch (e) {
-      console.error(e)
-      toast('Enregistrement impossible', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (editing) {
-    return (
-      <div className="mt-1 flex items-end gap-2">
-        <Input label="Montant par personne (€)" type="number" min={0} step="0.5" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} className="w-44" />
-        <Button size="sm" loading={loading} onClick={save}>Enregistrer</Button>
-        <Button size="sm" variant="ghost" onClick={() => { setValue(String(amount)); setEditing(false) }}>Annuler</Button>
-      </div>
-    )
-  }
-  return (
-    <div className="text-[13px] text-muted">
-      {formatEuro(amount)} par personne
-      {isStaff && (
-        <button onClick={() => { setValue(String(amount)); setEditing(true) }} className="ml-1.5 rounded-lg p-1 align-middle text-muted hover:bg-slate-100 hover:text-ink" title="Changer le montant pour ce match">
-          <Pencil className="size-3.5" />
-        </button>
-      )}
-    </div>
-  )
-}
-
 function CoumRowView({
-  row, amount, isStaff, busy, onCollect, onCancel, onToggleAbsent, onRecoum,
+  row, isStaff, busy, onCollect, onCancel, onToggleAbsent, onRecoum,
 }: {
   row: CoumRow
-  amount: number
   isStaff: boolean
   busy: boolean
   onCollect: () => void
@@ -245,22 +193,19 @@ function CoumRowView({
       <div className="min-w-0 flex-1">
         <div className={cx('text-[14px]', row.absent ? 'text-muted' : 'font-medium')}>{playerName(row.player)}</div>
         {(row.rounds > 1 || row.paid > 0) && (
-          <div className="text-[12px] text-muted">
-            {row.paid} encaissée{row.paid > 1 ? 's' : ''} sur {row.rounds} demandée{row.rounds > 1 ? 's' : ''}
-            {owed > 0 && !row.absent ? ` · ${formatEuro(owed * amount)} à payer` : ''}
-          </div>
+          <div className="text-[12px] text-muted">{row.paid} reçue{row.paid > 1 ? 's' : ''} sur {row.rounds} demandée{row.rounds > 1 ? 's' : ''}</div>
         )}
       </div>
       {row.state === 'paid' && <Badge tone="accent"><Check className="size-3" /> A coumé{row.rounds > 1 ? ` ×${row.rounds}` : ''}</Badge>}
-      {row.state === 'pending' && <Badge tone="rose">À payer{owed > 1 ? ` ×${owed}` : ''}</Badge>}
+      {row.state === 'pending' && <Badge tone="rose">Pas encore{owed > 1 ? ` ×${owed}` : ''}</Badge>}
       {row.state === 'absent' && <Badge tone="neutral">Absent</Badge>}
       {isStaff && (
         <div className="flex items-center gap-1">
           {!row.absent && row.state !== 'paid' && (
-            <Button size="sm" variant="secondary" icon={<Check className="size-4 text-accent-strong" />} loading={busy} onClick={onCollect}>Encaissé</Button>
+            <Button size="sm" variant="secondary" icon={<Check className="size-4 text-accent-strong" />} loading={busy} onClick={onCollect}>A payé</Button>
           )}
           {row.paid > 0 && (
-            <IconButton title="Annuler le dernier encaissement" onClick={onCancel}><RotateCcw className="size-4" /></IconButton>
+            <IconButton title="Annuler la dernière coum reçue" onClick={onCancel}><RotateCcw className="size-4" /></IconButton>
           )}
           {!row.absent && (
             <IconButton title="Recoumer ce joueur (une coum de plus)" onClick={onRecoum}><RefreshCw className="size-4" /></IconButton>
