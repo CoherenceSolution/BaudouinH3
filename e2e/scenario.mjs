@@ -1,7 +1,7 @@
 // Scénario de bout en bout joué contre les émulateurs Firebase (npm run emulators) et le serveur Vite (npm run dev, .env avec VITE_USE_EMULATORS=true).
 // Prérequis : npx playwright install chromium. Lancer : bash e2e/reset-emulators.sh && node e2e/scenario.mjs
 // Il couvre : installation, création de match, amendes, buts, surnoms, trois votants, vote « commentaire d'abord »,
-// orateur, lecture en direct, annonce du nom en suspense, coups de cœur, rétrospective, mobile.
+// orateur, lecture en direct, lecture guidée dans la console, coups de cœur, rétrospective, mobile.
 import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:5173'
@@ -143,7 +143,7 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
   }
   return p
 }
-async function vote(name, best, worst, moment, comment, pin = null, suspense = false) {
+async function vote(name, best, worst, moment, comment, pin = null, commentFirst = false) {
   const [firstName, lastName] = name
   const p = await login(firstName, firstName, lastName, 'public', pin)
   await p.goto(BASE + `/votes/${matchId}`)
@@ -152,8 +152,8 @@ async function vote(name, best, worst, moment, comment, pin = null, suspense = f
   await bestBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(best)
   await bestBlock.getByRole('button', { name: new RegExp(best) }).first().click()
   await bestBlock.locator('textarea').fill(comment)
-  // Suspense : l'orateur devra lire le commentaire avant d'annoncer le nom.
-  if (suspense) await bestBlock.getByRole('checkbox').check()
+  // Consigne : l'orateur devra lire le commentaire avant d'annoncer le nom.
+  if (commentFirst) await bestBlock.getByRole('checkbox').check()
   const worstBlock = p.locator('.card').filter({ hasText: '🥴' }).first()
   await worstBlock.locator('input[placeholder^="Rechercher un joueur"]').fill(worst)
   await worstBlock.getByRole('button', { name: new RegExp(worst) }).first().click()
@@ -218,14 +218,15 @@ await shot(speaker, '12b-console-nom-orateur')
 await speaker.waitForTimeout(400)
 if (await ronny.getByText('Vote anonyme').count() < 2) throw new Error('Les votes lus devraient être anonymes pour un votant')
 
-// 7b. Le nom mis en suspense reste caché jusqu'à l'annonce de l'orateur
-if (await ronny.getByText('Nom annoncé par l’orateur après le commentaire').count() !== 1) throw new Error('Le nom mis en suspense devrait rester caché pour la salle')
+// 7b. Consigne « commentaire d'abord » : elle ne concerne que la console de l'orateur
+if (await ronny.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0) throw new Error('La consigne ne doit rien changer pour la salle')
+if (await ronny.getByText('Deux buts, une masterclass.').count() !== 1) throw new Error('Le vote devrait être lisible en entier pour la salle')
 await speaker.getByText('Lisez d’abord le commentaire, puis annoncez le nom voté.').waitFor()
-await shot(speaker, '12c-console-suspense')
+await shot(speaker, '12c-console-consigne')
 await speaker.getByRole('button', { name: 'Annoncer le nom' }).first().click()
-await speaker.waitForTimeout(800)
-if (await ronny.getByText('Nom annoncé par l’orateur après le commentaire').count() !== 0) throw new Error('Le nom devrait apparaître après l’annonce')
-await shot(ronny, '13b-nom-annonce')
+await speaker.waitForTimeout(600)
+if (await speaker.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0) throw new Error('Le nom devrait s’afficher dans la console après l’annonce')
+await shot(speaker, '12d-console-nom-annonce')
 await ronny.getByRole('button', { name: 'Classement' }).click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '14-classement')

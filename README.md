@@ -67,18 +67,20 @@ indifféremment le prénom, le nom ou le surnom, et le surnom seul suffit pour s
 
 ### Vote « commentaire d'abord »
 
-Dans le formulaire de vote, chaque catégorie porte une case **« Garder le suspense : le commentaire d'abord, le
-nom ensuite »**. Quand elle est cochée, le nom désigné reste caché — pour la salle comme pour l'orateur — et
-l'orateur voit à sa place un bouton **« Annoncer le nom »**, avec la consigne, la première fois, de lire d'abord
-le commentaire. Le nom apparaît alors chez tout le monde et compte dans le classement. Les noms encore en
-suspense sont automatiquement révélés quand l'orateur termine la soirée.
+Dans le formulaire de vote, chaque catégorie porte une case **« Demander à l'orateur de lire le commentaire avant
+le nom »**. Quand elle est cochée, la console de l'orateur place le commentaire au-dessus et remplace le nom par
+un bouton **« Annoncer le nom »**, avec la consigne, la première fois : « Lisez d'abord le commentaire, puis
+annoncez le nom voté. » Un appui affiche le nom dans sa console.
+
+C'est un simple guide de lecture : rien n'est caché ailleurs. La lecture en direct, les classements et la
+rétrospective affichent le vote normalement pour tout le monde.
 
 ## Utilisation
 
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
 | Votant | « Je vote » puis prénom et nom, ou simplement son surnom | Remplir son vote (trois catégories), suivre la lecture, voter ses coups de cœur |
-| Orateur | « Je suis l'orateur » puis prénom et nom, ou son surnom | Console : ordre, mélange, étoiles, lecture, annonce des noms en suspense, révélation d'auteur, clôture |
+| Orateur | « Je suis l'orateur » puis prénom et nom, ou son surnom | Console : ordre, mélange, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, clôture |
 | Secrétaire | « Je vote », nom ou surnom, puis le code commun (une fois par téléphone) | Matchs, amendes, buts et passes, joueurs, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
 
@@ -104,9 +106,9 @@ suspense sont automatiquement révélés quand l'orateur termine la soirée.
 
 ## Test de bout en bout
 
-`e2e/scenario.mjs` rejoue une soirée complète (installation, match, amendes, buts, surnoms, votants, vote en
-suspense, orateur, lecture, annonce du nom, coups de cœur, rétrospective, vue mobile) avec Playwright contre les
-émulateurs :
+`e2e/scenario.mjs` rejoue une soirée complète (installation, match, amendes, buts, surnoms, votants, vote
+« commentaire d'abord », orateur, lecture guidée, coups de cœur, rétrospective, vue mobile) avec Playwright
+contre les émulateurs :
 
 ```bash
 npm run emulators                      # terminal 1

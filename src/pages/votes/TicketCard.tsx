@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
-import { pickPending, type LikeCounts } from '@/lib/rankings'
+import type { LikeCounts } from '@/lib/rankings'
 import { Badge, Button } from '@/components/ui'
 
 interface Props {
@@ -12,14 +12,18 @@ interface Props {
   likes?: LikeCounts
   /** Affiche le nom de l'auteur (révélé par l'orateur, ou vue staff) */
   showAuthor: boolean
-  /** Vue orateur (réservé, sans effet visuel) */
+  /**
+   * Vue orateur : sur les votes « commentaire d'abord », le nom attend que l'orateur
+   * appuie sur « Annoncer le nom ». Ce repli est local à sa console : les autres écrans
+   * (lecture en direct, classements) affichent le vote normalement.
+   */
   speakerView?: boolean
   actions?: ReactNode
   myLikes?: Partial<Record<VoteCategory, string>>
   onLike?: (category: VoteCategory) => void
-  /** Orateur : annonce le nom d'une catégorie mise « en suspense » par le votant. */
+  /** Prévient la console qu'un nom vient d'être annoncé (consigne vue). */
   onReveal?: (category: VoteCategory) => void
-  /** Affiche la consigne de lecture à côté du premier bouton d'annonce (première fois). */
+  /** Affiche la consigne de lecture à côté du bouton d'annonce (première fois). */
   revealHint?: boolean
   index?: number
   className?: string
@@ -31,8 +35,10 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, actions, myLikes, onLike, onReveal, revealHint, index, className }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, onReveal, revealHint, index, className }: Props) {
   const categories = useCategories()
+  // Noms déjà annoncés par l'orateur pendant cette lecture (état local, rien n'est écrit).
+  const [announced, setAnnounced] = useState<VoteCategory[]>([])
   const author = players.get(ticket.authorPlayerId)
   const counts = likes?.get(ticket.id)
   const multiDevice = (ticket.authorUids?.length ?? 0) > 1
@@ -60,23 +66,23 @@ export function TicketCard({ ticket, players, likes, showAuthor, actions, myLike
           const n = counts?.[c.key] ?? 0
           const mine = myLikes?.[c.key] === ticket.id
           const text = [e?.proposal, e?.comment].filter(Boolean).join(' — ')
-          // Suspense demandé par le votant : le nom n'apparaît qu'une fois annoncé par l'orateur.
-          const pending = pickPending(e)
+          // Consigne du votant : dans la console de l'orateur, le nom attend l'annonce.
+          const guided = Boolean(speakerView && c.pickPlayer && e?.commentFirst && e?.playerId)
+          const waiting = guided && !announced.includes(c.key)
           const pick = c.pickPlayer && (
-            pending ? (
-              onReveal ? (
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <Button size="sm" variant="accent" icon={<Megaphone className="size-4" />} onClick={() => onReveal(c.key)}
-                          title="Lisez d’abord le commentaire, puis annoncez le nom voté.">
-                    Annoncer le nom
-                  </Button>
-                  {revealHint && <span className="text-[12px] font-medium text-violet-700">Lisez d’abord le commentaire, puis annoncez le nom voté.</span>}
-                </div>
-              ) : (
-                <div className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-violet-soft px-2 py-1 text-[13px] font-medium text-violet-700">
-                  <Megaphone className="size-3.5" /> Nom annoncé par l’orateur après le commentaire
-                </div>
-              )
+            waiting ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="accent"
+                  icon={<Megaphone className="size-4" />}
+                  title="Lisez d’abord le commentaire, puis annoncez le nom voté."
+                  onClick={() => { setAnnounced((a) => [...a, c.key]); onReveal?.(c.key) }}
+                >
+                  Annoncer le nom
+                </Button>
+                {revealHint && <span className="text-[12px] font-medium text-violet-700">Lisez d’abord le commentaire, puis annoncez le nom voté.</span>}
+              </div>
             ) : (
               <div className="text-[15px] font-semibold leading-snug">{p ? playerName(p) : <span className="text-muted">—</span>}</div>
             )
@@ -87,8 +93,8 @@ export function TicketCard({ ticket, players, likes, showAuthor, actions, myLike
               <span className={cx('mt-0.5 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold uppercase tracking-wide', catTone[c.key])} title={c.label}>{c.emoji}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</div>
-                {/* Suspense : le commentaire passe avant le nom, comme demandé par le votant. */}
-                {e?.commentFirst ? <>{comment}{pick}</> : <>{pick}{comment}</>}
+                {/* Dans la console, le commentaire passe avant le nom : c'est l'ordre de lecture demandé. */}
+                {guided ? <>{comment}{pick}</> : <>{pick}{comment}</>}
               </div>
               {(onLike || n > 0) && (
                 <button

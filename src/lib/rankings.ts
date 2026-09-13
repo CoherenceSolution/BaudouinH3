@@ -1,4 +1,4 @@
-import type { Goal, Like, Ticket, VoteCategory, VoteEntry } from './types'
+import type { Goal, Like, Ticket, VoteCategory } from './types'
 
 export interface RankRow {
   playerId: string
@@ -27,35 +27,17 @@ export function isTicketComplete(t: Ticket): boolean {
   return ticketCompletion(t) === 3
 }
 
-/**
- * true si le nom désigné peut être affiché : soit le votant n'a pas demandé le suspense,
- * soit l'orateur a déjà annoncé le nom après avoir lu le commentaire.
- */
-export function pickRevealed(entry: VoteEntry | undefined | null): boolean {
-  return !!entry?.playerId && (!entry.commentFirst || !!entry.nameRevealed)
+/** Les catégories où le votant demande que le commentaire soit lu avant le nom. */
+export function commentFirstPicks(t: Ticket): VoteCategory[] {
+  return (['best', 'worst', 'moment'] as VoteCategory[]).filter((c) => t[c]?.commentFirst && t[c]?.playerId)
 }
 
-/** true si l'orateur doit encore annoncer le nom désigné par ce vote. */
-export function pickPending(entry: VoteEntry | undefined | null): boolean {
-  return !!entry?.playerId && !!entry.commentFirst && !entry.nameRevealed
-}
-
-/** Les catégories dont le nom reste à annoncer sur ce ticket. */
-export function pendingPicks(t: Ticket): VoteCategory[] {
-  return (['best', 'worst', 'moment'] as VoteCategory[]).filter((c) => pickPending(t[c]))
-}
-
-/**
- * Classement des nominations (meilleur / pire joueur) sur un ensemble de tickets.
- * `onlyRevealed` garde le suspense pendant la lecture : un nom non encore annoncé ne compte pas.
- */
-export function nominationRanking(tickets: Ticket[], category: VoteCategory, onlyRevealed = false): RankRow[] {
+/** Classement des nominations (meilleur / pire joueur) sur un ensemble de tickets. */
+export function nominationRanking(tickets: Ticket[], category: VoteCategory): RankRow[] {
   const counts = new Map<string, number>()
   for (const t of tickets) {
-    const entry = t[category]
-    const id = entry?.playerId
-    if (!id || (onlyRevealed && !pickRevealed(entry))) continue
-    counts.set(id, (counts.get(id) ?? 0) + 1)
+    const id = t[category]?.playerId
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
   }
   return [...counts.entries()].map(([playerId, count]) => ({ playerId, count })).sort((a, b) => b.count - a.count)
 }

@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useCategories } from '@/hooks/useSettings'
 import type { CategoryDef, Match, Player, Ticket, VoteCategory, VoteEntry } from '@/lib/types'
 import { cx, playerName } from '@/lib/format'
-import { isTicketComplete, pickRevealed } from '@/lib/rankings'
+import { isTicketComplete } from '@/lib/rankings'
 import { PlayerPicker } from '@/components/PlayerPicker'
 import { Button, Card, Checkbox, Textarea } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
@@ -201,8 +201,8 @@ function CategoryBlock({ category, entry, players, onChange }: { category: Categ
           <Checkbox
             checked={Boolean(entry.commentFirst)}
             onChange={(v) => onChange({ commentFirst: v })}
-            label="Garder le suspense : le commentaire d’abord, le nom ensuite"
-            hint="L’orateur lit votre commentaire, puis appuie sur un bouton pour annoncer le nom. Le nom reste caché pour tout le monde jusque-là."
+            label="Demander à l’orateur de lire le commentaire avant le nom"
+            hint="Sa console lui rappelle la consigne et ne lui montre le nom qu’après un appui sur « Annoncer le nom »."
             className="rounded-xl bg-slate-50 p-3"
           />
         )}
@@ -220,8 +220,7 @@ export function TicketSummaryRow({ category, entry, players }: { category: Categ
       {(entry?.comment || entry?.proposal) && <p className="mt-0.5 whitespace-pre-line text-[14px] text-ink-2">{[entry?.proposal, entry?.comment].filter(Boolean).join(' — ')}</p>}
       {entry?.commentFirst && (
         <p className="mt-1 inline-flex items-center gap-1 text-[12px] font-medium text-violet-700">
-          <Megaphone className="size-3.5" />
-          {pickRevealed(entry) ? 'Nom annoncé après le commentaire' : 'L’orateur lira le commentaire avant d’annoncer le nom'}
+          <Megaphone className="size-3.5" /> L’orateur lira le commentaire avant d’annoncer le nom
         </p>
       )}
     </div>

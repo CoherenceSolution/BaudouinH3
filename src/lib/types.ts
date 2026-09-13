@@ -78,10 +78,8 @@ export interface VoteEntry {
   playerId: string | null
   proposal: string // conservé pour compatibilité, non utilisé dans le formulaire
   comment: string
-  /** Le votant demande le suspense : l'orateur lit le commentaire, puis annonce le nom. */
+  /** Le votant demande que l'orateur lise le commentaire avant d'annoncer le nom. */
   commentFirst?: boolean
-  /** Le nom a été annoncé par l'orateur : il s'affiche alors partout. */
-  nameRevealed?: boolean
 }
 
 export type TicketStatus = 'draft' | 'submitted'
