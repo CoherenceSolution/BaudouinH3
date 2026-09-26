@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { doc, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore'
-import { AlarmClock, Play, Plus, Square } from 'lucide-react'
+import { doc, onSnapshot, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore'
+import { Link } from 'react-router-dom'
+import { AlarmClock, ArrowRight, Play, Plus, Square } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
@@ -41,23 +42,26 @@ export function formatRemaining(ms: number): string {
 /**
  * Compte à rebours affiché à tout le monde pendant la phase de vote :
  * ceux qui n'ont pas encore voté (ou pas fini) voient combien de temps il leur reste.
+ * Il reste collé en haut de l'écran pour être vu sans chercher.
+ * Avec `to`, le bandeau mène au match (affiché hors de la page du match).
  */
-export function VoteCountdown({ match, pending }: { match: Match; pending: boolean }) {
+export function VoteCountdown({ match, pending, to, title }: { match: Match; pending: boolean; to?: string; title?: string }) {
   const remaining = useRemaining(match)
   if (remaining == null || match.status !== 'voting') return null
   const expired = remaining <= 0
   const urgent = !expired && remaining <= 120_000
-  return (
-    <div
-      role="status"
-      className={cx(
-        'mb-4 flex items-center gap-3 rounded-xl border px-4 py-3',
-        expired ? 'border-rose/40 bg-rose-soft text-rose' : urgent ? 'border-amber-300 bg-gold-soft text-amber-800' : 'border-line bg-surface text-ink',
-      )}
-    >
+  const className = cx(
+    'sticky top-[61px] z-20 mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm md:top-2',
+    expired ? 'border-rose/40 bg-rose-soft text-rose' : urgent ? 'border-amber-300 bg-gold-soft text-amber-800' : 'border-line bg-surface text-ink',
+  )
+  const content = (
+    <>
       <AlarmClock className={cx('size-5 shrink-0', !expired && 'animate-pulse')} />
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold">{expired ? 'Temps écoulé' : pending ? 'Il vous reste du temps pour voter' : 'Fin des votes'}</div>
+        <div className="text-[14px] font-semibold">
+          {title ? `${title} · ` : ''}
+          {expired ? 'Temps écoulé' : pending ? 'Il vous reste du temps pour voter' : 'Fin des votes'}
+        </div>
         <div className="text-[12px] opacity-80">
           {expired
             ? pending
@@ -70,15 +74,21 @@ export function VoteCountdown({ match, pending }: { match: Match; pending: boole
         </div>
       </div>
       <span className="shrink-0 text-2xl font-bold tabular-nums">{expired ? '0:00' : formatRemaining(remaining)}</span>
-    </div>
+      {to && <ArrowRight className="size-4 shrink-0" />}
+    </>
+  )
+  return to ? (
+    <Link to={to} role="status" className={className}>{content}</Link>
+  ) : (
+    <div role="status" className={className}>{content}</div>
   )
 }
 
 const QUICK_MINUTES = [5, 10, 15]
 
 /**
- * Réglage du minuteur, réservé au staff (admin ou secrétaire) : c'est lui qui déclenche le décompte.
- * Les règles Firestore n'autorisent que le staff à écrire ces champs sur le match.
+ * Réglage du minuteur, dans la console : l'orateur, un secrétaire ou l'admin déclenche le décompte,
+ * que tous les appareils affichent en même temps.
  */
 export function VoteTimerControl({ match }: { match: Match }) {
   const actor = useActor()
@@ -137,7 +147,7 @@ export function VoteTimerControl({ match }: { match: Match }) {
                 ? remaining! > 0
                   ? `Il reste ${formatRemaining(remaining!)} aux votants.`
                   : 'Temps écoulé : les votants voient « Temps écoulé ».'
-                : 'Donnez un temps limite aux votants : ils voient le décompte sur toutes les pages du match.'}
+                : 'Donnez un temps limite aux votants : le décompte s’affiche chez tout le monde, sur toutes les pages.'}
             </div>
           </div>
         </div>
@@ -175,4 +185,34 @@ export function VoteTimerControl({ match }: { match: Match }) {
       </p>
     </Card>
   )
+}
+
+/**
+ * Minuteurs en cours, affichés en haut de toutes les pages de l'application (sauf la page du match,
+ * qui a déjà son propre bandeau) : personne ne rate le compte à rebours, où qu'il soit.
+ */
+export function GlobalVoteTimers({ matches, currentPath, playerId }: { matches: Match[]; currentPath: string; playerId: string | null }) {
+  const running = matches.filter((m) => m.status === 'voting' && deadlineMs(m) != null && currentPath !== `/votes/${m.id}`)
+  if (running.length === 0) return null
+  return (
+    <>
+      {running.map((m) => (
+        <GlobalVoteTimer key={m.id} match={m} playerId={playerId} />
+      ))}
+    </>
+  )
+}
+
+function GlobalVoteTimer({ match, playerId }: { match: Match; playerId: string | null }) {
+  // Une seule lecture ciblée : le vote de la personne connectée, pour adapter le message.
+  const [submitted, setSubmitted] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!playerId) return
+    return onSnapshot(
+      doc(db, 'tickets', `${match.id}_${playerId}`),
+      (snap) => setSubmitted(snap.exists() && snap.data()?.status === 'submitted'),
+      () => setSubmitted(null),
+    )
+  }, [match.id, playerId])
+  return <VoteCountdown match={match} pending={Boolean(playerId) && submitted === false} to={`/votes/${match.id}`} title={`Contre ${match.opponent}`} />
 }

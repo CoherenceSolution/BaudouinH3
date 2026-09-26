@@ -3,7 +3,7 @@ import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from '
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { diffChanges, logActivity } from '@/lib/activity'
 import type { FineType } from '@/lib/types'
 import { describeFineType } from '@/lib/fines'
 import { Badge, Button, Card, Input, Modal, Select, Toggle } from '@/components/ui'
@@ -99,7 +99,10 @@ function FineTypeModal({ open, type, nextOrder, onClose }: { open: boolean; type
     try {
       if (type) {
         await updateDoc(doc(db, 'fineTypes', type.id), data)
-        await logActivity(actor, 'update', 'fineType', type.id, `Barème modifié : ${data.label}`)
+        const changes = diffChanges({ ...type }, data, {
+          label: 'Libellé', description: 'Description', kind: 'Type', amount: 'Montant', unitLabel: 'Unité', freeUnits: 'Unités offertes', cap: 'Plafond', active: 'Actif',
+        })
+        await logActivity(actor, 'update', 'fineType', type.id, `Barème modifié : ${data.label}`, changes)
       } else {
         const ref = await addDoc(collection(db, 'fineTypes'), { ...data, order: nextOrder, createdAt: serverTimestamp() })
         await logActivity(actor, 'create', 'fineType', ref.id, `Barème : ajout de « ${data.label} »`)

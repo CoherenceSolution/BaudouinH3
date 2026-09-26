@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone, Flame } from 'lucide-react'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone, Flame, CheckCheck, ClipboardPen, Pencil } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
@@ -31,6 +31,10 @@ interface Props {
   nominationCounts?: Partial<Record<VoteCategory, number>>
   /** Seuil à partir duquel on signale le joueur (3 voix par défaut). */
   alertThreshold?: number
+  /** Bouton ou contenu affiché sous le vote (ex. « Valider le vote »). */
+  footer?: ReactNode
+  /** Marque le vote comme déjà lu (console de l'orateur). */
+  readBadge?: boolean
 }
 
 const catTone: Record<VoteCategory, string> = {
@@ -39,7 +43,7 @@ const catTone: Record<VoteCategory, string> = {
   moment: 'bg-sky-soft text-sky-700',
 }
 
-export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, onReveal, revealHint, index, className, nominationCounts, alertThreshold }: Props) {
+export function TicketCard({ ticket, players, likes, showAuthor, speakerView, actions, myLikes, onLike, onReveal, revealHint, index, className, nominationCounts, alertThreshold, footer, readBadge }: Props) {
   const categories = useCategories()
   // Noms déjà annoncés par l'orateur pendant cette lecture (état local, rien n'est écrit).
   const [announced, setAnnounced] = useState<VoteCategory[]>([])
@@ -53,11 +57,14 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
         {index != null && <span className="flex size-6 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">{index}</span>}
         <span className="text-[13px] font-medium">
           {showAuthor ? (
-            <span className="inline-flex items-center gap-1"><Eye className="size-3.5 text-sky" /> {playerName(author)}</span>
+            <span className="inline-flex items-center gap-1"><Eye className="size-3.5 text-sky" /> {author ? playerName(author) : 'Auteur non précisé'}</span>
           ) : (
             <span className="inline-flex items-center gap-1 text-muted"><EyeOff className="size-3.5" /> Vote anonyme</span>
           )}
         </span>
+        {readBadge && <Badge tone="accent"><CheckCheck className="size-3" /> Lu</Badge>}
+        {speakerView && ticket.manual && <Badge tone="violet"><ClipboardPen className="size-3" /> Hors plateforme</Badge>}
+        {speakerView && ticket.correctedByName && <Badge><Pencil className="size-3" /> Nom corrigé par {ticket.correctedByName}</Badge>}
         {ticket.starred && <Badge tone="gold"><Star className="size-3 fill-current" /> Petite étoile</Badge>}
         {ticket.saved && <Badge tone="sky"><Bookmark className="size-3 fill-current" /> Conservé</Badge>}
         {multiDevice && <Badge tone="rose"><Smartphone className="size-3" /> Double auteur : rempli depuis {ticket.authorUids.length} appareils</Badge>}
@@ -129,6 +136,7 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
           )
         })}
       </div>
+      {footer && <div className="border-t border-line p-3">{footer}</div>}
     </article>
   )
 }

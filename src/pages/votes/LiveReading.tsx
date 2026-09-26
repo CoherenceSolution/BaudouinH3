@@ -1,27 +1,36 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { Flame, Radio } from 'lucide-react'
+import { Flame, Pencil, Radio } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Like, Match, Player, Ticket, VoteCategory } from '@/lib/types'
 import { VOTE_CATEGORIES } from '@/lib/types'
 import { useCategories, useLiveAlertThreshold } from '@/hooks/useSettings'
 import { likeCounts, nominationProgress, readTickets, submittedTickets } from '@/lib/rankings'
 import { playerName } from '@/lib/format'
-import { Avatar, Badge, Card, EmptyState } from '@/components/ui'
+import { Avatar, Badge, Button, Card, EmptyState } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
+import { useActor } from '@/hooks/useActor'
+import { logActivity } from '@/lib/activity'
 import { TicketCard } from './TicketCard'
+import { EditTicketModal } from './EditTicketModal'
 
 interface Props {
   match: Match
   players: Map<string, Player>
+  playerList: Player[]
   tickets: Ticket[]
   likes: Like[]
   myPlayerId: string | null
+  /** Orateur, secrétaire ou admin : peut corriger un nom mal choisi dans un vote lu. */
+  canEdit?: boolean
 }
 
 /** Vue "En direct" : les tickets lus apparaissent au fur et à mesure, chacun peut voter pour sa contribution préférée. */
-export function LiveReading({ match, players, tickets, likes, myPlayerId }: Props) {
+export function LiveReading({ match, players, playerList, tickets, likes, myPlayerId, canEdit }: Props) {
   const toast = useToast()
+  const [editing, setEditing] = useState<Ticket | null>(null)
+  const actor = useActor()
+  const categories = useCategories()
   const threshold = useLiveAlertThreshold()
   const readAsc = useMemo(() => readTickets(tickets).sort((a, b) => (a.readAt?.toMillis() ?? 0) - (b.readAt?.toMillis() ?? 0)), [tickets])
   const read = useMemo(() => [...readAsc].reverse(), [readAsc])
@@ -38,8 +47,15 @@ export function LiveReading({ match, players, tickets, likes, myPlayerId }: Prop
     if (!myPlayerId) return
     const ref = doc(db, 'likes', `${match.id}_${myPlayerId}_${category}`)
     try {
-      if (myLikes[category] === ticketId) await deleteDoc(ref)
-      else await setDoc(ref, { voterPlayerId: myPlayerId, category, ticketId, matchId: match.id, createdAt: serverTimestamp() })
+      const label = categories.find((c) => c.key === category)?.label ?? category
+      const n = readAsc.findIndex((t) => t.id === ticketId) + 1
+      if (myLikes[category] === ticketId) {
+        await deleteDoc(ref)
+        await logActivity(actor, 'delete', 'like', ref.id, `Coup de cœur retiré (${label}, vote lu n°${n})`)
+      } else {
+        await setDoc(ref, { voterPlayerId: myPlayerId, category, ticketId, matchId: match.id, createdAt: serverTimestamp() })
+        await logActivity(actor, myLikes[category] ? 'update' : 'create', 'like', ref.id, `Coup de cœur ${myLikes[category] ? 'déplacé' : 'donné'} (${label}, vote lu n°${n})`)
+      }
     } catch (e) {
       console.error(e)
       toast('Vote impossible', 'error')
@@ -74,9 +90,17 @@ export function LiveReading({ match, players, tickets, likes, myPlayerId }: Prop
             onLike={myPlayerId ? (c) => toggleLike(t.id, c) : undefined}
             nominationCounts={nominationCountsOf(progress.running, t.id)}
             alertThreshold={threshold}
+            actions={
+              canEdit && (
+                <Button size="sm" variant="ghost" icon={<Pencil className="size-4" />} onClick={() => setEditing(t)} title="Corriger un nom mal choisi dans ce vote">
+                  Modifier
+                </Button>
+              )
+            }
           />
         ))
       )}
+      {canEdit && <EditTicketModal ticket={editing} players={playerList} onClose={() => setEditing(null)} />}
     </div>
   )
 }
