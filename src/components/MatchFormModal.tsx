@@ -4,7 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Match } from '@/lib/types'
 import { formatDate, todayIso } from '@/lib/format'
-import { logActivity } from '@/lib/activity'
+import { diffChanges, logActivity } from '@/lib/activity'
 import { useActor } from '@/hooks/useActor'
 import { Button, Input, Modal, Select, Toggle } from './ui'
 import { useToast } from './ui/Toast'
@@ -56,7 +56,15 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
     try {
       if (match) {
         await updateDoc(doc(db, 'matches', match.id), { ...data, status })
-        await logActivity(actor, 'update', 'match', match.id, `Match modifié : ${opponent.trim()} (${formatDate(date)})`)
+        const statusLabel = { voting: 'Votes ouverts', reading: 'Lecture', closed: 'Terminé' } as const
+        const view = (m: { date: string; opponent: string; competition?: string; home: boolean; homeScore: number | null; awayScore: number | null; status: Match['status'] }) => ({
+          date: formatDate(m.date), opponent: m.opponent, competition: m.competition ?? '', home: m.home ? 'domicile' : 'extérieur',
+          homeScore: m.homeScore, awayScore: m.awayScore, status: statusLabel[m.status],
+        })
+        const changes = diffChanges(view(match), view({ ...data, status }), {
+          date: 'Date', opponent: 'Adversaire', competition: 'Compétition', home: 'Lieu', homeScore: 'Score Baudouin', awayScore: 'Score adversaire', status: 'Statut',
+        })
+        await logActivity(actor, 'update', 'match', match.id, `Match modifié : ${opponent.trim()} (${formatDate(date)})`, changes)
         toast('Match mis à jour')
       } else {
         const ref = await addDoc(collection(db, 'matches'), { ...data, status: 'voting', createdBy: actor.uid, createdAt: serverTimestamp() })

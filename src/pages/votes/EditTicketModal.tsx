@@ -49,7 +49,12 @@ export function EditTicketModal({ ticket, players, onClose }: Props) {
       const summary = changed
         .map((c) => `${c.label} : ${playerFullLabel(byId.get(ticket[c.key]?.playerId ?? '')) || '—'} → ${playerFullLabel(byId.get(picks[c.key] ?? '')) || '—'}`)
         .join(' ; ')
-      await logActivity(actor, 'update', 'ticket', ticket.id, `Vote corrigé — ${summary}`)
+      const changes = changed.map((c) => ({
+        field: c.label,
+        before: playerFullLabel(byId.get(ticket[c.key]?.playerId ?? '')) || '—',
+        after: playerFullLabel(byId.get(picks[c.key] ?? '')) || '—',
+      }))
+      await logActivity(actor, 'update', 'ticket', ticket.id, `Vote corrigé — ${summary}`, changes)
       toast('Vote corrigé, classements mis à jour')
       onClose()
     } catch (e) {

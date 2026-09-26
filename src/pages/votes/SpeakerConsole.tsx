@@ -71,8 +71,8 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       // Le minuteur n'a plus de sens hors phase de vote.
       if (status !== 'voting') Object.assign(patch, { voteDeadline: null, voteTimerBy: null })
       await updateDoc(doc(db, 'matches', match.id), patch)
-      await logActivity(actor, 'update', 'match', match.id, status === 'reading' ? `Votes clôturés, lecture commencée par ${speakerName}` : status === 'closed' ? 'Soirée terminée' : 'Votes réouverts')
-      toast(status === 'reading' ? 'Votes clôturés pour tout le monde. Bonne lecture !' : status === 'closed' ? 'Soirée terminée' : 'Votes réouverts')
+      await logActivity(actor, 'update', 'match', match.id, status === 'reading' ? `Votes clôturés, lecture commencée par ${speakerName}` : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
+      toast(status === 'reading' ? 'Votes clôturés pour tout le monde. Bonne lecture !' : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
     } catch (e) {
       console.error(e)
       toast('Action impossible', 'error')
@@ -95,7 +95,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
   }
 
   async function announce(t: Ticket) {
-    await patchTicket(t, { readAt: serverTimestamp(), readOrder: t.readOrder ?? read.length + 1 })
+    await patchTicket(t, { readAt: serverTimestamp(), readOrder: t.readOrder ?? read.length + 1 }, `Vote validé et affiché à tous (lecture n°${read.length + 1})`)
     toast(commentFirstPicks(t).length ? 'Vote validé et envoyé à tous. Lisez le commentaire, puis annoncez le nom.' : 'Vote validé et envoyé à tous, classements mis à jour')
   }
 
@@ -109,7 +109,10 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       const order = i === idx ? idx + dir : i === idx + dir ? idx : i
       batch.update(doc(db, 'tickets', x.id), { readOrder: order })
     })
-    await batch.commit().catch((e) => { console.error(e); toast('Réorganisation impossible', 'error') })
+    await batch
+      .commit()
+      .then(() => logActivity(actor, 'update', 'ticket', t.id, `Ordre de lecture : vote n°${read.length + idx + 1} ${dir < 0 ? 'monté' : 'descendu'} en position ${read.length + idx + dir + 1}`))
+      .catch((e) => { console.error(e); toast('Réorganisation impossible', 'error') })
   }
 
   async function shuffle() {
@@ -120,7 +123,9 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
     }
     const batch = writeBatch(db)
     ids.forEach((id, i) => batch.update(doc(db, 'tickets', id), { readOrder: i }))
-    await batch.commit().then(() => toast('Ordre mélangé')).catch((e) => { console.error(e); toast('Mélange impossible', 'error') })
+    await batch
+      .commit()
+      .then(() => { toast('Ordre mélangé'); return logActivity(actor, 'update', 'match', match.id, `Ordre de lecture mélangé (${ids.length} votes dans la file)`) }).catch((e) => { console.error(e); toast('Mélange impossible', 'error') })
   }
 
   const editButton = (t: Ticket) => (
@@ -139,7 +144,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
             <div>
               <div className="font-semibold">Console de l’orateur</div>
               <div className="text-[13px] text-muted">
-                {match.status === 'voting' ? 'Votes ouverts' : match.status === 'reading' ? `Lecture par ${match.speakerName ?? speakerName}` : 'Soirée terminée'}
+                {match.status === 'voting' ? 'Votes ouverts' : match.status === 'reading' ? `Lecture par ${match.speakerName ?? speakerName}` : 'Lecture des votes terminée'}
                 {' · '}{submitted.length} votes envoyés · {drafts} en cours · {read.length} lus
               </div>
             </div>
@@ -309,7 +314,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                           <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
                           <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Nom de l’auteur masqué (orateur)' : 'Nom de l’auteur consulté (orateur)')} />
                           {editButton(t)}
-                          <IconBtn title="Remettre dans la file" onClick={() => patchTicket(t, { readAt: null })}><RotateCcw className="size-4" /></IconBtn>
+                          <IconBtn title="Remettre dans la file" onClick={() => patchTicket(t, { readAt: null }, `Vote remis dans la file (lecture n°${read.indexOf(t) + 1} annulée)`)}><RotateCcw className="size-4" /></IconBtn>
                         </>
                       }
                     />
@@ -325,13 +330,13 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       {match.status !== 'voting' && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
           <div className="text-[13px] text-muted">
-            {match.status === 'reading' ? 'Tous les votes sont lus ? Terminez la soirée. Besoin d’un vote en plus ? Rouvrez les votes.' : 'La soirée est terminée. Vous pouvez reprendre la lecture si besoin.'}
+            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée. Besoin d’un vote en plus ? Rouvrez les votes.' : 'La lecture des votes est terminée. Vous pouvez la reprendre si besoin.'}
           </div>
           <div className="flex flex-wrap gap-2">
             {match.status === 'reading' && (
               <>
                 <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>Rouvrir les votes</Button>
-                <Button icon={<Flag className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('closed')}>Terminer la soirée</Button>
+                <Button icon={<Flag className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('closed')}>La lecture des votes est terminée</Button>
               </>
             )}
             {match.status === 'closed' && (
@@ -352,7 +357,7 @@ function Stepper({ status }: { status: Match['status'] }) {
   const steps: { key: Match['status']; label: string }[] = [
     { key: 'voting', label: 'Votes ouverts' },
     { key: 'reading', label: 'Lecture' },
-    { key: 'closed', label: 'Terminé' },
+    { key: 'closed', label: 'Lecture terminée' },
   ]
   const current = steps.findIndex((s) => s.key === status)
   return (

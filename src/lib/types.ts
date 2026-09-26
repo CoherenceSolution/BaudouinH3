@@ -30,6 +30,8 @@ export interface Player {
   active: boolean
   /** Droits accordés par l'admin : le membre qui se connecte sous ce nom devient secrétaire. */
   role?: 'secretary' | null
+  /** Désigné par l'admin comme orateur possible : lui seul peut prendre la console d'orateur. */
+  canSpeak?: boolean
   createdAt?: Timestamp
 }
 
@@ -227,5 +229,13 @@ export interface ActivityLog {
   entity: string
   entityId: string
   summary: string
+  /** Détail d'une modification : chaque champ changé, avec sa valeur avant et après. */
+  changes?: ActivityChange[]
   at: Timestamp
+}
+
+export interface ActivityChange {
+  field: string
+  before: string
+  after: string
 }

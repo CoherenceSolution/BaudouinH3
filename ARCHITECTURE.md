@@ -23,9 +23,9 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 | Rôle | Connexion | Peut |
 |---|---|---|
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture et le compte à rebours, voter « coup de cœur », voir qui a coumé, consulter amendes et stats. |
-| **Orateur** | Même formulaire que tout le monde (prénom + nom), en cochant « Je suis l'orateur ce soir » — ou plus tard via le bouton « Je suis l'orateur » de la page du match (choix libre, sur base de confiance). | Tout dans la **console orateur** : voter lui-même, lancer / prolonger / arrêter le minuteur, clôturer les votes de tout le monde, puis lire la file d'attente (« Valider le vote » envoie chaque vote à tous), réorganiser / mélanger, étoiles, conserver, consigne « commentaire avant le nom », afficher le nom d'un auteur, corriger un nom mal choisi, terminer la soirée. |
+| **Orateur** | Choisi parmi la **liste des orateurs désignés par l'admin** (`players.canSpeak`, Gestion → Staff). Même formulaire que tout le monde (prénom + nom), en cochant « Je suis l'orateur ce soir » — ou plus tard via le bouton « Je suis l'orateur » de la page du match, visible seulement pour un orateur désigné. | Tout dans la **console orateur** : voter lui-même, lancer / prolonger / arrêter le minuteur, clôturer les votes de tout le monde, puis lire la file d'attente (« Valider le vote » envoie chaque vote à tous), réorganiser / mélanger, étoiles, conserver, consigne « commentaire avant le nom », afficher le nom d'un auteur, corriger un nom mal choisi, indiquer que « La lecture des votes est terminée ». |
 | **Secrétaire** | Même formulaire que tout le monde ; aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité, encoder un **vote hors plateforme**. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume ». |
-| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, définir ou changer le code commun. |
+| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, tenir la liste des orateurs, définir ou changer le code commun. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
 « Première installation » qui crée le compte admin, le document `config/bootstrap` et précharge l'équipe
@@ -44,7 +44,7 @@ config/bootstrap              { claimedBy, at }
 staff/{uid}                   { email, displayName, role: 'admin'|'secretary', playerId, createdAt }
 config/settings               { categories: { best|worst|moment: { label, emoji } } }
 config/secretaryAccess        { email, uid, updatedAt }   ← compte technique courant des secrétaires
-players/{id}                  { firstName, lastName, nickname, active, role: 'secretary'|null, createdAt }
+players/{id}                  { firstName, lastName, nickname, active, role: 'secretary'|null, canSpeak, createdAt }
 matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
                                 status: 'voting'|'reading'|'closed',
                                 speakerName, speakerUid, readingStartedAt, closedAt,
@@ -64,7 +64,7 @@ fines/{id}                    { playerId, fineTypeId, label, matchId, date, quan
 statCategories/{id}           { label, emoji, active, order }
 statEntries/{id}              { categoryId, playerId, matchId, date, value, note, createdBy, createdAt }
 activity/{id}                 { actorUid, actorName, actorRole, action: 'create'|'update'|'delete',
-                                entity, entityId, summary, at }
+                                entity, entityId, summary, changes: [{ field, before, after }], at }
 ```
 
 Points de conception :
@@ -124,8 +124,16 @@ Points de conception :
   créées, renommées, masquées ou **supprimées** depuis Gestion → Listes (ou depuis la page Stats). La suppression
   d'une liste efface aussi toutes ses entrées, par lots de 400 écritures.
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
-- **Journal d'activité** en ajout seul : chaque action de création/modification/suppression du staff ou de l'orateur
-  écrit une ligne lisible (« Amende infligée : Retard 15,00 € — Ronny Verast »). Rien ne peut y être modifié.
+- **Journal d'activité — toute modification est traçable**, en ajout seul (rien ne peut y être modifié ni supprimé) :
+  chaque création, modification ou suppression écrit une ligne lisible avec qui, quoi et quand
+  (« Amende infligée : Retard 15,00 € — Ronny Verast »). Pour une modification, `changes` garde la valeur de chaque
+  champ **avant → après** (match, barème, listes, paramètres, renommage de joueur, correction d'un vote, droits).
+  La lecture est aussi entièrement tracée : clôture, vote validé (n° de lecture), vote remis dans la file, ordre
+  modifié ou mélangé, étoiles, nom d'auteur consulté, vote hors plateforme, coups de cœur, minuteur, fin de lecture.
+  Gestion → Activité : filtres par type et par personne, recherche, « Charger plus ancien ».
+  Exception volontaire : les brouillons auto-sauvegardés d'un vote (toutes les 800 ms) ne sont pas journalisés,
+  seul l'envoi ou la mise à jour du vote l'est ; et le contenu d'un vote n'est jamais écrit dans le journal, pour
+  préserver l'anonymat (seules les corrections de nom y figurent, sans l'auteur du vote).
 
 ## 4. Règles de sécurité (firestore.rules)
 
@@ -199,7 +207,7 @@ src/
    les classements se mettent à jour, les membres votent leur coup de cœur par catégorie. Quand un votant l'a
    demandé, sa console lui présente le commentaire avant le nom et lui rappelle de le lire en premier. Dès qu'un
    joueur atteint 3 voix dans une catégorie, le direct le signale.
-5. Il peut afficher le nom de l'auteur d'un ticket, conserver un ticket, puis termine la soirée.
+5. Il peut afficher le nom de l'auteur d'un ticket, conserver un ticket, puis appuie sur « La lecture des votes est terminée ».
    Pendant ce temps, le trésorier note **la coum** dans l'onglet du même nom : une ligne par joueur
    (a coumé / pas encore / absent), un bouton « Recoumer les présents » pour un tour supplémentaire.
 6. En fin d'année, la rétrospective compile tout : meilleur/pire joueur cumulés, buteurs, passeurs, duo de la saison,
@@ -207,7 +215,6 @@ src/
 
 ## 7. Évolutions possibles
 
-- Code PIN pour l'orateur ou restriction au staff (un simple changement de l'écran de connexion et d'une règle).
 - Export CSV / PDF de la rétrospective.
 - Notifications push (nécessite Firebase Cloud Messaging, gratuit).
 - Multi-équipes : ajouter un champ `teamId` sur chaque document et une règle par équipe.

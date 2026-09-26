@@ -4,6 +4,7 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { ArrowLeft, Mic, MicOff } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
+import { useSpeaker } from '@/hooks/useSpeaker'
 import { useCoums, useLikes, usePlayers, useTickets } from '@/hooks/useData'
 import type { Match } from '@/lib/types'
 import { formatDate, matchTitle } from '@/lib/format'
@@ -29,7 +30,8 @@ export function MatchVotePage() {
   const coums = useCoums(matchId)
   const [match, setMatch] = useState<Match | null | undefined>(undefined)
 
-  const isSpeaker = identity?.mode === 'speaker'
+  // Orateur : seulement un joueur de la liste désignée par l'admin.
+  const { isSpeaker, canSpeak } = useSpeaker()
   const canAnimate = isSpeaker || isStaff
 
   useEffect(() => {
@@ -88,7 +90,7 @@ export function MatchVotePage() {
             {match.speakerName && match.status !== 'voting' && <span>Orateur : {match.speakerName}</span>}
           </div>
           {/* Le rôle d'orateur se prend ici, sans se déconnecter (le staff a la console d'office). */}
-          {!isStaff && identity && match.status !== 'closed' && (
+          {!isStaff && identity && canSpeak && match.status !== 'closed' && (
             isSpeaker ? (
               <Button size="sm" variant="ghost" className="mt-2" icon={<MicOff className="size-4" />} onClick={() => setMode('public')}>Je ne suis plus l’orateur</Button>
             ) : (

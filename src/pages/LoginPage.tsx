@@ -5,7 +5,7 @@ import { usePlayers } from '@/hooks/useData'
 import { PinDialog } from '@/components/PinDialog'
 import type { Player } from '@/lib/types'
 import { Button, Checkbox, Input } from '@/components/ui'
-import { fullName, normalize } from '@/lib/format'
+import { fullName, normalize, playerName } from '@/lib/format'
 import { ErrorNotice } from '@/components/ErrorNotice'
 
 type Step = 'member' | 'staff'
@@ -61,6 +61,7 @@ function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
   const [error, setError] = useState('')
   const [pinFor, setPinFor] = useState<Player | null>(null)
   const mode: Mode = speaker ? 'speaker' : 'public'
+  const speakers = players.data.filter((p) => p.canSpeak)
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -72,6 +73,11 @@ function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
     }
     if (match === 'ambiguous') {
       setError('Plusieurs joueurs correspondent. Indiquez le nom complet.')
+      return
+    }
+    // L'orateur est choisi parmi la liste désignée par l'admin.
+    if (speaker && !match.canSpeak) {
+      setError('Vous n’êtes pas dans la liste des orateurs désignés par l’admin. Décochez « Je suis l’orateur ce soir » pour voter normalement.')
       return
     }
     // Joueur avec droits de secrétaire : le code commun active les droits sur cet appareil.
@@ -94,13 +100,13 @@ function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
           <Input label="Nom" value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" required error={error} />
         </>
       )}
-      <Checkbox
+      {speakers.length > 0 && <Checkbox
         checked={speaker}
         onChange={setSpeaker}
         label={<span className="inline-flex items-center gap-1.5"><Mic className="size-4" /> Je suis l’orateur ce soir</span>}
-        hint="Vous votez comme tout le monde, et vous avez en plus la console pour lancer le minuteur, clôturer les votes et les lire. Vous pourrez aussi prendre ce rôle plus tard depuis la page du match."
+        hint={`Réservé aux orateurs désignés par l’admin (${speakers.map((p) => playerName(p)).join(', ')}). Vous votez comme tout le monde, et vous avez en plus la console pour lancer le minuteur, clôturer les votes et les lire.`}
         className="mt-4 rounded-xl bg-slate-50 p-3"
-      />
+      />}
       <Button type="submit" block size="lg" className="mt-4" variant={speaker ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
         {speaker ? 'Entrer comme orateur' : 'Continuer'}
       </Button>

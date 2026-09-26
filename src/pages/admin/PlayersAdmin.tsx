@@ -6,7 +6,7 @@ import { usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { createPlayer } from '@/lib/players'
 import { INITIAL_PLAYERS } from '@/lib/initialPlayers'
-import { logActivity } from '@/lib/activity'
+import { diffChanges, logActivity } from '@/lib/activity'
 import type { Player } from '@/lib/types'
 import { cx, fullName, playerFullLabel, playerMatches, playerName, playerRealName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, Input, Modal, Spinner } from '@/components/ui'
@@ -137,7 +137,7 @@ function RenameModal({ player, onClose }: { player: Player; onClose: () => void 
     try {
       const next = { firstName: firstName.trim(), lastName: lastName.trim(), nickname: nick.trim() || null }
       await updateDoc(doc(db, 'players', player.id), next)
-      await logActivity(actor, 'update', 'player', player.id, `Joueur renommé : ${playerFullLabel(player)} → ${playerFullLabel({ ...player, ...next })}`)
+      await logActivity(actor, 'update', 'player', player.id, `Joueur renommé : ${playerFullLabel(player)} → ${playerFullLabel({ ...player, ...next })}`, diffChanges({ ...player }, next, { firstName: 'Prénom', lastName: 'Nom', nickname: 'Surnom' }))
       toast('Joueur renommé')
       onClose()
     } catch (e) {

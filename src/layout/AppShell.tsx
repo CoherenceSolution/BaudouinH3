@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Home, Vote, Euro, BarChart3, History, Settings, LogOut, Mic, UserRound, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
+import { useSpeaker } from '@/hooks/useSpeaker'
 import { useMatches, usePlayers } from '@/hooks/useData'
 import { cx, playerName } from '@/lib/format'
 import { Avatar } from '@/components/ui'
@@ -22,13 +23,14 @@ export function AppShell() {
   const { identity, staff, isStaff, role, logout, clearIdentity } = useAuth()
   const players = usePlayers(true)
   const matches = useMatches()
+  const { isSpeaker } = useSpeaker()
   const navigate = useNavigate()
   const location = useLocation()
   const me = identity ? players.byId.get(identity.playerId) : null
   const displayName = me ? playerName(me) : isStaff ? staff?.displayName || staff?.email || '' : ''
   const [pinOpen, setPinOpen] = useState(false)
   const canActivate = !isStaff && me?.role === 'secretary'
-  const roleLabelKey = role === 'admin' ? 'admin' : identity?.mode === 'speaker' ? 'speaker' : role === 'secretary' ? 'secretary' : 'public'
+  const roleLabelKey = role === 'admin' ? 'admin' : isSpeaker ? 'speaker' : role === 'secretary' ? 'secretary' : 'public'
 
   const nav = isStaff ? [...NAV, { to: '/admin', label: 'Gestion', icon: Settings }] : NAV
 

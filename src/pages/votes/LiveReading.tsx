@@ -9,6 +9,8 @@ import { likeCounts, nominationProgress, readTickets, submittedTickets } from '@
 import { playerName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, EmptyState } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
+import { useActor } from '@/hooks/useActor'
+import { logActivity } from '@/lib/activity'
 import { TicketCard } from './TicketCard'
 import { EditTicketModal } from './EditTicketModal'
 
@@ -27,6 +29,8 @@ interface Props {
 export function LiveReading({ match, players, playerList, tickets, likes, myPlayerId, canEdit }: Props) {
   const toast = useToast()
   const [editing, setEditing] = useState<Ticket | null>(null)
+  const actor = useActor()
+  const categories = useCategories()
   const threshold = useLiveAlertThreshold()
   const readAsc = useMemo(() => readTickets(tickets).sort((a, b) => (a.readAt?.toMillis() ?? 0) - (b.readAt?.toMillis() ?? 0)), [tickets])
   const read = useMemo(() => [...readAsc].reverse(), [readAsc])
@@ -43,8 +47,15 @@ export function LiveReading({ match, players, playerList, tickets, likes, myPlay
     if (!myPlayerId) return
     const ref = doc(db, 'likes', `${match.id}_${myPlayerId}_${category}`)
     try {
-      if (myLikes[category] === ticketId) await deleteDoc(ref)
-      else await setDoc(ref, { voterPlayerId: myPlayerId, category, ticketId, matchId: match.id, createdAt: serverTimestamp() })
+      const label = categories.find((c) => c.key === category)?.label ?? category
+      const n = readAsc.findIndex((t) => t.id === ticketId) + 1
+      if (myLikes[category] === ticketId) {
+        await deleteDoc(ref)
+        await logActivity(actor, 'delete', 'like', ref.id, `Coup de cœur retiré (${label}, vote lu n°${n})`)
+      } else {
+        await setDoc(ref, { voterPlayerId: myPlayerId, category, ticketId, matchId: match.id, createdAt: serverTimestamp() })
+        await logActivity(actor, myLikes[category] ? 'update' : 'create', 'like', ref.id, `Coup de cœur ${myLikes[category] ? 'déplacé' : 'donné'} (${label}, vote lu n°${n})`)
+      }
     } catch (e) {
       console.error(e)
       toast('Vote impossible', 'error')
