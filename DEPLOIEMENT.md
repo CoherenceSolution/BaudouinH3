@@ -57,13 +57,15 @@ Un mode de repli existe : si un secret GitHub `FIREBASE_SERVICE_ACCOUNT` contena
 présent, le workflow l'utilise à la place de la fédération. Aujourd'hui ce secret n'existe pas et n'est
 pas nécessaire.
 
-## 3. Les trois workflows GitHub
+## 3. Les workflows GitHub
 
 | Fichier | Quand | Ce qu'il fait |
 |---|---|---|
 | `.github/workflows/deploy.yml` | À chaque push sur `main` ou la branche de développement, et à la demande | Construit et publie le site + les règles Firestore |
-| `.github/workflows/ci.yml` | À chaque push et sur chaque pull request | Vérifie les types et le build, sans rien publier |
 | `.github/workflows/sync-calendar.yml` | Tous les jours vers 6 h (heure belge), et à la demande | Lit l'agenda Sportlink et met à jour les matchs dans Firestore |
+
+Il n'y a **pas** de workflow de test sur GitHub : les vérifications tournent dans la session de travail,
+gratuitement, avant chaque envoi de code. Voir la section suivante.
 
 La synchronisation de l'agenda réutilise **la même identité sans clé** que le déploiement : le compte de
 service `github-deploy` et la même fédération. Il n'y a donc rien de plus à configurer côté Google pour
@@ -71,7 +73,33 @@ elle. Les tâches planifiées de GitHub ne s'exécutent que depuis la branche `m
 vit sur la branche de développement, la synchronisation quotidienne doit être lancée à la main depuis
 l'onglet *Actions*.
 
-## 4. Ce qui est déployé, et ce qui ne l'est pas
+## 4. Les vérifications, en local et gratuites
+
+Rien n'est publié sans avoir été vérifié, et la vérification ne consomme aucune minute GitHub : elle
+tourne dans la session, sur la machine de travail.
+
+| Commande | Durée | Ce qu'elle vérifie |
+|---|---|---|
+| `npm run verify` | ~30 s | Types TypeScript, tests unitaires, construction du site |
+| `npm run verify:e2e` | ~2 min | Une soirée complète jouée dans un vrai navigateur, contre des émulateurs Firebase locaux |
+| `npm run verify:all` | ~3 min | Les deux |
+
+`npm run verify:e2e` ([`scripts/e2e.sh`](scripts/e2e.sh)) démarre les émulateurs Firebase et le serveur
+de développement, vide les données de test, joue [`e2e/scenario.mjs`](e2e/scenario.mjs) puis arrête tout.
+Le scénario crée un match, encode buts et amendes, fait voter plusieurs personnes, anime la lecture côté
+orateur, vérifie l'anonymat, les classements, la rétrospective et l'affichage mobile. Il échoue si une
+erreur apparaît dans la console du navigateur ; les erreurs volontaires (code faux refusé) sont annoncées
+comme telles, et les ressources externes bloquées par un pare-feu sont ignorées.
+
+Les données de test vivent dans un projet fictif `demo-baudouin-h3` servi par les émulateurs
+([`firebase.e2e.json`](firebase.e2e.json), [`.env.e2e`](.env.e2e)) : **la base réelle n'est jamais
+touchée**.
+
+Chaque session de travail est préparée automatiquement par
+[`.claude/hooks/session-start.sh`](.claude/hooks/session-start.sh), qui installe les dépendances et
+repère le navigateur. Il n'y a donc rien à lancer à la main avant de pouvoir tester.
+
+## 5. Ce qui est déployé, et ce qui ne l'est pas
 
 | Déployé à chaque push | Pas déployé |
 |---|---|
@@ -85,7 +113,7 @@ unique : `/amendes` doit fonctionner même en accès direct).
 
 Le projet visé est écrit dans [`.firebaserc`](.firebaserc) et répété dans le workflow (`PROJECT_ID`).
 
-## 5. Les clés Firebase du navigateur
+## 6. Les clés Firebase du navigateur
 
 [`.env.production`](.env.production) contient la configuration Firebase de l'application web
 (`apiKey`, `authDomain`, `projectId`…). Ce fichier est **committé volontairement** : ces valeurs ne sont
@@ -94,7 +122,7 @@ qui inspecte la page. Ce qui protège les données, ce sont les règles `firesto
 
 En revanche `.env` (développement local) est ignoré par git, voir [`.gitignore`](.gitignore).
 
-## 6. Vérifier un déploiement
+## 7. Vérifier un déploiement
 
 - **L'historique complet** : https://github.com/CoherenceSolution/BaudouinH3/actions
   Une ligne par envoi de code, avec une coche verte ou une croix rouge. Cliquer dessus montre chaque
@@ -103,7 +131,7 @@ En revanche `.env` (développement local) est ignoré par git, voir [`.gitignore
   (sur téléphone, fermer complètement l'onglet et rouvrir).
 - **Côté Firebase** : console Firebase → Hosting, qui liste les versions publiées avec leur date.
 
-## 7. Cas particuliers
+## 8. Cas particuliers
 
 **Déclencher un déploiement sans changer le code.** Onglet *Actions* du dépôt → workflow *Deploy* →
 bouton *Run workflow*. C'est prévu par la ligne `workflow_dispatch` du fichier.
@@ -132,7 +160,7 @@ compte. L'onglet *Actions* donne la réponse — le dernier *Deploy* avec une co
 qu'il portait. Si les déploiements suivants ont échoué, le site est resté sur cette version-là, même si
 le dépôt a beaucoup avancé depuis.
 
-## 8. Si un déploiement échoue
+## 9. Si un déploiement échoue
 
 Le détail est toujours dans l'onglet *Actions*, sur l'étape marquée en rouge.
 
@@ -144,14 +172,17 @@ Le détail est toujours dans l'onglet *Actions*, sur l'étape marquée en rouge.
 | Erreur à l'étape « Vérification et build » | Erreur de code (types, import) | Corriger le code ; le site en ligne n'a pas bougé |
 | `HTTP Error: 403` sur Firestore | API désactivée sur le projet | Le script réactive les API nécessaires |
 
-## 9. Résumé : où est écrit quoi
+## 10. Résumé : où est écrit quoi
 
 | Fichier | Rôle |
 |---|---|
 | `.github/workflows/deploy.yml` | Le déploiement : quand, quoi, comment |
-| `.github/workflows/ci.yml` | Vérification des types et du build sur toutes les branches et les pull requests |
 | `.github/workflows/sync-calendar.yml` | Synchronisation quotidienne de l'agenda Sportlink |
 | `scripts/calendar/sync.mjs` | Le programme de synchronisation lancé par ce workflow |
+| `scripts/e2e.sh` | Le test de bout en bout : émulateurs, serveur, scénario, arrêt |
+| `e2e/scenario.mjs` | Le scénario joué dans le navigateur |
+| `firebase.e2e.json`, `.env.e2e` | La configuration du projet fictif utilisé par les tests |
+| `.claude/hooks/session-start.sh` | Préparation automatique de chaque session de travail |
 | `scripts/setup-github-deploy.sh` | La configuration unique côté Google (compte de service, fédération) |
 | `firebase.json` | Quel dossier publier, les réécritures, les fichiers de règles, les ports des émulateurs |
 | `.firebaserc` | Le projet Firebase visé |

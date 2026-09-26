@@ -10,11 +10,23 @@ const BASE = 'http://localhost:5173'
 const S = process.env.SHOTS ?? new URL('./shots', import.meta.url).pathname
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {})
 const errors = []
+// Certaines étapes provoquent volontairement une erreur (code faux, accès refusé). Pendant
+// celles-ci, les erreurs de console sont attendues et ne comptent pas comme des défauts.
+let expecting = 0
+async function expectError(label, fn) {
+  expecting++
+  try {
+    return await fn()
+  } finally {
+    expecting--
+    console.log(`  (erreur attendue vérifiée : ${label})`)
+  }
+}
 async function ctx(name, mobile = false) {
   const c = await browser.newContext(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 860 } })
   const p = await c.newPage()
-  p.on('console', (m) => { if (m.type() === 'error') errors.push(`[${name}] ${m.text()}`) })
-  p.on('pageerror', (e) => errors.push(`[${name}] pageerror ${e.message}`))
+  p.on('console', (m) => { if (m.type() === 'error' && !expecting) errors.push(`[${name}] ${m.text()}`) })
+  p.on('pageerror', (e) => { if (!expecting) errors.push(`[${name}] pageerror ${e.message}`) })
   p.on('dialog', (d) => d.accept())
   return p
 }
@@ -199,9 +211,11 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
   await p.getByRole('button', { name: mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer' }).click()
   if (pin) {
     await p.getByText('Code des secrétaires').waitFor()
-    await p.getByLabel('Code').fill('0000')
-    await p.getByRole('button', { name: 'Valider' }).click()
-    await p.getByText('Code incorrect.').waitFor({ timeout: 15000 })
+    await expectError('un code faux est refusé', async () => {
+      await p.getByLabel('Code').fill('0000')
+      await p.getByRole('button', { name: 'Valider' }).click()
+      await p.getByText('Code incorrect.').waitFor({ timeout: 15000 })
+    })
     await p.getByLabel('Code').fill(pin)
     await p.getByRole('button', { name: 'Valider' }).click()
     await p.getByRole('link', { name: 'Gestion' }).first().waitFor({ timeout: 20000 })
@@ -415,6 +429,19 @@ await m.goto(BASE + '/amendes')
 await m.waitForTimeout(800)
 await shot(m, '22-mobile-amendes')
 
-console.log('ERRORS', errors.length)
-for (const e of errors) console.log(e)
 await browser.close()
+
+// Bruit d'environnement, pas des défauts de l'application : polices Google et autres ressources
+// externes bloquées par un pare-feu ou un proxy (bac à sable, machine sans accès Internet).
+const NOISE = /ERR_CERT_AUTHORITY_INVALID|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|fonts\.(googleapis|gstatic)\.com/
+const real = errors.filter((e) => !NOISE.test(e))
+const ignored = errors.length - real.length
+
+if (ignored) console.log(`(${ignored} message${ignored > 1 ? 's' : ''} d'environnement ignoré${ignored > 1 ? 's' : ''} : ressources externes bloquées)`)
+if (real.length === 0) {
+  console.log('Aucune erreur de console.')
+} else {
+  console.log(`${real.length} erreur${real.length > 1 ? 's' : ''} de console :`)
+  for (const e of real) console.log('  ' + e)
+  process.exitCode = 1
+}

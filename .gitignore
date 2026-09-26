@@ -9,3 +9,4 @@ firebase-debug.log
 *.tsbuildinfo
 e2e/shots
 !.env.production
+!.env.e2e

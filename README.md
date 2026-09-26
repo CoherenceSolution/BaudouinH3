@@ -157,6 +157,9 @@ dans l'onglet Stats.
 | `npm run dev` | Serveur de développement |
 | `npm run build` | Vérification TypeScript + build de production dans `dist/` |
 | `npm run typecheck` | Vérification TypeScript seule |
+| `npm run verify` | Types, tests unitaires et build (~30 s) |
+| `npm run verify:e2e` | Scénario complet dans un navigateur, contre les émulateurs (~2 min) |
+| `npm run verify:all` | Les deux |
 | `npm run emulators` | Émulateurs Firebase Auth + Firestore |
 | `npm run deploy` | Build puis `firebase deploy` |
 | `npm test` | Tests de la lecture de l'agenda et de la synchronisation |
