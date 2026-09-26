@@ -246,6 +246,8 @@ export interface CalendarConfig {
   lastSync?: {
     at?: Timestamp
     ok: boolean
+    /** « Agenda Sportlink » (tâche du matin) ou le nom de l'admin qui a appuyé sur le bouton. */
+    by?: string
     events?: number
     created?: number
     updated?: number

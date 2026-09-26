@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { eventsToMatches, parseStart, parseTeams } from './ical.mjs'
-import { matchIdFor, planSync } from './plan.mjs'
+import { eventsToMatches, parseStart, parseTeams } from '../../src/lib/calendar/ical.ts'
+import { matchIdFor, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
+
+const withIds = (feed) => Promise.all(feed.map(async (m) => ({ ...m, id: await matchIdFor(m.externalId) })))
 
 const ICS = [
   'BEGIN:VCALENDAR',
@@ -51,22 +53,23 @@ test('titre sans le nom de l’équipe : on garde le titre entier', () => {
 
 const TODAY = '2026-10-01'
 
-test('crée les matchs à venir, ignore les matchs passés', () => {
+test('crée les matchs à venir, ignore les matchs passés', async () => {
   const feed = [
     ...eventsToMatches(ICS),
     { externalId: 'ancien', date: '2026-09-20', time: '10:00', opponent: 'Passé', home: true, venue: null, details: null, cancelled: false },
   ]
-  const plan = planSync(feed, [], TODAY)
+  const plan = planSync(await withIds(feed), [], TODAY)
   assert.equal(plan.create.length, 3)
   assert.ok(!plan.create.some((c) => c.data.opponent === 'Passé'))
-  assert.equal(plan.create[0].id, matchIdFor('wedstrijd-1001@sportlink'))
+  assert.equal(plan.create[0].id, await matchIdFor('wedstrijd-1001@sportlink'))
+  assert.match(plan.create[0].id, /^sl_[0-9a-f]{20}$/)
 })
 
-test('un match déplacé est mis à jour ; un match inchangé ne l’est pas', () => {
-  const [a, b] = eventsToMatches(ICS)
+test('un match déplacé est mis à jour ; un match inchangé ne l’est pas', async () => {
+  const [a, b] = await withIds(eventsToMatches(ICS))
   const existing = [
-    { id: matchIdFor(a.externalId), status: 'scheduled', ...a, date: '2026-10-03', time: '20:00', homeScore: 5 },
-    { id: matchIdFor(b.externalId), status: 'scheduled', ...b },
+    { status: 'scheduled', ...a, date: '2026-10-03', time: '20:00', homeScore: 5 },
+    { status: 'scheduled', ...b },
   ]
   const plan = planSync([a, b], existing, TODAY)
   assert.equal(plan.create.length, 0)
@@ -85,4 +88,22 @@ test('un match à venir retiré de l’agenda est annulé, jamais supprimé ; le
   ]
   const plan = planSync([], existing, TODAY)
   assert.deepEqual(plan.cancel.map((c) => c.id), ['sl_futur'])
+})
+
+test('écritures : match créé « à venir », journal, bilan ; le lien n’apparaît nulle part', async () => {
+  const { plan, summary } = await prepareSync(ICS, [], { now: new Date('2026-10-01T08:00:00Z') })
+  assert.deepEqual(summary, { events: 3, created: 3, updated: 0, cancelled: 0 })
+  const writes = syncWrites(plan, summary, { actorUid: 'u', actorName: 'Bruno', actorRole: 'admin' }, 'NOW')
+  const created = writes.find((w) => w.kind === 'set' && w.path.startsWith('matches/'))
+  assert.equal(created.data.status, 'scheduled')
+  assert.equal(created.data.source, 'sportlink')
+  assert.equal(writes.filter((w) => w.kind === 'add').length, 3)
+  const last = writes.at(-1)
+  assert.equal(last.path, 'config/calendar')
+  assert.equal(last.data.lastSync.by, 'Bruno')
+  assert.ok(!JSON.stringify(writes).includes('token'))
+})
+
+test('un contenu qui n’est pas un agenda est refusé', async () => {
+  await assert.rejects(prepareSync('<html>Erreur</html>', []), /pas un agenda/)
 })

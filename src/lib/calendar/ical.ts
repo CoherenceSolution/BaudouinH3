@@ -1,35 +1,44 @@
 // Lecture d'un agenda iCalendar (.ics), tel que Sportlink le publie, et conversion en matchs.
-// Module pur (aucune dépendance) : utilisé par la synchronisation quotidienne et par ses tests.
+// Module pur, sans dépendance : partagé par le bouton « Mettre à jour » (navigateur),
+// la synchronisation quotidienne (scripts/calendar/sync.mjs) et les tests.
+// Syntaxe TypeScript « effaçable » uniquement : Node l'exécute directement.
 
 export const TIME_ZONE = 'Europe/Brussels'
 
+interface Prop {
+  value: string
+  params: Record<string, string>
+}
+
+type RawEvent = Record<string, Prop>
+
+/** Match tel que décrit par l'agenda. */
+export interface FeedMatch {
+  externalId: string
+  date: string
+  time: string | null
+  opponent: string
+  home: boolean
+  venue: string | null
+  details: string | null
+  cancelled: boolean
+  summary: string
+}
+
 /** Déplie les lignes longues (RFC 5545 : une ligne qui commence par un espace prolonge la précédente). */
-function unfold(text) {
+function unfold(text: string): string[] {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n[ \t]/g, '').split('\n')
 }
 
-function unescapeText(value) {
+function unescapeText(value: string): string {
   return value
     .replace(/\\n/gi, '\n')
     .replace(/\\([,;\\])/g, '$1')
     .trim()
 }
 
-/** « DTSTART;TZID=Europe/Brussels:20261004T143000 » → { name, params, value }. */
-function parseLine(line) {
-  const colon = findValueColon(line)
-  if (colon < 0) return null
-  const [name, ...rawParams] = line.slice(0, colon).split(';')
-  const params = {}
-  for (const p of rawParams) {
-    const eq = p.indexOf('=')
-    if (eq > 0) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1).replace(/^"|"$/g, '')
-  }
-  return { name: name.toUpperCase(), params, value: line.slice(colon + 1) }
-}
-
 /** Premier « : » hors guillemets (un paramètre peut contenir « : » entre guillemets). */
-function findValueColon(line) {
+function findValueColon(line: string): number {
   let quoted = false
   for (let i = 0; i < line.length; i++) {
     if (line[i] === '"') quoted = !quoted
@@ -38,10 +47,23 @@ function findValueColon(line) {
   return -1
 }
 
+/** « DTSTART;TZID=Europe/Brussels:20261004T143000 » → { name, params, value }. */
+function parseLine(line: string): (Prop & { name: string }) | null {
+  const colon = findValueColon(line)
+  if (colon < 0) return null
+  const [name, ...rawParams] = line.slice(0, colon).split(';')
+  const params: Record<string, string> = {}
+  for (const p of rawParams) {
+    const eq = p.indexOf('=')
+    if (eq > 0) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1).replace(/^"|"$/g, '')
+  }
+  return { name: name.toUpperCase(), params, value: line.slice(colon + 1) }
+}
+
 /** Événements bruts : une liste de { UID, SUMMARY, DTSTART: {value, params}, … }. */
-export function parseEvents(text) {
-  const events = []
-  let current = null
+export function parseEvents(text: string): RawEvent[] {
+  const events: RawEvent[] = []
+  let current: RawEvent | null = null
   for (const line of unfold(text)) {
     if (line === 'BEGIN:VEVENT') {
       current = {}
@@ -59,10 +81,10 @@ export function parseEvents(text) {
   return events
 }
 
-const pad = (n) => String(n).padStart(2, '0')
+const pad = (n: number) => String(n).padStart(2, '0')
 
 /** Date et heure locales (fuseau de Bruxelles) d'un instant. */
-export function localParts(date, timeZone = TIME_ZONE) {
+export function localParts(date: Date, timeZone = TIME_ZONE): { date: string; time: string } {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
       .formatToParts(date)
@@ -76,7 +98,7 @@ export function localParts(date, timeZone = TIME_ZONE) {
  * Heure UTC (suffixe Z) : convertie. Heure avec TZID ou « flottante » : prise telle quelle
  * (Sportlink publie à l'heure locale belge/néerlandaise). Date seule : pas d'heure.
  */
-export function parseStart(prop) {
+export function parseStart(prop: Prop | undefined): { date: string; time: string | null } | null {
   if (!prop) return null
   const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(prop.value.trim())
   if (!m) return null
@@ -87,7 +109,7 @@ export function parseStart(prop) {
 }
 
 /** Minuscules, sans accents ni ponctuation : pour reconnaître le nom de l'équipe. */
-export function normalize(s) {
+export function normalizeTeam(s: string | null | undefined): string {
   return String(s ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -101,14 +123,14 @@ export function normalize(s) {
  * « Baudouin H3 - Dragons H4 » : domicile. « Dragons H4 - Baudouin H3 » : extérieur.
  * L'équipe est reconnue par un mot-clé (« Baudouin » par défaut) ; sans lui, on garde le titre entier.
  */
-export function parseTeams(summary, teamKeyword = 'Baudouin') {
+export function parseTeams(summary: string, teamKeyword = 'Baudouin'): { home: boolean; opponent: string } {
   const title = String(summary ?? '').trim()
-  const key = normalize(teamKeyword)
+  const key = normalizeTeam(teamKeyword)
   const sides = title.split(/\s+(?:-|–|—|vs\.?|contre)\s+/i)
   if (sides.length === 2 && key) {
     const [a, b] = sides.map((s) => s.trim())
-    const ourA = normalize(a).includes(key)
-    const ourB = normalize(b).includes(key)
+    const ourA = normalizeTeam(a).includes(key)
+    const ourB = normalizeTeam(b).includes(key)
     if (ourA && !ourB) return { home: true, opponent: b }
     if (ourB && !ourA) return { home: false, opponent: a }
   }
@@ -116,12 +138,12 @@ export function parseTeams(summary, teamKeyword = 'Baudouin') {
 }
 
 /**
- * Agenda complet → matchs prêts à écrire.
+ * Agenda complet → matchs.
  * Chaque match garde l'UID Sportlink (`externalId`) : c'est lui qui relie l'événement au match
  * de l'application, même quand la date, l'heure ou le lieu changent.
  */
-export function eventsToMatches(text, { teamKeyword = 'Baudouin' } = {}) {
-  const out = []
+export function eventsToMatches(text: string, { teamKeyword = 'Baudouin' }: { teamKeyword?: string } = {}): FeedMatch[] {
+  const out: FeedMatch[] = []
   for (const ev of parseEvents(text)) {
     const uid = ev.UID?.value?.trim()
     const start = parseStart(ev.DTSTART)

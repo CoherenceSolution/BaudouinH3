@@ -7,6 +7,7 @@ import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import { formatDateTime } from '@/lib/format'
 import type { CalendarConfig } from '@/lib/types'
+import { describeSummary } from '@/lib/calendar/plan'
 import { Button, Card, Input } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 
@@ -24,7 +25,7 @@ export function CalendarSettings() {
     setKeyword(config?.teamKeyword ?? '')
   }, [config?.icalUrl, config?.teamKeyword])
 
-  const validUrl = /^https:\/\/\S+$/.test(url.trim())
+  const validUrl = /^https?:\/\/\S+$/.test(url.trim())
 
   async function save() {
     setSaving(true)
@@ -63,23 +64,19 @@ export function CalendarSettings() {
 /** Dernière synchronisation : réussie (avec le bilan) ou en échec (avec la raison). */
 export function SyncStatus({ lastSync, hasUrl }: { lastSync: CalendarConfig['lastSync']; hasUrl: boolean }) {
   if (!hasUrl) return null
-  if (!lastSync) return <p className="mt-3 text-[12px] text-muted">Pas encore synchronisé : première lecture demain matin (ou tout de suite depuis GitHub → Actions → « Synchroniser l’agenda »).</p>
+  if (!lastSync) return <p className="mt-3 text-[12px] text-muted">Pas encore synchronisé : première lecture demain matin, ou tout de suite avec « Mettre à jour le calendrier » (Gestion → Matchs).</p>
   const when = lastSync.at ? formatDateTime(lastSync.at.toDate()) : ''
+  const by = lastSync.by && lastSync.by !== 'Agenda Sportlink' ? ` par ${lastSync.by}` : ''
   if (!lastSync.ok)
     return (
       <p className="mt-3 flex gap-1.5 text-[12px] text-rose">
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Échec de la synchronisation {when && `du ${when}`} : {lastSync.error ?? 'erreur inconnue'}
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Échec de la synchronisation {when && `du ${when}`}{by} : {lastSync.error ?? 'erreur inconnue'}
       </p>
     )
-  const changes = [
-    lastSync.created ? `${lastSync.created} ajouté${lastSync.created > 1 ? 's' : ''}` : '',
-    lastSync.updated ? `${lastSync.updated} mis à jour` : '',
-    lastSync.cancelled ? `${lastSync.cancelled} annulé${lastSync.cancelled > 1 ? 's' : ''}` : '',
-  ].filter(Boolean)
   return (
     <p className="mt-3 flex gap-1.5 text-[12px] text-muted">
       <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-accent-strong" />
-      Synchronisé {when && `le ${when}`} · {changes.length ? changes.join(', ') : 'aucun changement'}
+      Synchronisé {when && `le ${when}`}{by} · {describeSummary(lastSync)}
     </p>
   )
 }

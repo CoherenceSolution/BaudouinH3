@@ -102,8 +102,11 @@ C'est tout : la synchronisation utilise le même accès Google que le déploieme
 - **Votes** : un match à venir est grisé, on peut l'ouvrir pour voir la date, l'heure et le lieu. Les votes
   s'ouvrent automatiquement **le jour du match**.
 - Les matchs ajoutés à la main (amical, tournoi…) restent possibles ; la synchronisation n'y touche pas.
-- Pour synchroniser tout de suite : GitHub → onglet **Actions** → « Synchroniser l'agenda » → **Run workflow**.
-  La dernière synchronisation (ou son erreur) s'affiche dans Gestion → Paramètres et Gestion → Matchs.
+- **Mise à jour immédiate** : l'admin appuie sur **Mettre à jour le calendrier** (Gestion → Matchs). L'application
+  relit l'agenda et applique les mêmes règles tout de suite, avec un bilan (« 1 match ajouté, 1 mis à jour »).
+  Si Sportlink refuse la lecture depuis le navigateur, le bouton propose de lancer la même mise à jour sur GitHub :
+  onglet **Actions** → « Synchroniser l'agenda » → **Run workflow** (résultat environ une minute plus tard).
+- La dernière synchronisation (qui, quand, bilan ou erreur) s'affiche dans Gestion → Paramètres et Gestion → Matchs.
 
 À savoir : GitHub n'exécute les tâches planifiées que depuis la branche `main`, et les suspend après 60 jours
 sans aucune activité sur le dépôt (un clic sur « Enable workflow » dans l'onglet Actions les relance).

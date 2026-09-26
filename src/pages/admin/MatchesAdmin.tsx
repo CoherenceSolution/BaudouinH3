@@ -9,10 +9,13 @@ import { Badge, Button, Card, Spinner } from '@/components/ui'
 import { MatchStatusBadge, ResultPill } from '@/components/MatchCard'
 import { MatchFormModal } from '@/components/MatchFormModal'
 import { SyncStatus } from './CalendarSettings'
+import { CalendarSyncButton } from './CalendarSyncButton'
+import { useAuth } from '@/auth/AuthProvider'
 
 export function MatchesAdmin() {
   const matches = useMatches()
   const calendar = useCalendarConfig()
+  const { isAdmin } = useAuth()
   const [editing, setEditing] = useState<Match | null | 'new'>(null)
   if (matches.loading) return <Spinner />
   return (
@@ -28,7 +31,10 @@ export function MatchesAdmin() {
             </p>
           ) : null}
         </div>
-        <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>Nouveau match</Button>
+        <div className="flex flex-wrap gap-2">
+          {isAdmin && calendar?.icalUrl && <CalendarSyncButton />}
+          <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>Nouveau match</Button>
+        </div>
       </div>
       <Card className="divide-y divide-line">
         {matches.data.length === 0 && <p className="px-4 py-8 text-center text-[13px] text-muted">Aucun match.</p>}
