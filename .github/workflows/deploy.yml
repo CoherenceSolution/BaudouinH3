@@ -5,7 +5,7 @@
 #
 # Authentification sans clé (Workload Identity Federation) : GitHub prouve son identité à Google
 # et endosse le compte de service github-deploy. Aucun secret à stocker.
-# Mise en place : voir README, section « Déploiement automatique ».
+# Mise en place et diagnostic : voir DEPLOIEMENT.md à la racine du dépôt.
 #
 # Solution de repli : si un secret FIREBASE_SERVICE_ACCOUNT (clé JSON) existe, il est utilisé à la place.
 name: Deploy

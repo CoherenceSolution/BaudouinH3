@@ -2,6 +2,7 @@
 # Configuration unique du déploiement sans clé depuis GitHub Actions (Workload Identity Federation).
 # À exécuter une seule fois dans Google Cloud Shell (https://shell.cloud.google.com), avec le compte
 # propriétaire du projet Firebase. Idempotent : peut être relancé sans risque.
+# Explications : DEPLOIEMENT.md, section « L'authentification sans clé ».
 set -euo pipefail
 
 PROJECT_ID="baudouinheren3"
