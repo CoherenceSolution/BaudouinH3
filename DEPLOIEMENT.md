@@ -116,9 +116,21 @@ règles Firestore en arrière, et le prochain push republiera la version du dép
 dans le workflow. Quand la branche de développement sera fusionnée dans `main`, on pourra ne garder
 que `main`.
 
-**Déployer depuis un ordinateur**, si jamais GitHub est indisponible : installer `firebase-tools`,
-faire `firebase login`, puis `npm run deploy`. Cette commande est définie dans
-[`package.json`](package.json).
+**Déployer depuis un ordinateur**, quand GitHub est indisponible ou bloqué (facturation, panne) :
+
+```bash
+npm install -g firebase-tools   # une seule fois
+firebase login                  # une seule fois, avec le compte propriétaire du projet
+npm run deploy                  # construit puis publie Hosting + règles Firestore
+```
+
+C'est exactement ce que fait le workflow, en local. La commande est définie dans
+[`package.json`](package.json). Le déploiement automatique reprend ensuite sans rien faire de plus.
+
+**Savoir quelle version est réellement en ligne.** Un push ne garantit rien : c'est le déploiement qui
+compte. L'onglet *Actions* donne la réponse — le dernier *Deploy* avec une coche verte, et le commit
+qu'il portait. Si les déploiements suivants ont échoué, le site est resté sur cette version-là, même si
+le dépôt a beaucoup avancé depuis.
 
 ## 8. Si un déploiement échoue
 
@@ -126,6 +138,7 @@ Le détail est toujours dans l'onglet *Actions*, sur l'étape marquée en rouge.
 
 | Message | Cause | Solution |
 |---|---|---|
+| `The job was not started because recent account payments have failed or your spending limit needs to be increased` | Facturation GitHub : minutes d'exécution épuisées ou paiement en échec. Le travail n'a jamais démarré (il échoue en deux secondes, sans aucune étape) | Régler dans GitHub → *Settings* → *Billing & plans*. En attendant, déployer depuis un ordinateur (section 7) |
 | `failed to generate Google Cloud federated token … invalid_target` | La fédération n'existe pas ou est incomplète côté Google | Rejouer `scripts/setup-github-deploy.sh` dans Cloud Shell, avec le compte propriétaire du projet |
 | `Permission denied` sur le déploiement | Le compte de service a perdu son rôle | Même script : il réattribue `roles/firebase.admin` |
 | Erreur à l'étape « Vérification et build » | Erreur de code (types, import) | Corriger le code ; le site en ligne n'a pas bougé |
