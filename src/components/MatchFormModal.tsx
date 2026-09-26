@@ -4,8 +4,8 @@ import { RefreshCw, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Match } from '@/lib/types'
 import { formatDate, todayIso } from '@/lib/format'
-import { logActivity } from '@/lib/activity'
-import { initialStatus } from '@/lib/matches'
+import { diffChanges, logActivity } from '@/lib/activity'
+import { formatTime, initialStatus } from '@/lib/matches'
 import { useActor } from '@/hooks/useActor'
 import { Button, Input, Modal, Select, Toggle } from './ui'
 import { useToast } from './ui/Toast'
@@ -63,7 +63,15 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
     try {
       if (match) {
         await updateDoc(doc(db, 'matches', match.id), { ...data, status })
-        await logActivity(actor, 'update', 'match', match.id, `Match modifié : ${opponent.trim()} (${formatDate(date)})`)
+        const statusLabel = { scheduled: 'À venir', voting: 'Votes ouverts', reading: 'Lecture', closed: 'Terminé' } as const
+        const view = (m: { date: string; time?: string | null; venue?: string | null; opponent: string; competition?: string; home: boolean; homeScore: number | null; awayScore: number | null; status: Match['status'] }) => ({
+          date: formatDate(m.date), time: formatTime(m.time), venue: m.venue ?? '', opponent: m.opponent, competition: m.competition ?? '', home: m.home ? 'domicile' : 'extérieur',
+          homeScore: m.homeScore, awayScore: m.awayScore, status: statusLabel[m.status],
+        })
+        const changes = diffChanges(view(match), view({ ...data, status }), {
+          date: 'Date', time: 'Heure', venue: 'Lieu', opponent: 'Adversaire', competition: 'Compétition', home: 'Domicile / extérieur', homeScore: 'Score Baudouin', awayScore: 'Score adversaire', status: 'Statut',
+        })
+        await logActivity(actor, 'update', 'match', match.id, `Match modifié : ${opponent.trim()} (${formatDate(date)})`, changes)
         toast('Match mis à jour')
       } else {
         const initial = initialStatus(date)

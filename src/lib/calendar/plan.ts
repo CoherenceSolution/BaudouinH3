@@ -88,6 +88,32 @@ export function describeUpdate(before: ExistingMatch, data: SyncedData): string 
   return `${moved ? 'Match déplacé' : 'Match mis à jour'} : ${data.opponent}${changes.length ? ` (${changes.join(', ')})` : ''}`
 }
 
+const CHANGE_LABELS: [SyncedField, string][] = [
+  ['date', 'Date'],
+  ['time', 'Heure'],
+  ['venue', 'Lieu'],
+  ['opponent', 'Adversaire'],
+  ['home', 'Domicile / extérieur'],
+  ['details', 'Informations'],
+  ['cancelled', 'Annulé'],
+]
+
+function changeValue(k: SyncedField, v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—'
+  if (k === 'date') return shortDate(String(v))
+  if (k === 'time') return String(v).replace(':', 'h')
+  if (k === 'home') return v ? 'domicile' : 'extérieur'
+  if (typeof v === 'boolean') return v ? 'oui' : 'non'
+  return String(v)
+}
+
+/** Détail avant / après pour le journal d'activité (même forme que diffChanges dans lib/activity). */
+export function describeChanges(before: ExistingMatch, data: SyncedData): { field: string; before: string; after: string }[] {
+  return CHANGE_LABELS.map(([k, field]) => ({ field, before: changeValue(k, before[k] ?? fallback(k)), after: changeValue(k, data[k]) })).filter(
+    (c) => c.before !== c.after,
+  )
+}
+
 /** Bilan d'une synchronisation, enregistré dans config/calendar.lastSync. */
 export interface SyncSummary {
   events: number
@@ -121,8 +147,12 @@ export interface SyncActor {
 /** Le plan traduit en écritures : matchs, journal d'activité et bilan dans config/calendar. */
 export function syncWrites(plan: SyncPlan, summary: SyncSummary, actor: SyncActor, now: unknown): SyncWrite[] {
   const writes: SyncWrite[] = []
-  const log = (action: 'create' | 'update', entityId: string, text: string) =>
-    writes.push({ kind: 'add', collection: 'activity', data: { ...actor, action, entity: 'match', entityId, summary: text, at: now } })
+  const log = (action: 'create' | 'update', entityId: string, text: string, changes?: ReturnType<typeof describeChanges>) =>
+    writes.push({
+      kind: 'add',
+      collection: 'activity',
+      data: { ...actor, action, entity: 'match', entityId, summary: text, ...(changes?.length ? { changes } : {}), at: now },
+    })
 
   for (const { id, data } of plan.create) {
     writes.push({
@@ -134,11 +164,11 @@ export function syncWrites(plan: SyncPlan, summary: SyncSummary, actor: SyncActo
   }
   for (const { id, before, data } of plan.update) {
     writes.push({ kind: 'update', path: `matches/${id}`, data: { ...data, updatedAt: now, syncedAt: now } })
-    log('update', id, describeUpdate(before, data))
+    log('update', id, describeUpdate(before, data), describeChanges(before, data))
   }
   for (const { id, before } of plan.cancel) {
     writes.push({ kind: 'update', path: `matches/${id}`, data: { cancelled: true, updatedAt: now, syncedAt: now } })
-    log('update', id, `Match retiré de l’agenda Sportlink, marqué annulé : ${before.opponent} (${describeWhen(before)})`)
+    log('update', id, `Match retiré de l’agenda Sportlink, marqué annulé : ${before.opponent} (${describeWhen(before)})`, [{ field: 'Annulé', before: 'non', after: 'oui' }])
   }
   writes.push({ kind: 'set', path: 'config/calendar', data: { lastSync: { at: now, ok: true, by: actor.actorName, ...summary, error: null } } })
   return writes

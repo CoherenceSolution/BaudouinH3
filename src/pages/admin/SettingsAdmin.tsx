@@ -4,7 +4,7 @@ import { Save } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useSettings } from '@/hooks/useSettings'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { diffChanges, logActivity } from '@/lib/activity'
 import { DEFAULT_CATEGORIES, DEFAULT_LIVE_ALERT_THRESHOLD, type VoteCategory } from '@/lib/types'
 import { Button, Card, Input } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
@@ -38,7 +38,15 @@ export function SettingsAdmin() {
     setLoading(true)
     try {
       await setDoc(doc(db, 'config', 'settings'), { categories: form }, { merge: true })
-      await logActivity(actor, 'update', 'settings', 'settings', `Catégories renommées : ${form.best.label} / ${form.worst.label} / ${form.moment.label}`)
+      const before: Record<string, string> = {}
+      const after: Record<string, string> = {}
+      const labels: Record<string, string> = {}
+      categories.forEach((c) => {
+        before[c.key] = `${c.emoji} ${c.label}`
+        after[c.key] = `${form[c.key].emoji} ${form[c.key].label}`
+        labels[c.key] = `Catégorie « ${c.label} »`
+      })
+      await logActivity(actor, 'update', 'settings', 'settings', `Catégories renommées : ${form.best.label} / ${form.worst.label} / ${form.moment.label}`, diffChanges(before, after, labels))
       toast('Paramètres enregistrés')
     } catch (e) {
       console.error(e)
@@ -54,7 +62,7 @@ export function SettingsAdmin() {
     setSavingAlert(true)
     try {
       await setDoc(doc(db, 'config', 'settings'), { liveAlertThreshold: alert }, { merge: true })
-      await logActivity(actor, 'update', 'settings', 'settings', `Alerte du direct à ${alert} voix`)
+      await logActivity(actor, 'update', 'settings', 'settings', `Alerte du direct à ${alert} voix`, diffChanges({ n: settings.liveAlertThreshold ?? DEFAULT_LIVE_ALERT_THRESHOLD }, { n: alert }, { n: 'Seuil de l’alerte (voix)' }))
       toast('Paramètres enregistrés')
     } catch (e) {
       console.error(e)

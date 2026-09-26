@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { eventsToMatches, parseStart, parseTeams } from '../../src/lib/calendar/ical.ts'
-import { matchIdFor, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
+import { describeChanges, matchIdFor, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
 
 const withIds = (feed) => Promise.all(feed.map(async (m) => ({ ...m, id: await matchIdFor(m.externalId) })))
 
@@ -77,6 +77,10 @@ test('un match déplacé est mis à jour ; un match inchangé ne l’est pas', a
   assert.deepEqual([plan.update[0].data.date, plan.update[0].data.time], ['2026-10-04', '14:30'])
   assert.ok(!('homeScore' in plan.update[0].data), 'le score n’est jamais écrasé')
   assert.ok(!('status' in plan.update[0].data), 'l’état des votes n’est jamais écrasé')
+  assert.deepEqual(describeChanges(plan.update[0].before, plan.update[0].data), [
+    { field: 'Date', before: '3 oct.', after: '4 oct.' },
+    { field: 'Heure', before: '20h00', after: '14h30' },
+  ])
 })
 
 test('un match à venir retiré de l’agenda est annulé, jamais supprimé ; le passé et le jour même restent', () => {

@@ -82,12 +82,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ---- Joueurs : le champ « role » (droits de secrétaire) est réservé à l'admin ----
+    // ---- Joueurs : les champs « role » (droits de secrétaire) et « canSpeak » (liste des orateurs)
+    //      sont réservés à l'admin ----
     match /players/{playerId} {
       allow read: if signedIn();
       allow create: if (isStaff() || (signedIn() && !bootstrapDone()))
-                    && (!('role' in request.resource.data) || request.resource.data.role == null || isAdmin());
-      allow update: if isStaff() && (!onlyChangesAny(['role']) || isAdmin());
+                    && (!('role' in request.resource.data) || request.resource.data.role == null || isAdmin())
+                    && (!('canSpeak' in request.resource.data) || request.resource.data.canSpeak != true || isAdmin());
+      allow update: if isStaff() && (!onlyChangesAny(['role', 'canSpeak']) || isAdmin());
       allow delete: if isStaff();
     }
 
@@ -95,9 +97,11 @@ service cloud.firestore {
     match /matches/{matchId} {
       allow read: if signedIn();
       allow create, delete: if isStaff();
-      // Le staff modifie tout ; l'orateur (anonyme) ne touche qu'au cycle de vie de la lecture.
+      // Le staff modifie tout ; l'orateur (anonyme) ne touche qu'au cycle de vie de la lecture
+      // et au minuteur des votes, qu'il pilote depuis sa console.
       allow update: if isStaff()
-                    || (signedIn() && onlyChanges(['status', 'speakerName', 'speakerUid', 'readingStartedAt', 'closedAt', 'updatedAt']));
+                    || (signedIn() && onlyChanges(['status', 'speakerName', 'speakerUid', 'readingStartedAt', 'closedAt',
+                                                   'voteDeadline', 'voteTimerMinutes', 'voteTimerBy', 'updatedAt']));
     }
 
     // ---- Tickets de vote : id = <matchId>_<authorPlayerId> ----

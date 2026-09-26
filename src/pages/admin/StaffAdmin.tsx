@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
-import { ShieldCheck, ShieldOff, Link2, KeyRound } from 'lucide-react'
+import { ShieldCheck, ShieldOff, Link2, KeyRound, Mic, MicOff } from 'lucide-react'
 import { PIN_PATTERN, setSecretaryPin } from '@/lib/secretaryAccess'
 import { humanizePinError } from '@/lib/pinErrors'
 import type { SecretaryAccess } from '@/lib/types'
@@ -30,6 +30,7 @@ export function StaffAdmin() {
   const [q, setQ] = useState('')
 
   const secretaries = useMemo(() => players.data.filter((p) => p.role === 'secretary'), [players.data])
+  const speakers = useMemo(() => players.data.filter((p) => p.canSpeak), [players.data])
   const list = useMemo(() => players.data.filter((p) => playerMatches(p, q)), [players.data, q])
 
   async function setSecretary(p: Player, grant: boolean) {
@@ -37,6 +38,19 @@ export function StaffAdmin() {
       await updateDoc(doc(db, 'players', p.id), { role: grant ? 'secretary' : null })
       await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerFullLabel(p)}` : `Droits de secrétaire retirés à ${playerFullLabel(p)}`)
       toast(grant ? `${playerName(p)} est maintenant secrétaire` : `Droits retirés à ${playerName(p)}`)
+    } catch (err) {
+      console.error(err)
+      toast('Action impossible', 'error')
+    }
+  }
+
+  async function setSpeaker(p: Player, grant: boolean) {
+    try {
+      await updateDoc(doc(db, 'players', p.id), { canSpeak: grant })
+      await logActivity(actor, 'update', 'staff', p.id, grant ? `${playerFullLabel(p)} ajouté à la liste des orateurs` : `${playerFullLabel(p)} retiré de la liste des orateurs`, [
+        { field: 'Orateur désigné', before: grant ? 'non' : 'oui', after: grant ? 'oui' : 'non' },
+      ])
+      toast(grant ? `${playerName(p)} peut être orateur` : `${playerName(p)} n’est plus orateur`)
     } catch (err) {
       console.error(err)
       toast('Action impossible', 'error')
@@ -60,11 +74,28 @@ export function StaffAdmin() {
       <PinSection />
 
       <section>
-        <h3 className="mb-2 text-[15px] font-semibold">Secrétaires ({secretaries.length})</h3>
+        <h3 className="mb-2 text-[15px] font-semibold">Secrétaires et orateurs</h3>
         <p className="mb-3 text-[13px] text-muted">
-          Un secrétaire n’a pas d’e-mail ni de mot de passe personnel : il se connecte avec « Je vote » sous son nom, entre le code commun une fois sur son téléphone, et peut gérer matchs, amendes, buts et joueurs. Retirez les droits ici à tout moment.
+          Un secrétaire n’a pas d’e-mail ni de mot de passe personnel : il se connecte avec son prénom et son nom, entre le code commun une fois sur son téléphone, et peut gérer matchs, amendes, buts et joueurs. Retirez les droits ici à tout moment.
         </p>
         <ErrorNotice error={players.error} />
+        <div className="mb-3 rounded-xl bg-violet-soft/60 p-3">
+          <p className="mb-2 text-[13px] text-ink-2">
+            <b>Orateurs ({speakers.length})</b> — seuls ces joueurs peuvent prendre le rôle d’orateur et ouvrir la console (en plus des secrétaires et de l’admin).
+          </p>
+          {speakers.length === 0 ? (
+            <p className="text-[12px] text-muted">Aucun orateur désigné : utilisez le bouton « Orateur » dans la liste ci-dessous.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {speakers.map((p) => (
+                <span key={p.id} className="inline-flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-2 text-[13px] font-medium">
+                  <Avatar player={p} size="sm" /> {playerName(p)}
+                  <button onClick={() => setSpeaker(p, false)} className="rounded-full p-1 text-muted hover:bg-rose-soft hover:text-rose" title="Retirer de la liste des orateurs"><MicOff className="size-3.5" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         {secretaries.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
             {secretaries.map((p) => (
@@ -87,6 +118,10 @@ export function StaffAdmin() {
                   {playerRealName(p) && <span className="block truncate text-[12px] text-muted">{playerRealName(p)}</span>}
                 </span>
                 {isSec && <Badge tone="accent"><ShieldCheck className="size-3" /> Secrétaire</Badge>}
+                {p.canSpeak && <Badge tone="violet"><Mic className="size-3" /> Orateur</Badge>}
+                <Button size="sm" variant={p.canSpeak ? 'ghost' : 'secondary'} icon={p.canSpeak ? <MicOff className="size-4" /> : <Mic className="size-4" />} onClick={() => setSpeaker(p, !p.canSpeak)}>
+                  {p.canSpeak ? 'Retirer orateur' : 'Orateur'}
+                </Button>
                 <Button size="sm" variant={isSec ? 'ghost' : 'secondary'} icon={isSec ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />} onClick={() => setSecretary(p, !isSec)}>
                   {isSec ? 'Retirer' : 'Rendre secrétaire'}
                 </Button>

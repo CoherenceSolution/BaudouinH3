@@ -15,7 +15,7 @@ import { signInSecretary } from '@/lib/secretaryAccess'
 /**
  * Session applicative.
  *  - "public"  : membre connecté anonymement, qui a choisi son nom dans la liste des joueurs.
- *  - "speaker" : idem, mais en mode orateur.
+ *  - "speaker" : idem, mais en mode orateur (rôle pris à la connexion ou depuis la page du match).
  *  - "staff"   : secrétaire ou admin (e-mail + mot de passe).
  */
 export type Mode = 'public' | 'speaker'
@@ -35,6 +35,8 @@ interface AuthState {
   isAdmin: boolean
   identity: PublicIdentity | null
   setIdentity: (playerId: string, mode: Mode) => void
+  /** Prend ou quitte le rôle d'orateur sur cet appareil, sans se reconnecter. */
+  setMode: (mode: Mode) => void
   clearIdentity: () => void
   loginStaff: (email: string, password: string) => Promise<void>
   loginSecretary: (pin: string) => Promise<void>
@@ -122,6 +124,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const setMode = useCallback((mode: Mode) => {
+    setIdentityState((cur) => {
+      if (!cur) return cur
+      const next = { ...cur, mode }
+      try {
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify(next))
+      } catch {
+        /* stockage indisponible */
+      }
+      return next
+    })
+  }, [])
+
   const clearIdentity = useCallback(() => {
     setIdentityState(null)
     try {
@@ -166,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: role === 'admin',
       identity: effectiveIdentity,
       setIdentity,
+      setMode,
       clearIdentity,
       loginStaff,
       loginSecretary,
@@ -181,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
     }
-  }, [authReady, staffReady, bootstrapped, user, staff, identity, setIdentity, clearIdentity, loginStaff, loginSecretary, ensureAnonymous, logout])
+  }, [authReady, staffReady, bootstrapped, user, staff, identity, setIdentity, setMode, clearIdentity, loginStaff, loginSecretary, ensureAnonymous, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -3,7 +3,7 @@ import { addDoc, collection, doc, updateDoc } from 'firebase/firestore'
 import { Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { diffChanges, logActivity } from '@/lib/activity'
 import { deleteStatCategory } from '@/lib/statCategories'
 import type { StatCategory } from '@/lib/types'
 import { Button, Input, Modal } from './ui'
@@ -41,8 +41,10 @@ export function StatCategoryModal({ open, category, nextOrder, entryCount = 0, o
     setLoading(true)
     try {
       if (category) {
-        await updateDoc(doc(db, 'statCategories', category.id), { label: label.trim(), emoji: emoji.trim() || '🏅', active })
-        await logActivity(actor, 'update', 'statCategory', category.id, `Liste modifiée : ${label.trim()}`)
+        const next = { label: label.trim(), emoji: emoji.trim() || '🏅', active }
+        await updateDoc(doc(db, 'statCategories', category.id), next)
+        const changes = diffChanges({ ...category }, next, { label: 'Nom', emoji: 'Emoji', active: 'Visible' })
+        await logActivity(actor, 'update', 'statCategory', category.id, `Liste modifiée : ${label.trim()}`, changes)
       } else {
         const ref = await addDoc(collection(db, 'statCategories'), { label: label.trim(), emoji: emoji.trim() || '🏅', active, order: nextOrder })
         await logActivity(actor, 'create', 'statCategory', ref.id, `Liste créée : ${label.trim()}`)

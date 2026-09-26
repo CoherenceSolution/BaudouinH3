@@ -1,11 +1,13 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Home, Vote, Euro, BarChart3, History, Settings, LogOut, Mic, UserRound, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
-import { usePlayers } from '@/hooks/useData'
+import { useSpeaker } from '@/hooks/useSpeaker'
+import { useMatches, usePlayers } from '@/hooks/useData'
 import { cx, playerName } from '@/lib/format'
 import { Avatar } from '@/components/ui'
 import { ErrorBoundary } from '@/components/ErrorNotice'
 import { PinDialog } from '@/components/PinDialog'
+import { GlobalVoteTimers } from '@/components/VoteTimer'
 import { useState } from 'react'
 import { KeyRound } from 'lucide-react'
 
@@ -20,12 +22,15 @@ const NAV = [
 export function AppShell() {
   const { identity, staff, isStaff, role, logout, clearIdentity } = useAuth()
   const players = usePlayers(true)
+  const matches = useMatches()
+  const { isSpeaker } = useSpeaker()
   const navigate = useNavigate()
+  const location = useLocation()
   const me = identity ? players.byId.get(identity.playerId) : null
   const displayName = me ? playerName(me) : isStaff ? staff?.displayName || staff?.email || '' : ''
   const [pinOpen, setPinOpen] = useState(false)
   const canActivate = !isStaff && me?.role === 'secretary'
-  const roleLabelKey = role === 'admin' ? 'admin' : identity?.mode === 'speaker' ? 'speaker' : role === 'secretary' ? 'secretary' : 'public'
+  const roleLabelKey = role === 'admin' ? 'admin' : isSpeaker ? 'speaker' : role === 'secretary' ? 'secretary' : 'public'
 
   const nav = isStaff ? [...NAV, { to: '/admin', label: 'Gestion', icon: Settings }] : NAV
 
@@ -82,6 +87,7 @@ export function AppShell() {
               <span><b>Vous avez des droits de secrétaire.</b> Entrez le code commun pour les activer sur cet appareil.</span>
             </button>
           )}
+          <GlobalVoteTimers matches={matches.data} currentPath={location.pathname} playerId={identity?.playerId ?? null} />
           {canActivate && me && <PinDialog open={pinOpen} onClose={() => setPinOpen(false)} onSuccess={() => setPinOpen(false)} playerLabel={playerName(me)} />}
           <ErrorBoundary>
             <Outlet />

@@ -184,7 +184,7 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
   )
 }
 
-function CategoryBlock({ category, entry, players, onChange }: { category: CategoryDef; entry: VoteEntry; players: Player[]; onChange: (p: Partial<VoteEntry>) => void }) {
+export function CategoryBlock({ category, entry, players, onChange, commentPlaceholder }: { category: CategoryDef; entry: VoteEntry; players: Player[]; onChange: (p: Partial<VoteEntry>) => void; commentPlaceholder?: string }) {
   const tone = category.key === 'best' ? 'border-l-gold' : category.key === 'worst' ? 'border-l-rose' : 'border-l-sky'
   return (
     <Card className={cx('border-l-4 p-4 sm:p-5', tone)}>
@@ -193,7 +193,7 @@ function CategoryBlock({ category, entry, players, onChange }: { category: Categ
         {category.pickPlayer && <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label="Votre choix" />}
         <Textarea
           label="Commentaire"
-          placeholder={category.key === 'moment' ? 'Racontez le geste ou le moment (ce sera lu à voix haute !)' : 'Justifiez votre vote (ce sera lu à voix haute !)'}
+          placeholder={commentPlaceholder ?? (category.key === 'moment' ? 'Racontez le geste ou le moment (ce sera lu à voix haute !)' : 'Justifiez votre vote (ce sera lu à voix haute !)')}
           value={entry.comment}
           onChange={(e) => onChange({ comment: e.target.value })}
         />
