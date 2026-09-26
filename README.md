@@ -3,7 +3,11 @@
 Votes d'après-match, suivi de la coum, amendes et statistiques de buts/passes pour l'équipe Baudouin H3.
 Stack : React + Vite + TypeScript + Tailwind, données et hébergement Firebase (plan gratuit).
 
-L'architecture détaillée est dans [ARCHITECTURE.md](./ARCHITECTURE.md).
+L'application est en ligne sur **https://baudouinheren3.web.app** et se redéploie toute seule à chaque
+envoi de code.
+
+- Architecture, modèle de données et rôles : [ARCHITECTURE.md](./ARCHITECTURE.md)
+- Fonctionnement du déploiement, fichier par fichier : [DEPLOIEMENT.md](./DEPLOIEMENT.md)
 
 ## Mise en route (10 minutes)
 
@@ -42,10 +46,15 @@ npm run dev
 
 ### 4. Déployer
 
+En temps normal il n'y a rien à faire : chaque envoi de code sur GitHub construit et publie le site
+automatiquement (voir [DEPLOIEMENT.md](./DEPLOIEMENT.md)).
+
+Pour déployer depuis un ordinateur malgré tout :
+
 ```bash
 npm install -g firebase-tools
 firebase login
-firebase deploy           # déploie les règles Firestore + le site (npm run build est lancé par npm run deploy)
+npm run deploy            # construit le site puis déploie Hosting + règles Firestore
 ```
 
 Le site est servi sur `https://<projet>.web.app`. Les membres peuvent l'ajouter à leur écran d'accueil (PWA).
@@ -181,13 +190,9 @@ bash e2e/reset-emulators.sh && node e2e/scenario.mjs   # terminal 3, captures da
 Chaque push sur `main` (ou sur la branche de développement) construit et déploie le site sur Firebase via
 `.github/workflows/deploy.yml`, **sans aucune clé stockée** : GitHub s'authentifie auprès de Google par
 fédération d'identité (Workload Identity Federation), ce qui respecte les organisations qui interdisent les
-clés de compte de service.
+clés de compte de service. La mise en place a déjà été faite par le script
+`scripts/setup-github-deploy.sh`, exécuté une fois dans Google Cloud Shell.
 
-Mise en place unique, par le propriétaire du projet Firebase :
-
-1. Ouvrir https://shell.cloud.google.com (Cloud Shell, dans le navigateur, rien à installer).
-2. Coller et exécuter le contenu de `scripts/setup-github-deploy.sh`.
-3. C'est tout : le prochain push déclenche le déploiement. L'onglet **Actions** du dépôt GitHub montre le résultat.
-
-Repli : si un secret GitHub `FIREBASE_SERVICE_ACCOUNT` (clé JSON d'un compte de service) existe, le workflow
-l'utilise à la place de la fédération.
+Le détail complet (chaîne d'authentification, ce qui est déployé, vérification, retour en arrière,
+diagnostic des erreurs) est dans **[DEPLOIEMENT.md](./DEPLOIEMENT.md)**. L'historique des déploiements est
+dans l'onglet **Actions** du dépôt GitHub.
