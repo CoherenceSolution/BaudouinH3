@@ -24,8 +24,8 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 | Rôle | Connexion | Peut |
 |---|---|---|
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture et le compte à rebours, voter « coup de cœur », voir qui a coumé, consulter amendes et stats. |
-| **Orateur** | Choisi parmi la **liste des orateurs désignés par l'admin** (`players.canSpeak`, Gestion → Staff). Même formulaire que tout le monde (prénom + nom), en cochant « Je suis l'orateur ce soir » — ou plus tard via le bouton « Je suis l'orateur » de la page du match, visible seulement pour un orateur désigné. | Tout dans la **console orateur** : voter lui-même, lancer / prolonger / arrêter le minuteur, clôturer les votes de tout le monde, puis lire la file d'attente (« Valider le vote » envoie chaque vote à tous), réorganiser / mélanger, étoiles, conserver, consigne « commentaire avant le nom », afficher le nom d'un auteur, corriger un nom mal choisi, indiquer que « La lecture des votes est terminée ». |
-| **Secrétaire** | Même formulaire que tout le monde ; aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité, encoder un **vote hors plateforme**. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume ». |
+| **Orateur** | Choisi parmi la **liste des orateurs désignés par l'admin** (`players.canSpeak`, Gestion → Staff). Même formulaire que tout le monde (prénom + nom), en cochant « Je suis l'orateur ce soir » — ou plus tard via le bouton « Je suis l'orateur » de la page du match, visible seulement pour un orateur désigné. | Tout dans la **console orateur** : voter lui-même, lancer / prolonger / arrêter le minuteur, clôturer les votes de tout le monde, puis lire la file d'attente (« Valider le vote » envoie chaque vote à tous), réorganiser / mélanger, étoiles, conserver, consigne « commentaire avant le nom », afficher le nom d'un auteur (**seulement s'il est l'orateur en cours**, qui « a la main » ; l'admin aussi), corriger un nom mal choisi, indiquer que « La lecture des votes est terminée ». |
+| **Secrétaire** | Même formulaire que tout le monde ; aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur (sauf voir le nom des votants, à moins de prendre la main) + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité, encoder un **vote hors plateforme**. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume ». |
 | **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, tenir la liste des orateurs, définir ou changer le code commun. |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
@@ -50,7 +50,9 @@ players/{id}                  { firstName, lastName, nickname, active, role: 'se
 matches/{id}                  { date, time, venue, details, opponent, competition, home, homeScore, awayScore,
                                 source: 'sportlink'?, externalId, cancelled, syncedAt,
                                 status: 'scheduled'|'voting'|'reading'|'closed',
-                                speakerName, speakerUid, readingStartedAt, closedAt,
+                                speakerName, speakerUid, speakerPlayerId, speakerSince,
+                                speakerTakeover: { uid, playerId, name, byName, at },
+                                readingStartedAt, closedAt,
                                 voteDeadline, voteTimerMinutes, voteTimerBy,
                                 createdBy, createdAt, updatedAt }
 tickets/{matchId_authorId}    { matchId, authorPlayerId, authorUids[],
@@ -77,8 +79,18 @@ Points de conception :
   l'orateur voient un avertissement « double auteur » si plusieurs appareils ont touché le même vote.
 - **Catégories renommables** : les libellés et emojis des trois catégories vivent dans `config/settings`
   (Gestion → Paramètres) ; chacune désigne un joueur et porte un commentaire lu à voix haute.
-- **Anonymat** : les votes lus sont anonymes pour tout le monde, staff compris. Seul l'orateur peut, vote par vote,
-  consulter le nom de l'auteur dans sa console (`revealAuthor`), sans que ce nom soit montré ailleurs.
+- **Anonymat et orateur en cours** : les votes sont anonymes pour tout le monde, secrétaires compris. Seuls
+  **l'orateur en cours** et **l'admin** peuvent, vote par vote, consulter le nom de l'auteur dans la console (icône œil).
+  L'affichage est un état local de leur appareil, jamais écrit dans le vote (l'ancien champ `revealAuthor` n'est plus lu) :
+  personne d'autre ne le voit, et chaque consultation est journalisée (sans le nom).
+  L'orateur en cours « a la main » : `matches.speakerUid` + `speakerPlayerId` (le compte des secrétaires étant partagé,
+  l'uid seul ne suffit pas). L'orateur désigné prend la main en ouvrant sa console si personne ne l'a ; un autre
+  orateur, un secrétaire ou l'admin peut la **prendre** (« Prendre la main », après confirmation). L'ancien orateur perd
+  aussitôt l'accès aux noms et en est **informé** : `speakerTakeover` garde qui a été dépossédé et par qui, et un
+  bandeau s'affiche sur toutes les pages de son appareil jusqu'à ce qu'il le ferme ou reprenne la main.
+  « Je ne suis plus l'orateur » rend la main. Clôturer les votes ne prend jamais la main à quelqu'un.
+  Limite assumée : Firestore ne masque pas un champ, `tickets.authorPlayerId` reste lisible par un connecté qui
+  interrogerait la base directement ; la restriction porte sur l'application.
 - **Surnoms** : `players.nickname` (facultatif) devient le nom affiché partout (`playerName`), le nom d'état civil
   restant disponible (`fullName`) pour les écrans de gestion, le journal d'activité et les exports (`playerFullLabel`).
   Les recherches de joueur comparent prénom, nom **et** surnom, sans accents ni majuscules (`playerMatches`) ;
@@ -146,7 +158,7 @@ Points de conception :
   (« Amende infligée : Retard 15,00 € — Ronny Verast »). Pour une modification, `changes` garde la valeur de chaque
   champ **avant → après** (match, barème, listes, paramètres, renommage de joueur, correction d'un vote, droits).
   La lecture est aussi entièrement tracée : clôture, vote validé (n° de lecture), vote remis dans la file, ordre
-  modifié ou mélangé, étoiles, nom d'auteur consulté, vote hors plateforme, coups de cœur, minuteur, fin de lecture.
+  modifié ou mélangé, étoiles, nom d'auteur consulté, prise de main sur l'orateur, vote hors plateforme, coups de cœur, minuteur, fin de lecture.
   Gestion → Activité : filtres par type et par personne, recherche, « Charger plus ancien ».
   Exception volontaire : les brouillons auto-sauvegardés d'un vote (toutes les 800 ms) ne sont pas journalisés,
   seul l'envoi ou la mise à jour du vote l'est ; et le contenu d'un vote n'est jamais écrit dans le journal, pour
@@ -161,7 +173,7 @@ Points de conception :
 - Tickets et coups de cœur : tout utilisateur connecté (modèle de confiance : l'identité du votant est déclarative,
   comme demandé, sans adresse e-mail).
 - Cycle de vie d'un match par l'orateur anonyme : autorisé uniquement pour les champs
-  `status, speakerName, speakerUid, readingStartedAt, closedAt, updatedAt` et ceux du minuteur
+  `status, speakerName, speakerUid, speakerPlayerId, speakerSince, speakerTakeover, readingStartedAt, closedAt, updatedAt` et ceux du minuteur
   (`voteDeadline, voteTimerMinutes, voteTimerBy`) (`diff().affectedKeys().hasOnly`).
 - Agenda (`config/calendar`) : lecture et écriture par le staff seul ; la synchronisation du matin passe par le
   compte de service, le bouton « Mettre à jour le calendrier » par les droits de l'admin.
@@ -229,7 +241,7 @@ src/
    les classements se mettent à jour, les membres votent leur coup de cœur par catégorie. Quand un votant l'a
    demandé, sa console lui présente le commentaire avant le nom et lui rappelle de le lire en premier. Dès qu'un
    joueur atteint 3 voix dans une catégorie, le direct le signale.
-5. Il peut afficher le nom de l'auteur d'un ticket, conserver un ticket, puis appuie sur « La lecture des votes est terminée ».
+5. L'orateur en cours (et lui seul, avec l'admin) peut afficher le nom de l'auteur d'un ticket ; si quelqu'un prend la main, il en est prévenu. Il peut aussi conserver un ticket, puis appuie sur « La lecture des votes est terminée ».
    Pendant ce temps, le trésorier note **la coum** dans l'onglet du même nom : une ligne par joueur
    (a coumé / pas encore / absent), un bouton « Recoumer les présents » pour un tour supplémentaire.
 6. En fin d'année, la rétrospective compile tout : meilleur/pire joueur cumulés, buteurs, passeurs, duo de la saison,

@@ -263,6 +263,8 @@ await intrus.close()
 const speaker = await login('speaker', 'Maxim', 'Leonard', 'speaker')
 await speaker.goto(BASE + `/votes/${matchId}`)
 await speaker.getByText('Console de l’orateur').waitFor()
+// L'orateur désigné prend la main en ouvrant sa console : il est l'orateur en cours.
+await speaker.getByText('Vous êtes l’orateur en cours.').waitFor()
 await speaker.getByRole('button', { name: 'Participation' }).click()
 await speaker.waitForTimeout(800)
 await shot(speaker, '10-participation')
@@ -302,6 +304,25 @@ await speaker.waitForTimeout(600)
 await speaker.getByTitle('Voir le nom de l’auteur (pour vous seul)').first().click()
 await speaker.waitForTimeout(300)
 await shot(speaker, '12b-console-nom-orateur')
+
+// 7a. Orateur en cours : seul lui (et l'admin) voit le nom des votants. Une secrétaire qui prend
+// la main le devient ; l'ancien orateur est prévenu et perd l'accès aux noms.
+await jarne.goto(BASE + `/votes/${matchId}`)
+await jarne.getByText(/Orateur en cours : Maxim/).waitFor()
+if (await jarne.getByTitle('Voir le nom de l’auteur (pour vous seul)').count() !== 0) throw new Error('Seul l’orateur en cours peut voir le nom des votants')
+if (await jarne.getByText('Auteur non précisé').count() + (await jarne.locator('article header').getByText(/Leonard|Verast|Leyder/).count()) !== 0) throw new Error('Aucun nom d’auteur ne doit apparaître chez une secrétaire')
+await jarne.getByRole('button', { name: 'Prendre la main' }).click()
+await jarne.getByText('Vous êtes l’orateur en cours.').waitFor()
+await jarne.getByTitle('Voir le nom de l’auteur (pour vous seul)').first().waitFor()
+await speaker.getByText(/a pris la main sur la lecture/).waitFor()
+await speaker.getByText(/Orateur en cours : Jarne/).waitFor()
+await shot(speaker, '12b2-main-reprise')
+if (await speaker.getByTitle(/nom de l’auteur/).count() !== 0) throw new Error('L’ancien orateur ne doit plus voir le nom des votants')
+// L'orateur reprend la main pour continuer la lecture ; Jarne est prévenue à son tour.
+await speaker.getByRole('button', { name: 'Prendre la main' }).click()
+await speaker.getByText('Vous êtes l’orateur en cours.').waitFor()
+await jarne.getByText(/a pris la main sur la lecture/).waitFor()
+if (await jarne.getByTitle(/nom de l’auteur/).count() !== 0) throw new Error('La secrétaire ne doit plus voir le nom des votants')
 await speaker.waitForTimeout(400)
 if (await ronny.getByText('Vote anonyme').count() < 2) throw new Error('Les votes lus devraient être anonymes pour un votant')
 
@@ -336,6 +357,8 @@ await shot(speaker, '12e-console-lus-grises')
 
 // 7d. Vote hors plateforme (staff) : rejoint la file et se valide comme les autres
 await admin.goto(BASE + `/votes/${matchId}`)
+// L'admin voit le nom des votants sans avoir la main.
+await admin.getByTitle('Voir le nom de l’auteur (pour vous seul)').first().waitFor()
 await admin.getByRole('button', { name: 'Vote hors plateforme' }).click()
 const manualDlg = admin.getByRole('dialog')
 const manualBest = manualDlg.locator('.card').filter({ hasText: '🏆' }).first()

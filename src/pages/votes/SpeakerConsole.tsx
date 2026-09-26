@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore'
-import { ArrowDown, ArrowUp, Bookmark, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardPen, Eye, EyeOff, Flag, Lock, Megaphone, Mic, Pencil, RotateCcw, Shuffle, Star } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bookmark, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardPen, Eye, EyeOff, Flag, Hand, Lock, Megaphone, Mic, Pencil, RotateCcw, Shuffle, Star } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
@@ -13,6 +13,8 @@ import { Button, Card } from '@/components/ui'
 import { VoteTimerControl } from '@/components/VoteTimer'
 import { useToast } from '@/components/ui/Toast'
 import { useLocalFlag } from '@/hooks/useLocalFlag'
+import { useSpeaker } from '@/hooks/useSpeaker'
+import { useSpeakerLead } from '@/hooks/useSpeakerLead'
 import { TicketCard } from './TicketCard'
 import { TicketForm } from './TicketForm'
 import { ChooseIdentity } from './ChooseIdentity'
@@ -35,7 +37,7 @@ interface Props {
  * puis la lecture : une file d'attente, « Valider le vote » qui l'envoie à tous, les votes lus grisés.
  */
 export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoaded, likes }: Props) {
-  const { identity, user, isStaff } = useAuth()
+  const { identity, user, isStaff, isAdmin } = useAuth()
   const allPlayers = usePlayers(true)
   const actor = useActor()
   const toast = useToast()
@@ -45,6 +47,25 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
   const [showRead, setShowRead] = useState(true)
   // La consigne de lecture ne s'affiche que la première fois, sur cet appareil.
   const [revealHintSeen, setRevealHintSeen] = useLocalFlag('h3.revealHintSeen')
+
+  // Orateur en cours : lui seul (avec l'admin) peut consulter le nom des votants.
+  const { isSpeaker } = useSpeaker()
+  const lead = useSpeakerLead(match, players)
+  // Noms d'auteurs affichés : état local à cet appareil, jamais écrit dans le vote,
+  // pour que personne d'autre (ni un orateur qui prendrait la main) ne les voie.
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    if (!lead.canSeeNames) setRevealed(new Set())
+  }, [lead.canSeeNames])
+
+  // L'orateur désigné prend la main en ouvrant sa console, si personne ne l'a.
+  const autoClaimed = useRef(false)
+  const { claim } = lead
+  useEffect(() => {
+    if (!isSpeaker || isStaff || lead.hasLead || match.status === 'closed' || autoClaimed.current) return
+    autoClaimed.current = true
+    claim().catch((e) => console.error(e))
+  }, [isSpeaker, isStaff, lead.hasLead, match.status, claim])
 
   const submitted = useMemo(() => submittedTickets(tickets), [tickets])
   const unread = useMemo(
@@ -58,7 +79,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
   const guidedCount = useMemo(() => submitted.reduce((n, t) => n + commentFirstPicks(t).length, 0), [submitted])
   const hintTicketId = useMemo(() => [...read, ...unread].find((t) => commentFirstPicks(t).length > 0)?.id ?? null, [read, unread])
 
-  const me = identity ? allPlayers.byId.get(identity.playerId) : null
+  const me = identity ? players.get(identity.playerId) ?? allPlayers.byId.get(identity.playerId) : null
   const myTicket = identity ? tickets.find((t) => t.id === `${match.id}_${identity.playerId}`) : undefined
   const speakerName = me ? playerName(me) : actor.name
 
@@ -66,12 +87,16 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
     setBusy('status')
     try {
       const patch: Record<string, unknown> = { status, updatedAt: serverTimestamp() }
-      if (status === 'reading') Object.assign(patch, { speakerName, speakerUid: user?.uid ?? null, readingStartedAt: serverTimestamp() })
+      if (status === 'reading') {
+        patch.readingStartedAt = serverTimestamp()
+        // Personne n'a la main : celui qui clôture devient l'orateur en cours. Sinon, on ne la lui prend pas.
+        if (!lead.hasLead) Object.assign(patch, { speakerName, speakerUid: user?.uid ?? null, speakerPlayerId: identity?.playerId ?? null, speakerSince: serverTimestamp() })
+      }
       if (status === 'closed') patch.closedAt = serverTimestamp()
       // Le minuteur n'a plus de sens hors phase de vote.
       if (status !== 'voting') Object.assign(patch, { voteDeadline: null, voteTimerBy: null })
       await updateDoc(doc(db, 'matches', match.id), patch)
-      await logActivity(actor, 'update', 'match', match.id, status === 'reading' ? `Votes clôturés, lecture commencée par ${speakerName}` : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
+      await logActivity(actor, 'update', 'match', match.id, status === 'reading' ? `Votes clôturés, lecture commencée par ${lead.hasLead ? lead.leadName ?? speakerName : speakerName}` : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
       toast(status === 'reading' ? 'Votes clôturés pour tout le monde. Bonne lecture !' : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
     } catch (e) {
       console.error(e)
@@ -128,6 +153,35 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       .then(() => { toast('Ordre mélangé'); return logActivity(actor, 'update', 'match', match.id, `Ordre de lecture mélangé (${ids.length} votes dans la file)`) }).catch((e) => { console.error(e); toast('Mélange impossible', 'error') })
   }
 
+  async function takeLead() {
+    if (lead.hasLead && !confirm(`${lead.leadName ?? 'Un autre orateur'} a la main sur la lecture. La prendre ? Il en sera informé et ne verra plus le nom des votants.`)) return
+    setBusy('lead')
+    try {
+      await lead.claim(true)
+      toast('Vous êtes l’orateur en cours')
+    } catch (e) {
+      console.error(e)
+      toast('Impossible de prendre la main', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  function toggleReveal(t: Ticket) {
+    if (!lead.canSeeNames) return
+    const shown = revealed.has(t.id)
+    setRevealed((cur) => {
+      const nextSet = new Set(cur)
+      if (shown) nextSet.delete(t.id)
+      else nextSet.add(t.id)
+      return nextSet
+    })
+    // Consulter un nom reste tracé, sans écrire le nom lui-même dans le journal.
+    if (!shown) logActivity(actor, 'update', 'ticket', t.id, `Nom de l’auteur consulté (${isAdmin && !lead.isLead ? 'admin' : 'orateur'})`)
+  }
+  const revealButton = (t: Ticket) => lead.canSeeNames && <RevealBtn shown={revealed.has(t.id)} onToggle={() => toggleReveal(t)} />
+  const authorShown = (t: Ticket) => lead.canSeeNames && revealed.has(t.id)
+
   const editButton = (t: Ticket) => (
     <IconBtn title="Modifier les noms de ce vote" onClick={() => setEditing(t)}><Pencil className="size-4" /></IconBtn>
   )
@@ -150,6 +204,24 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
             </div>
           </div>
           <Stepper status={match.status} />
+        </div>
+        {/* Qui a la main : l'orateur en cours est le seul (avec l'admin) à voir le nom des votants. */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-[13px]">
+          <span className="flex items-center gap-2">
+            <Hand className={cx('size-4', lead.isLead ? 'text-accent-strong' : 'text-muted')} />
+            {lead.isLead ? (
+              <span><b>Vous êtes l’orateur en cours.</b> Vous seul{isAdmin ? '' : ' (et l’admin)'} pouvez voir le nom des votants.</span>
+            ) : lead.hasLead ? (
+              <span>Orateur en cours : <b>{lead.leadName ?? 'un autre appareil'}</b>.{isAdmin ? ' En tant qu’admin, vous voyez aussi le nom des votants.' : ' Lui seul et l’admin voient le nom des votants.'}</span>
+            ) : (
+              <span className="text-muted">Personne n’a encore la main sur la lecture.</span>
+            )}
+          </span>
+          {!lead.isLead && match.status !== 'closed' && (
+            <Button size="sm" variant={lead.hasLead ? 'secondary' : 'accent'} icon={<Hand className="size-4" />} loading={busy === 'lead'} onClick={takeLead}>
+              {lead.hasLead ? 'Prendre la main' : 'Je prends la main'}
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -203,7 +275,11 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
         }
       >
         <div className="space-y-4">
-          <p className="text-[13px] text-muted">Les votes sont anonymes. L’icône œil affiche le nom de l’auteur d’un vote pour vous seul ; le crayon corrige un nom mal choisi.</p>
+          <p className="text-[13px] text-muted">
+            {lead.canSeeNames
+              ? 'Les votes sont anonymes. L’icône œil affiche le nom de l’auteur d’un vote pour vous seul ; le crayon corrige un nom mal choisi.'
+              : 'Les votes sont anonymes. Seuls l’orateur en cours et l’admin peuvent voir le nom des votants ; le crayon corrige un nom mal choisi.'}
+          </p>
           {guidedCount > 0 && (
             <p className="flex items-start gap-2 rounded-xl bg-violet-soft px-3 py-2 text-[13px] font-medium text-violet-700">
               <Megaphone className="mt-0.5 size-4 shrink-0" />
@@ -232,7 +308,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                 key={next.id}
                 ticket={next}
                 players={players}
-                showAuthor={next.revealAuthor}
+                showAuthor={authorShown(next)}
                 speakerView
                 index={read.length + 1}
                 className="ring-2 ring-accent-strong/60"
@@ -243,7 +319,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                     {waiting.length > 0 && <IconBtn title="Descendre" onClick={() => move(next, 1)}><ArrowDown className="size-4" /></IconBtn>}
                     <StarBtn t={next} onToggle={() => patchTicket(next, { starred: !next.starred }, next.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
                     <SaveBtn t={next} onToggle={() => patchTicket(next, { saved: !next.saved }, next.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
-                    <RevealBtn t={next} onToggle={() => patchTicket(next, { revealAuthor: !next.revealAuthor }, next.revealAuthor ? 'Nom de l’auteur masqué (orateur)' : 'Nom de l’auteur consulté (orateur)')} />
+                    {revealButton(next)}
                     {editButton(next)}
                   </>
                 }
@@ -265,7 +341,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                     key={t.id}
                     ticket={t}
                     players={players}
-                    showAuthor={t.revealAuthor}
+                    showAuthor={authorShown(t)}
                     speakerView
                     index={read.length + i + 2}
                     onReveal={() => setRevealHintSeen(true)}
@@ -276,7 +352,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                         <IconBtn title="Descendre" disabled={i === waiting.length - 1} onClick={() => move(t, 1)}><ArrowDown className="size-4" /></IconBtn>
                         <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
                         <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
-                        <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Nom de l’auteur masqué (orateur)' : 'Nom de l’auteur consulté (orateur)')} />
+                        {revealButton(t)}
                         {editButton(t)}
                       </>
                     }
@@ -301,7 +377,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                       ticket={t}
                       players={players}
                       likes={counts}
-                      showAuthor={t.revealAuthor}
+                      showAuthor={authorShown(t)}
                       speakerView
                       index={read.indexOf(t) + 1}
                       className="bg-slate-50 opacity-60 grayscale transition hover:opacity-100 hover:grayscale-0"
@@ -312,7 +388,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
                         <>
                           <StarBtn t={t} onToggle={() => patchTicket(t, { starred: !t.starred }, t.starred ? 'Étoile retirée' : 'Petite étoile attribuée')} />
                           <SaveBtn t={t} onToggle={() => patchTicket(t, { saved: !t.saved }, t.saved ? 'Vote retiré des conservés' : 'Vote conservé')} />
-                          <RevealBtn t={t} onToggle={() => patchTicket(t, { revealAuthor: !t.revealAuthor }, t.revealAuthor ? 'Nom de l’auteur masqué (orateur)' : 'Nom de l’auteur consulté (orateur)')} />
+                          {revealButton(t)}
                           {editButton(t)}
                           <IconBtn title="Remettre dans la file" onClick={() => patchTicket(t, { readAt: null }, `Vote remis dans la file (lecture n°${read.indexOf(t) + 1} annulée)`)}><RotateCcw className="size-4" /></IconBtn>
                         </>
@@ -425,10 +501,10 @@ function SaveBtn({ t, onToggle }: { t: Ticket; onToggle: () => void }) {
   )
 }
 
-function RevealBtn({ t, onToggle }: { t: Ticket; onToggle: () => void }) {
+function RevealBtn({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   return (
-    <IconBtn title={t.revealAuthor ? 'Masquer le nom de l’auteur' : 'Voir le nom de l’auteur (pour vous seul)'} onClick={onToggle} active={t.revealAuthor} activeClass="bg-violet-soft text-violet-700">
-      {t.revealAuthor ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+    <IconBtn title={shown ? 'Masquer le nom de l’auteur' : 'Voir le nom de l’auteur (pour vous seul)'} onClick={onToggle} active={shown} activeClass="bg-violet-soft text-violet-700">
+      {shown ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
     </IconBtn>
   )
 }

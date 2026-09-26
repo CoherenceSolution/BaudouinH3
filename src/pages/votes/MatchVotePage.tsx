@@ -3,8 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Mic, MicOff } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
+import { useSpeakerLead } from '@/hooks/useSpeakerLead'
 import { useCoums, useLikes, useMatch, usePlayers, useTickets } from '@/hooks/useData'
 import { formatDate, matchTitle } from '@/lib/format'
+import type { Match, Player } from '@/lib/types'
 import { formatTime } from '@/lib/matches'
 import { Button, Spinner, Tabs } from '@/components/ui'
 import { MatchStatusBadge, ResultPill, VenueLink } from '@/components/MatchCard'
@@ -84,13 +86,13 @@ export function MatchVotePage() {
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
             <span>{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long' })}{match.time ? ` · ${formatTime(match.time)}` : ''}</span>
             <MatchStatusBadge status={match.status} cancelled={match.cancelled} />
-            {match.speakerName && !upcoming && match.status !== 'voting' && <span>Orateur : {match.speakerName}</span>}
+            {match.speakerName && !upcoming && <span>Orateur : {match.speakerName}</span>}
           </div>
           {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
           {/* Le rôle d'orateur se prend ici, sans se déconnecter (le staff a la console d'office). */}
           {!isStaff && identity && canSpeak && !upcoming && match.status !== 'closed' && (
             isSpeaker ? (
-              <Button size="sm" variant="ghost" className="mt-2" icon={<MicOff className="size-4" />} onClick={() => setMode('public')}>Je ne suis plus l’orateur</Button>
+              <StepDownButton match={match} players={players.byId} onDone={() => setMode('public')} />
             ) : (
               <Button size="sm" variant="secondary" className="mt-2" icon={<Mic className="size-4" />} onClick={() => setMode('speaker')}>Je suis l’orateur</Button>
             )
@@ -119,5 +121,25 @@ export function MatchVotePage() {
         </>
       )}
     </div>
+  )
+}
+
+/** Quitte le rôle d'orateur sur cet appareil et rend la main sur la lecture s'il l'avait. */
+function StepDownButton({ match, players, onDone }: { match: Match; players: Map<string, Player>; onDone: () => void }) {
+  const { release } = useSpeakerLead(match, players)
+  const [busy, setBusy] = useState(false)
+  async function stepDown() {
+    setBusy(true)
+    try {
+      await release()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setBusy(false)
+      onDone()
+    }
+  }
+  return (
+    <Button size="sm" variant="ghost" className="mt-2" icon={<MicOff className="size-4" />} loading={busy} onClick={stepDown}>Je ne suis plus l’orateur</Button>
   )
 }

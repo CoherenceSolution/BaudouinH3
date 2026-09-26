@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui'
 import { ErrorBoundary } from '@/components/ErrorNotice'
 import { PinDialog } from '@/components/PinDialog'
 import { GlobalVoteTimers } from '@/components/VoteTimer'
+import { SpeakerTakeoverNotices } from '@/components/SpeakerTakeoverNotice'
 import { useState } from 'react'
 import { KeyRound } from 'lucide-react'
 
@@ -88,6 +89,7 @@ export function AppShell() {
             </button>
           )}
           <GlobalVoteTimers matches={matches.data} currentPath={location.pathname} playerId={identity?.playerId ?? null} />
+          <SpeakerTakeoverNotices matches={matches.data} />
           {canActivate && me && <PinDialog open={pinOpen} onClose={() => setPinOpen(false)} onSuccess={() => setPinOpen(false)} playerLabel={playerName(me)} />}
           <ErrorBoundary>
             <Outlet />
