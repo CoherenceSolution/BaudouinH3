@@ -1,7 +1,8 @@
 // Scénario de bout en bout joué contre les émulateurs Firebase (npm run emulators) et le serveur Vite (npm run dev, .env avec VITE_USE_EMULATORS=true).
 // Prérequis : npx playwright install chromium. Lancer : bash e2e/reset-emulators.sh && node e2e/scenario.mjs
 // Il couvre : installation, création de match, surnoms, la coum, amendes, buts, minuteur des votes, trois votants,
-// vote « commentaire d'abord », orateur, lecture guidée dans la console, lecture en direct (alerte à 3 voix),
+// vote « commentaire d'abord », orateur (vote, minuteur et clôture depuis sa console), file de lecture et « Valider le vote »,
+// lecture guidée dans la console, vote hors plateforme, correction d'un nom, lecture en direct (alerte à 3 voix),
 // coups de cœur, listes maison, rétrospective, mobile.
 import { chromium } from 'playwright'
 
@@ -45,7 +46,7 @@ await shot(admin, '03-votes-list')
 const href = await admin.locator('a[href^="/votes/"]').first().getAttribute('href')
 const matchId = href.split('/').pop()
 await admin.goto(BASE + href)
-await admin.getByRole('button', { name: 'Console' }).waitFor()
+await admin.getByRole('button', { name: 'Console orateur' }).waitFor()
 console.log('matchId', matchId)
 
 // 2b. Compte admin relié à un joueur : l'admin vote sous ce nom
@@ -54,7 +55,7 @@ await admin.getByTitle('Joueur relié').first().waitFor()
 await admin.getByTitle('Joueur relié').first().selectOption({ label: 'Bruno Huberty' })
 await admin.getByText('joueur : Bruno Huberty').waitFor()
 await admin.goto(BASE + `/votes/${matchId}`)
-await admin.getByRole('button', { name: 'Mon vote', exact: true }).click()
+// Le staff vote depuis la console, au même endroit que le reste.
 await admin.getByText('Vous votez en tant que Bruno Huberty').waitFor()
 await shot(admin, '03b-admin-ticket')
 await fillTicket(admin, 'Vigne', 'Leyder', 'Le contrôle orienté sur le corner', 'Trois passes décisives.')
@@ -174,9 +175,9 @@ await admin.getByRole('button', { name: /Duos/ }).click()
 await admin.waitForTimeout(400)
 await shot(admin, '07-stats-duos')
 
-// 4b. Minuteur des votes (admin ou secrétaire uniquement)
+// 4b. Minuteur des votes, depuis la console
 await admin.goto(BASE + `/votes/${matchId}`)
-await admin.getByRole('button', { name: 'Console', exact: true }).click()
+await admin.getByRole('button', { name: 'Console orateur', exact: true }).click()
 await admin.getByText('Minuteur des votes').waitFor()
 await admin.getByRole('button', { name: '10 min' }).click()
 await admin.getByText('Minuteur lancé : 10 minutes').first().waitFor()
@@ -187,9 +188,10 @@ await shot(admin, '07c-minuteur')
 async function login(name, firstName, lastName, mode = 'public', pin = null) {
   const p = await ctx('voter-' + name)
   await p.goto(BASE)
-  await p.getByRole('button', { name: mode === 'speaker' ? /orateur/ : /Je vote/ }).click()
+  // Un seul formulaire pour tout le monde ; l'orateur coche simplement la case.
   await p.getByLabel('Prénom').fill(firstName)
   await p.getByLabel('Nom', { exact: true }).fill(lastName)
+  if (mode === 'speaker') await p.getByRole('checkbox').check()
   await p.getByRole('button', { name: mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer' }).click()
   if (pin) {
     await p.getByText('Code des secrétaires').waitFor()
@@ -205,6 +207,8 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
 async function vote(name, best, worst, moment, comment, pin = null, commentFirst = false) {
   const [firstName, lastName] = name
   const p = await login(firstName, firstName, lastName, 'public', pin)
+  // Le compte à rebours est visible partout, pas seulement sur la page du match.
+  await p.getByText(/Contre RSC Anderlecht Vétérans/).first().waitFor()
   await p.goto(BASE + `/votes/${matchId}`)
   await p.getByText('Vous votez en tant que').waitFor()
   await p.getByText(/Il vous reste du temps pour voter/).waitFor()
@@ -231,30 +235,42 @@ await jarne.waitForTimeout(1500)
 // 6. Orateur
 const speaker = await login('speaker', 'Maxim', 'Leonard', 'speaker')
 await speaker.goto(BASE + `/votes/${matchId}`)
-await speaker.getByText('Phase de vote').waitFor()
+await speaker.getByText('Console de l’orateur').waitFor()
 await speaker.getByRole('button', { name: 'Participation' }).click()
 await speaker.waitForTimeout(800)
 await shot(speaker, '10-participation')
-await speaker.getByRole('button', { name: 'Console' }).click()
+await speaker.getByRole('button', { name: 'Console orateur' }).click()
 await speaker.waitForTimeout(600)
 await shot(speaker, '11-console-avant')
-await speaker.getByRole('button', { name: 'Clôturer les votes et lire' }).click()
+// L'orateur vote lui-même, depuis sa console
+await speaker.getByText('Vous votez en tant que Maxim Leonard').waitFor()
+await fillTicket(speaker, 'Vigne', 'Verast', 'Le tir en pivot', 'Intouchable ce soir.')
+await speaker.getByRole('button', { name: 'Envoyer mon vote' }).click()
+await speaker.getByText('Vote envoyé', { exact: true }).waitFor()
+// …relance le minuteur (plus besoin d'un secrétaire)…
+await speaker.getByRole('button', { name: '5 min', exact: true }).click()
+await speaker.getByText('Minuteur lancé : 5 minutes').first().waitFor()
+await ronny.getByText(/Minuteur lancé par Maxim Leonard/).waitFor()
+await shot(speaker, '11b-console-vote-minuteur')
+// …et clôture les votes de tout le monde
+await speaker.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
 await speaker.getByText('Lecture par Maxim Leonard').waitFor()
 await speaker.getByRole('button', { name: 'Mélanger' }).click()
 await speaker.waitForTimeout(500)
 await speaker.getByTitle('Attribuer une petite étoile').first().click()
-await speaker.getByRole('button', { name: 'Lire' }).first().click()
-await speaker.getByText('Lecture annoncée').waitFor()
+await speaker.getByRole('button', { name: 'Valider le vote' }).click()
+await speaker.getByText('Vote validé et envoyé à tous').waitFor()
 await speaker.waitForTimeout(600)
 await shot(speaker, '12-console-lecture')
 
 // 7. Votant en direct + coup de coeur
 await ronny.getByRole('button', { name: 'En direct' }).click()
-await ronny.getByText('1 / 3 votes lus').waitFor()
+await ronny.getByText('1 / 4 votes lus').waitFor()
+if (await ronny.getByRole('button', { name: 'Modifier' }).count() !== 0) throw new Error('Un votant ne doit pas pouvoir corriger un vote')
 await ronny.locator('article button:has(svg)').first().click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '13-en-direct')
-await speaker.getByRole('button', { name: 'Lire' }).first().click()
+await speaker.getByRole('button', { name: 'Valider le vote' }).click()
 await speaker.waitForTimeout(600)
 await speaker.getByTitle('Voir le nom de l’auteur (pour vous seul)').first().click()
 await speaker.waitForTimeout(300)
@@ -264,6 +280,11 @@ if (await ronny.getByText('Vote anonyme').count() < 2) throw new Error('Les vote
 
 // 7b. Consigne « commentaire d'abord » : elle ne concerne que la console de l'orateur
 if (await ronny.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0) throw new Error('La consigne ne doit rien changer pour la salle')
+// L'ordre a été mélangé : on valide jusqu'à ce que le vote de Ronny soit passé.
+while (await ronny.getByText('Deux buts, une masterclass.').count() === 0) {
+  await speaker.getByRole('button', { name: 'Valider le vote' }).click()
+  await speaker.waitForTimeout(800)
+}
 if (await ronny.getByText('Deux buts, une masterclass.').count() !== 1) throw new Error('Le vote devrait être lisible en entier pour la salle')
 await speaker.getByText('Lisez d’abord le commentaire, puis annoncez le nom voté.').waitFor()
 await shot(speaker, '12c-console-consigne')
@@ -273,15 +294,48 @@ if (await speaker.getByRole('button', { name: 'Annoncer le nom' }).count() !== 0
 await shot(speaker, '12d-console-nom-annonce')
 
 // 7c. Troisième lecture : le même joueur atteint 3 voix, le direct le signale
-await speaker.getByRole('button', { name: 'Lire' }).first().click()
-await speaker.getByText('Lecture annoncée').first().waitFor()
-await ronny.getByText('3 / 3 votes lus').waitFor()
+while (await speaker.getByRole('button', { name: 'Valider le vote' }).count() > 0) {
+  await speaker.getByRole('button', { name: 'Valider le vote' }).click()
+  await speaker.waitForTimeout(600)
+}
+await ronny.getByText('4 / 4 votes lus').waitFor()
 await ronny.getByText('3 voix atteintes').waitFor()
 if ((await ronny.getByText('3e voix').count()) < 1) throw new Error('Le vote lu devrait porter le badge « 3e voix »')
 await shot(ronny, '13b-alerte-3-voix')
 await ronny.getByRole('button', { name: 'Classement' }).click()
 await ronny.waitForTimeout(500)
 await shot(ronny, '14-classement')
+await shot(speaker, '12e-console-lus-grises')
+
+// 7d. Vote hors plateforme (staff) : rejoint la file et se valide comme les autres
+await admin.goto(BASE + `/votes/${matchId}`)
+await admin.getByRole('button', { name: 'Vote hors plateforme' }).click()
+const manualDlg = admin.getByRole('dialog')
+const manualBest = manualDlg.locator('.card').filter({ hasText: '🏆' }).first()
+await manualBest.locator('input[placeholder^="Rechercher un joueur"]').fill('Verast')
+await manualBest.getByRole('button', { name: /Verast/ }).first().click()
+await manualBest.locator('textarea').fill('Voté sur papier au bar.')
+await shot(admin, '12f-vote-hors-plateforme')
+await manualDlg.getByRole('button', { name: 'Comptabiliser ce vote' }).click()
+await admin.getByText('Vote ajouté à la file de lecture').waitFor()
+await speaker.getByText('Hors plateforme').first().waitFor()
+await speaker.getByRole('button', { name: 'Valider le vote' }).click()
+await ronny.getByRole('button', { name: 'En direct' }).click()
+await ronny.getByText('5 / 5 votes lus').waitFor()
+
+// 7e. Correction d'un nom mal choisi (orateur) : depuis le direct, « Modifier »
+await speaker.getByRole('button', { name: 'En direct' }).click()
+await speaker.getByRole('button', { name: 'Modifier' }).first().click()
+const editDlg = speaker.getByRole('dialog')
+const editBest = editDlg.locator('section').filter({ hasText: '🏆' }).first()
+await editBest.getByLabel('Changer de joueur').click()
+await editBest.locator('input[placeholder^="Rechercher un joueur"]').fill('Leonard')
+await editBest.getByRole('button', { name: /Leonard/ }).first().click()
+await shot(speaker, '12g-correction-nom')
+await editDlg.getByRole('button', { name: 'Enregistrer la correction' }).click()
+await speaker.getByText('Vote corrigé, classements mis à jour').waitFor()
+await speaker.getByRole('button', { name: 'Console orateur' }).click()
+await speaker.getByText(/Nom corrigé par Maxim Leonard/).first().waitFor()
 await speaker.getByRole('button', { name: 'Terminer la soirée' }).click()
 await speaker.getByText('Soirée terminée').first().waitFor()
 
@@ -328,7 +382,6 @@ const m = await ctx('mobile', true)
 await m.goto(BASE)
 await m.waitForTimeout(800)
 await shot(m, '19-mobile-login')
-await m.getByRole('button', { name: /Je vote/ }).click()
 await m.getByLabel('Prénom').fill('Kobe')
 await m.getByLabel('Nom', { exact: true }).fill('van bellinghen')
 await m.getByRole('button', { name: 'Continuer' }).click()

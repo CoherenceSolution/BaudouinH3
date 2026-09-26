@@ -80,9 +80,9 @@ rétrospective affichent le vote normalement pour tout le monde.
 
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
-| Votant | « Je vote » puis prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
-| Orateur | « Je suis l'orateur » puis prénom et nom | Console : ordre, mélange, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, clôture |
-| Secrétaire | « Je vote », prénom et nom, puis le code commun (une fois par téléphone) | Matchs, **coum** (qui a payé, absents, recoum), minuteur des votes, amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
+| Votant | Prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
+| Orateur | Prénom et nom, case « Je suis l'orateur ce soir » (ou bouton « Je suis l'orateur » sur la page du match) | Console : son propre vote, minuteur, clôture des votes, file de lecture avec « Valider le vote », votes lus grisés, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, correction d'un nom |
+| Secrétaire | Prénom et nom, puis le code commun (une fois par téléphone) | Console orateur, vote hors plateforme, correction d'un nom, matchs, **coum** (qui a payé, absents, recoum), amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs et code commun (Gestion → Staff) |
 
 ### La coum

@@ -112,6 +112,12 @@ export interface Ticket {
   starred: boolean
   saved: boolean
   revealAuthor: boolean
+  /** Vote encodé par le staff pour quelqu'un qui a voté hors de la plateforme (papier, à voix haute…). */
+  manual?: boolean
+  /** Nom de la personne qui a encodé ce vote hors plateforme. */
+  enteredByName?: string | null
+  /** Nom de la dernière personne (orateur, secrétaire, admin) qui a corrigé un nom dans ce vote. */
+  correctedByName?: string | null
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

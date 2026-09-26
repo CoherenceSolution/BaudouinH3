@@ -4,15 +4,20 @@ import { useAuth, type Mode } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
 import { PinDialog } from '@/components/PinDialog'
 import type { Player } from '@/lib/types'
-import { Button, Input } from '@/components/ui'
-import { cx, fullName, normalize } from '@/lib/format'
+import { Button, Checkbox, Input } from '@/components/ui'
+import { fullName, normalize } from '@/lib/format'
 import { ErrorNotice } from '@/components/ErrorNotice'
 
-type Step = 'choose' | 'public' | 'speaker' | 'staff'
+type Step = 'member' | 'staff'
 
+/**
+ * Connexion. Tout le monde — votants, orateur, secrétaires — entre par le même formulaire :
+ * prénom et nom. Les droits de secrétaire suivent le nom (code commun demandé une fois),
+ * et le rôle d'orateur se coche ici ou se prend plus tard depuis la page du match.
+ */
 export function LoginPage() {
   const { user, ensureAnonymous, setIdentity, loginStaff } = useAuth()
-  const [step, setStep] = useState<Step>('choose')
+  const [step, setStep] = useState<Step>('member')
   const [error, setError] = useState('')
 
   // Connexion anonyme dès l'arrivée : nécessaire pour lire la liste des joueurs.
@@ -29,49 +34,33 @@ export function LoginPage() {
       </div>
 
       <div className="w-full max-w-md">
-        {step === 'choose' && (
-          <div className="rise space-y-3">
-            <RoleCard icon={UserRound} title="Je vote" desc="J’entre mon nom et je remplis mon vote." onClick={() => setStep('public')} />
-            <RoleCard icon={Mic} title="Je suis l’orateur" desc="Je lis les votes et j’anime la soirée." onClick={() => setStep('speaker')} accent />
-            <RoleCard icon={ShieldCheck} title="Administrateur" desc="Compte protégé par mot de passe." onClick={() => setStep('staff')} />
-          </div>
+        {step === 'member' && (
+          <>
+            <PickName onPick={(id, mode) => setIdentity(id, mode)} />
+            <button
+              type="button"
+              onClick={() => setStep('staff')}
+              className="mx-auto mt-5 flex items-center gap-1.5 text-[13px] text-slate-400 hover:text-white"
+            >
+              <ShieldCheck className="size-4" /> Connexion administrateur
+            </button>
+          </>
         )}
-        {(step === 'public' || step === 'speaker') && (
-          <PickName mode={step} onBack={() => setStep('choose')} onPick={(id) => setIdentity(id, step)} />
-        )}
-        {step === 'staff' && <StaffLogin onBack={() => setStep('choose')} onLogin={loginStaff} />}
+        {step === 'staff' && <StaffLogin onBack={() => setStep('member')} onLogin={loginStaff} />}
         {error && <p className="mt-4 text-center text-[13px] text-rose-300">{error}</p>}
       </div>
     </div>
   )
 }
 
-function RoleCard({ icon: Icon, title, desc, onClick, accent }: { icon: typeof UserRound; title: string; desc: string; onClick: () => void; accent?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cx(
-        'flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:-translate-y-px',
-        accent ? 'border-accent/40 bg-accent/10 hover:bg-accent/15' : 'border-white/10 bg-white/5 hover:bg-white/10',
-      )}
-    >
-      <span className={cx('flex size-11 shrink-0 items-center justify-center rounded-xl', accent ? 'bg-accent text-ink' : 'bg-white/10 text-white')}>
-        <Icon className="size-5" />
-      </span>
-      <span>
-        <span className="block text-[16px] font-semibold">{title}</span>
-        <span className="block text-[13px] text-slate-400">{desc}</span>
-      </span>
-    </button>
-  )
-}
-
-function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; onPick: (id: string) => void }) {
+function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
   const players = usePlayers()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [speaker, setSpeaker] = useState(false)
   const [error, setError] = useState('')
   const [pinFor, setPinFor] = useState<Player | null>(null)
+  const mode: Mode = speaker ? 'speaker' : 'public'
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -90,15 +79,12 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
       setPinFor(match)
       return
     }
-    onPick(match.id)
+    onPick(match.id, mode)
   }
 
   return (
     <form onSubmit={submit} className="rise card p-5 text-ink">
-      <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> Retour
-      </button>
-      <h2 className="text-lg font-bold">{mode === 'speaker' ? 'Qui est l’orateur ce soir ?' : 'Qui êtes-vous ?'}</h2>
+      <h2 className="flex items-center gap-2 text-lg font-bold"><UserRound className="size-5" /> Se connecter</h2>
       <p className="mb-4 text-[13px] text-muted">Entrez votre prénom et votre nom tels qu’ils figurent dans l’équipe. Vous resterez connecté sur cet appareil. Si l’admin vous a donné des droits de secrétaire, ils s’appliquent automatiquement.</p>
       {players.error ? (
         <ErrorNotice error={players.error} title="Impossible de charger la liste des joueurs" />
@@ -108,15 +94,22 @@ function PickName({ mode, onBack, onPick }: { mode: Mode; onBack: () => void; on
           <Input label="Nom" value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" required error={error} />
         </>
       )}
-      <Button type="submit" block size="lg" className="mt-4" variant={mode === 'speaker' ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
-        {mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer'}
+      <Checkbox
+        checked={speaker}
+        onChange={setSpeaker}
+        label={<span className="inline-flex items-center gap-1.5"><Mic className="size-4" /> Je suis l’orateur ce soir</span>}
+        hint="Vous votez comme tout le monde, et vous avez en plus la console pour lancer le minuteur, clôturer les votes et les lire. Vous pourrez aussi prendre ce rôle plus tard depuis la page du match."
+        className="mt-4 rounded-xl bg-slate-50 p-3"
+      />
+      <Button type="submit" block size="lg" className="mt-4" variant={speaker ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
+        {speaker ? 'Entrer comme orateur' : 'Continuer'}
       </Button>
       {pinFor && (
         <PinDialog
           open
           playerLabel={fullName(pinFor)}
-          onClose={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
-          onSuccess={() => { const id = pinFor.id; setPinFor(null); onPick(id) }}
+          onClose={() => { const id = pinFor.id; setPinFor(null); onPick(id, mode) }}
+          onSuccess={() => { const id = pinFor.id; setPinFor(null); onPick(id, mode) }}
         />
       )}
     </form>
@@ -165,7 +158,7 @@ function StaffLogin({ onBack, onLogin }: { onBack: () => void; onLogin: (e: stri
         <ArrowLeft className="size-4" /> Retour
       </button>
       <h2 className="text-lg font-bold">Connexion administrateur</h2>
-      <p className="mb-4 text-[13px] text-muted">Les secrétaires n’ont pas de mot de passe : ils se connectent avec « Je vote » et leurs droits suivent leur nom.</p>
+      <p className="mb-4 text-[13px] text-muted">Réservé à l’administrateur. Les secrétaires et l’orateur n’ont pas de mot de passe : ils se connectent avec leur prénom et leur nom, leurs droits suivent leur nom.</p>
       <Input label="Adresse e-mail" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="mb-3" />
       <Input label="Mot de passe" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required error={error} />
       <Button type="submit" block size="lg" className="mt-4" loading={loading}>

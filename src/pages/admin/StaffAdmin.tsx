@@ -62,7 +62,7 @@ export function StaffAdmin() {
       <section>
         <h3 className="mb-2 text-[15px] font-semibold">Secrétaires ({secretaries.length})</h3>
         <p className="mb-3 text-[13px] text-muted">
-          Un secrétaire n’a pas d’e-mail ni de mot de passe personnel : il se connecte avec « Je vote » sous son nom, entre le code commun une fois sur son téléphone, et peut gérer matchs, amendes, buts et joueurs. Retirez les droits ici à tout moment.
+          Un secrétaire n’a pas d’e-mail ni de mot de passe personnel : il se connecte avec son prénom et son nom, entre le code commun une fois sur son téléphone, et peut gérer matchs, amendes, buts et joueurs. Retirez les droits ici à tout moment.
         </p>
         <ErrorNotice error={players.error} />
         {secretaries.length > 0 && (

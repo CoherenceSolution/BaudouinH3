@@ -89,9 +89,11 @@ service cloud.firestore {
     match /matches/{matchId} {
       allow read: if signedIn();
       allow create, delete: if isStaff();
-      // Le staff modifie tout ; l'orateur (anonyme) ne touche qu'au cycle de vie de la lecture.
+      // Le staff modifie tout ; l'orateur (anonyme) ne touche qu'au cycle de vie de la lecture
+      // et au minuteur des votes, qu'il pilote depuis sa console.
       allow update: if isStaff()
-                    || (signedIn() && onlyChanges(['status', 'speakerName', 'speakerUid', 'readingStartedAt', 'closedAt', 'updatedAt']));
+                    || (signedIn() && onlyChanges(['status', 'speakerName', 'speakerUid', 'readingStartedAt', 'closedAt',
+                                                   'voteDeadline', 'voteTimerMinutes', 'voteTimerBy', 'updatedAt']));
     }
 
     // ---- Tickets de vote : id = <matchId>_<authorPlayerId> ----
