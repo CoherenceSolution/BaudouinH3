@@ -35,7 +35,8 @@ export interface Player {
   createdAt?: Timestamp
 }
 
-export type MatchStatus = 'voting' | 'reading' | 'closed'
+/** « scheduled » : match à venir, votes fermés. Il passe tout seul en « voting » le jour du match (voir lib/matches). */
+export type MatchStatus = 'scheduled' | 'voting' | 'reading' | 'closed'
 
 export interface Match {
   id: string
@@ -45,6 +46,19 @@ export interface Match {
   homeScore: number | null
   awayScore: number | null
   home: boolean // Baudouin H3 joue à domicile
+  /** Heure du coup d'envoi, « HH:MM » (heure belge). */
+  time?: string | null
+  /** Lieu du match (nom, adresse), tel que publié par Sportlink ou saisi à la main. */
+  venue?: string | null
+  /** Informations complémentaires de l'agenda (terrain, arbitre…). */
+  details?: string | null
+  /** 'sportlink' : importé et tenu à jour par la synchronisation de l'agenda. Absent : saisi à la main. */
+  source?: 'sportlink'
+  /** UID de l'événement Sportlink. */
+  externalId?: string
+  /** Retiré ou annulé dans l'agenda Sportlink. */
+  cancelled?: boolean
+  syncedAt?: Timestamp
   status: MatchStatus
   speakerName?: string | null
   speakerUid?: string | null
@@ -238,4 +252,22 @@ export interface ActivityChange {
   field: string
   before: string
   after: string
+}
+
+/** config/calendar : lien de l'agenda Sportlink et état de la dernière synchronisation (staff seulement). */
+export interface CalendarConfig {
+  icalUrl?: string
+  /** Mot qui reconnaît l'équipe dans le titre des événements (« Baudouin » par défaut). */
+  teamKeyword?: string
+  lastSync?: {
+    at?: Timestamp
+    ok: boolean
+    /** « Agenda Sportlink » (tâche du matin) ou le nom de l'admin qui a appuyé sur le bouton. */
+    by?: string
+    events?: number
+    created?: number
+    updated?: number
+    cancelled?: number
+    error?: string | null
+  }
 }

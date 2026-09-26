@@ -5,6 +5,7 @@ import { Plus, Handshake, Pencil, Trash2, ClipboardList, Settings2 } from 'lucid
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useAllGoals, useMatches, usePlayers, useStatCategories, useStatEntries } from '@/hooks/useData'
+import { isPlayed } from '@/lib/matches'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Match, Player, StatCategory, StatEntry } from '@/lib/types'
@@ -21,7 +22,10 @@ type Tab = 'scorers' | 'assists' | 'duos' | 'matches' | string
 export function StatsPage() {
   const { isStaff } = useAuth()
   const players = usePlayers(true)
-  const matches = useMatches()
+  const allMatches = useMatches()
+  // Les matchs à venir n'entrent ni dans les statistiques ni dans les listes de choix.
+  const played = useMemo(() => allMatches.data.filter(isPlayed), [allMatches.data])
+  const matches = { ...allMatches, data: played }
   const goals = useAllGoals()
   const cats = useStatCategories()
   const entries = useStatEntries()

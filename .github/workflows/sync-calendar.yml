@@ -1,0 +1,66 @@
+# Synchronisation quotidienne de l'agenda Sportlink avec les matchs de l'application.
+#
+# Tous les jours vers 6 h (heure belge), ou à la main : onglet Actions → « Synchroniser l'agenda » → Run workflow.
+# Le lien de l'agenda se colle dans l'application (Gestion → Paramètres → Agenda Sportlink) ;
+# un secret GitHub SPORTLINK_ICAL_URL, s'il existe, a priorité.
+#
+# Même authentification que le déploiement (voir deploy.yml) : aucun secret supplémentaire à créer.
+# Remarque GitHub : les tâches planifiées ne tournent que depuis la branche main.
+name: Synchroniser l'agenda
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sync-calendar
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: baudouinheren3
+  PROJECT_NUMBER: "456086247"
+  DEPLOY_SERVICE_ACCOUNT: github-deploy@baudouinheren3.iam.gserviceaccount.com
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Mode d'authentification
+        id: mode
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$KEY" ]; then echo "mode=key" >> "$GITHUB_OUTPUT"; else echo "mode=wif" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Authentification Google sans clé
+        if: steps.mode.outputs.mode == 'wif'
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github/providers/github
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Authentification par clé (repli)
+        if: steps.mode.outputs.mode == 'key'
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Synchronisation
+        env:
+          FIREBASE_PROJECT_ID: ${{ env.PROJECT_ID }}
+          SPORTLINK_ICAL_URL: ${{ secrets.SPORTLINK_ICAL_URL }}
+        run: npm run sync:calendar

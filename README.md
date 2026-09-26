@@ -85,6 +85,32 @@ rétrospective affichent le vote normalement pour tout le monde.
 | Secrétaire | Prénom et nom, puis le code commun (une fois par téléphone) | Console orateur, vote hors plateforme, correction d'un nom, matchs, **coum** (qui a payé, absents, recoum), amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
 | Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs et code commun (Gestion → Staff) |
 
+### Agenda Sportlink (matchs automatiques)
+
+Les matchs de l'équipe arrivent tout seuls depuis l'agenda Sportlink : plus besoin de les créer à la main.
+
+**Mise en place (une fois, 1 minute)** : l'admin ou un secrétaire colle le lien de l'agenda
+(`https://data.sportlink.com/ical-team?token=…`) dans **Gestion → Paramètres → Agenda Sportlink** et enregistre.
+C'est tout : la synchronisation utilise le même accès Google que le déploiement automatique.
+
+- **Chaque matin (vers 6 h)**, les matchs à venir sont ajoutés, avec la date, l'heure, le lieu (lien Google Maps)
+  et l'adversaire ; domicile ou extérieur est déduit du titre « Équipe A - Équipe B ».
+- **Match déplacé ou avancé** dans Sportlink : la date, l'heure et le lieu sont mis à jour dans l'application
+  (et notés dans le journal d'activité).
+- **Match retiré de l'agenda** : il est marqué « Annulé », jamais supprimé.
+- **Jamais touchés** : les matchs passés (non importés), les scores, la compétition, les votes, la coum, les buts.
+- **Votes** : un match à venir est grisé, on peut l'ouvrir pour voir la date, l'heure et le lieu. Les votes
+  s'ouvrent automatiquement **le jour du match**.
+- Les matchs ajoutés à la main (amical, tournoi…) restent possibles ; la synchronisation n'y touche pas.
+- **Mise à jour immédiate** : l'admin appuie sur **Mettre à jour le calendrier** (Gestion → Matchs). L'application
+  relit l'agenda et applique les mêmes règles tout de suite, avec un bilan (« 1 match ajouté, 1 mis à jour »).
+  Si Sportlink refuse la lecture depuis le navigateur, le bouton propose de lancer la même mise à jour sur GitHub :
+  onglet **Actions** → « Synchroniser l'agenda » → **Run workflow** (résultat environ une minute plus tard).
+- La dernière synchronisation (qui, quand, bilan ou erreur) s'affiche dans Gestion → Paramètres et Gestion → Matchs.
+
+À savoir : GitHub n'exécute les tâches planifiées que depuis la branche `main`, et les suspend après 60 jours
+sans aucune activité sur le dépôt (un clic sur « Enable workflow » dans l'onglet Actions les relance).
+
 ### La coum
 
 Onglet **Coum** de chaque match : une feuille du moment, pour les présents du jour. On garde simplement la trace
@@ -124,6 +150,8 @@ dans l'onglet Stats.
 | `npm run typecheck` | Vérification TypeScript seule |
 | `npm run emulators` | Émulateurs Firebase Auth + Firestore |
 | `npm run deploy` | Build puis `firebase deploy` |
+| `npm test` | Tests de la lecture de l'agenda et de la synchronisation |
+| `npm run sync:calendar` | Synchronisation de l'agenda Sportlink (identifiants Google requis ; `SYNC_DRY_RUN=1` pour un essai à blanc) |
 
 ## Sécurité et confidentialité
 

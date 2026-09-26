@@ -10,6 +10,7 @@ passes décisives, journal d'activité.
 |---|---|---|
 | Hébergement + données | **Firebase, plan Spark (gratuit)** : Firestore, Authentication, Hosting | 0 €/mois à l'échelle d'une équipe (quota : 50 000 lectures et 20 000 écritures par jour). Temps réel natif pour les classements. Aucun serveur à maintenir. |
 | Cloud Functions | **Aucune** | Elles imposent le plan payant (Blaze). Toute la logique tourne dans le navigateur, la sécurité repose sur les règles Firestore. |
+| Agenda Sportlink | **GitHub Actions planifiée** (1×/jour) + bouton de l'admin | Seule tâche « serveur » : lire l'agenda iCal et écrire les matchs avec le compte de service du déploiement. Gratuit, sans Cloud Functions. Le bouton fait la même chose depuis le navigateur quand Sportlink l'autorise. |
 | Frontend | **React 19 + Vite 7 + TypeScript + Tailwind CSS 4** | Rapide à développer, bundle léger, installable comme PWA sur téléphone. |
 | Routage | react-router 7 | SPA, une seule page HTML servie par Firebase Hosting. |
 | Icônes | lucide-react | Sobres, cohérentes avec le style épuré. |
@@ -44,9 +45,11 @@ config/bootstrap              { claimedBy, at }
 staff/{uid}                   { email, displayName, role: 'admin'|'secretary', playerId, createdAt }
 config/settings               { categories: { best|worst|moment: { label, emoji } } }
 config/secretaryAccess        { email, uid, updatedAt }   ← compte technique courant des secrétaires
+config/calendar               { icalUrl, teamKeyword, lastSync: { at, ok, by, events, created, updated, cancelled, error } }
 players/{id}                  { firstName, lastName, nickname, active, role: 'secretary'|null, canSpeak, createdAt }
-matches/{id}                  { date, opponent, competition, home, homeScore, awayScore,
-                                status: 'voting'|'reading'|'closed',
+matches/{id}                  { date, time, venue, details, opponent, competition, home, homeScore, awayScore,
+                                source: 'sportlink'?, externalId, cancelled, syncedAt,
+                                status: 'scheduled'|'voting'|'reading'|'closed',
                                 speakerName, speakerUid, readingStartedAt, closedAt,
                                 voteDeadline, voteTimerMinutes, voteTimerBy,
                                 createdBy, createdAt, updatedAt }
@@ -123,6 +126,20 @@ Points de conception :
 - **Listes maison** (« Papa de l'année », « Homme du match »…) : collections `statCategories` / `statEntries`,
   créées, renommées, masquées ou **supprimées** depuis Gestion → Listes (ou depuis la page Stats). La suppression
   d'une liste efface aussi toutes ses entrées, par lots de 400 écritures.
+- **Agenda Sportlink** (`src/lib/calendar/`, `scripts/calendar/sync.mjs`, `.github/workflows/sync-calendar.yml`) :
+  chaque matin, et quand l'admin appuie sur « Mettre à jour le calendrier », l'agenda iCal est lu et comparé aux matchs `source: 'sportlink'`. L'identifiant du match dérive de l'UID de l'événement
+  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Seuls `date, time, opponent, home, venue, details,
+  cancelled` sont écrits ; score, compétition et état des votes jamais. Les événements passés ne sont ni importés
+  ni modifiés ; un match futur qui disparaît de l'agenda est marqué `cancelled`, jamais supprimé. Le lien (qui
+  contient un jeton) vit dans `config/calendar`, lisible par le staff seul, et n'est jamais écrit dans le journal.
+  La logique (lecture iCal, plan, écritures) est un seul code TypeScript pur, partagé : le bouton l'applique avec
+  le SDK web et les droits de l'admin, la tâche du matin avec firebase-admin (Node exécute le TypeScript
+  directement). Si Sportlink refuse la lecture depuis le navigateur (CORS), le bouton renvoie vers le lancement
+  manuel de la tâche GitHub.
+- **Matchs à venir** : état `scheduled`, votes fermés, carte grisée et fiche « date, heure, lieu ». Le jour du match,
+  l'application les affiche en « votes ouverts » (`withEffectiveStatus`, calculé à la lecture) : aucune tâche
+  planifiée ni geste n'est nécessaire, et un match reporté se referme de lui-même. Les matchs à venir sont exclus
+  des statistiques, de la rétrospective et des listes de choix (amendes, listes maison).
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
 - **Journal d'activité — toute modification est traçable**, en ajout seul (rien ne peut y être modifié ni supprimé) :
   chaque création, modification ou suppression écrit une ligne lisible avec qui, quoi et quand
@@ -146,6 +163,8 @@ Points de conception :
 - Cycle de vie d'un match par l'orateur anonyme : autorisé uniquement pour les champs
   `status, speakerName, speakerUid, readingStartedAt, closedAt, updatedAt` et ceux du minuteur
   (`voteDeadline, voteTimerMinutes, voteTimerBy`) (`diff().affectedKeys().hasOnly`).
+- Agenda (`config/calendar`) : lecture et écriture par le staff seul ; la synchronisation du matin passe par le
+  compte de service, le bouton « Mettre à jour le calendrier » par les droits de l'admin.
 - Coums : lecture par tout utilisateur connecté (tout le monde voit qui a coumé), écriture par le staff seul.
 - Bootstrap : création de l'admin et des données initiales autorisée seulement tant que `config/bootstrap` n'existe pas ;
   ce document ne peut être créé que par un compte e-mail et jamais modifié ni supprimé.
@@ -168,6 +187,8 @@ src/
     statCategories.ts        Suppression d'une liste maison et de ses entrées
     rankings.ts              Classements (nominations, coups de cœur, buts, duos), complétion des tickets
     format.ts                Dates, noms et surnoms, recherche de joueur, saisons, titres de match
+    matches.ts               Matchs à venir : ouverture des votes le jour J, prochain match, heure, lien Maps
+    calendar/                Agenda Sportlink : lecture iCal, plan de synchronisation, bouton « Mettre à jour » (navigateur)
     activity.ts              Journal d'activité
     players.ts               Ajout rapide d'un joueur
     initialPlayers.ts        Données de première installation
@@ -195,8 +216,9 @@ src/
 
 ## 6. Déroulement d'une soirée
 
-1. Le secrétaire crée le match (date, adversaire, score facultatif) : les votes s'ouvrent. L'orateur (ou le staff)
-   peut lancer un **minuteur** (5, 10, 15 minutes ou une durée libre) : tout le monde voit le compte à rebours.
+1. Le match arrive tout seul depuis l'agenda Sportlink (ou le secrétaire le crée à la main) ; ses votes s'ouvrent
+   le jour du match. L'orateur (ou le staff) peut lancer un **minuteur** (5, 10, 15 minutes ou une durée libre) :
+   tout le monde voit le compte à rebours.
 2. Chaque membre présent choisit son nom, remplit son ticket (3 catégories, commentaire lu à voix
    haute), éventuellement à deux, puis l'envoie. Il peut demander, catégorie par catégorie, que l'orateur lise son
    commentaire avant d'annoncer le nom. Il peut modifier son vote tant que la lecture n'a pas commencé.

@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { doc, onSnapshot } from 'firebase/firestore'
 import { ArrowLeft, Mic, MicOff } from 'lucide-react'
-import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
-import { useCoums, useLikes, usePlayers, useTickets } from '@/hooks/useData'
-import type { Match } from '@/lib/types'
+import { useCoums, useLikes, useMatch, usePlayers, useTickets } from '@/hooks/useData'
 import { formatDate, matchTitle } from '@/lib/format'
+import { formatTime } from '@/lib/matches'
 import { Button, Spinner, Tabs } from '@/components/ui'
-import { MatchStatusBadge, ResultPill } from '@/components/MatchCard'
+import { MatchStatusBadge, ResultPill, VenueLink } from '@/components/MatchCard'
+import { UpcomingMatchPanel } from '@/components/UpcomingMatch'
 import { VoteCountdown } from '@/components/VoteTimer'
 import { TicketForm } from './TicketForm'
 import { SpeakerConsole } from './SpeakerConsole'
@@ -28,16 +27,11 @@ export function MatchVotePage() {
   const tickets = useTickets(matchId)
   const likes = useLikes(matchId)
   const coums = useCoums(matchId)
-  const [match, setMatch] = useState<Match | null | undefined>(undefined)
+  const match = useMatch(matchId)
 
   // Orateur : seulement un joueur de la liste désignée par l'admin.
   const { isSpeaker, canSpeak } = useSpeaker()
   const canAnimate = isSpeaker || isStaff
-
-  useEffect(() => {
-    if (!matchId) return
-    return onSnapshot(doc(db, 'matches', matchId), (snap) => setMatch(snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) }) : null))
-  }, [matchId])
 
   // L'orateur et le staff ont tout au même endroit : la console contient aussi leur propre vote.
   const tabs = useMemo(() => {
@@ -75,6 +69,9 @@ export function MatchVotePage() {
       </div>
     )
 
+  // Match à venir : seulement sa fiche (date, heure, lieu). Les onglets de vote apparaissent le jour du match.
+  const upcoming = match.status === 'scheduled'
+
   return (
     <div>
       <Link to="/votes" className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowLeft className="size-4" /> Tous les matchs</Link>
@@ -85,12 +82,13 @@ export function MatchVotePage() {
             <ResultPill match={match} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-            <span>{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-            <MatchStatusBadge status={match.status} />
-            {match.speakerName && match.status !== 'voting' && <span>Orateur : {match.speakerName}</span>}
+            <span>{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long' })}{match.time ? ` · ${formatTime(match.time)}` : ''}</span>
+            <MatchStatusBadge status={match.status} cancelled={match.cancelled} />
+            {match.speakerName && !upcoming && match.status !== 'voting' && <span>Orateur : {match.speakerName}</span>}
           </div>
+          {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
           {/* Le rôle d'orateur se prend ici, sans se déconnecter (le staff a la console d'office). */}
-          {!isStaff && identity && canSpeak && match.status !== 'closed' && (
+          {!isStaff && identity && canSpeak && !upcoming && match.status !== 'closed' && (
             isSpeaker ? (
               <Button size="sm" variant="ghost" className="mt-2" icon={<MicOff className="size-4" />} onClick={() => setMode('public')}>Je ne suis plus l’orateur</Button>
             ) : (
@@ -98,20 +96,28 @@ export function MatchVotePage() {
             )
           )}
         </div>
-        <div className="overflow-x-auto">
-          <Tabs value={tab} onChange={setTab} items={tabs} />
-        </div>
+        {!upcoming && (
+          <div className="overflow-x-auto">
+            <Tabs value={tab} onChange={setTab} items={tabs} />
+          </div>
+        )}
       </div>
 
-      {/* Le compte à rebours reste visible partout, console comprise. */}
-      <VoteCountdown match={match} pending={votePending} />
+      {upcoming && <UpcomingMatchPanel match={match} />}
 
-      {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
-      {tab === 'console' && <SpeakerConsole match={match} players={players.byId} playerList={players.data} tickets={tickets.data} ticketsLoaded={!tickets.loading} likes={likes.data} />}
-      {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}
-      {tab === 'live' && <LiveReading match={match} players={players.byId} playerList={players.data} tickets={tickets.data} likes={likes.data} myPlayerId={identity?.playerId ?? null} canEdit={canAnimate} />}
-      {tab === 'rankings' && <Rankings players={players.byId} tickets={tickets.data} likes={likes.data} />}
-      {tab === 'coum' && <CoumPanel match={match} players={players.data} coums={coums.data} loading={coums.loading} />}
+      {!upcoming && (
+        <>
+          {/* Le compte à rebours reste visible partout, console comprise. */}
+          <VoteCountdown match={match} pending={votePending} />
+
+          {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
+          {tab === 'console' && <SpeakerConsole match={match} players={players.byId} playerList={players.data} tickets={tickets.data} ticketsLoaded={!tickets.loading} likes={likes.data} />}
+          {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}
+          {tab === 'live' && <LiveReading match={match} players={players.byId} playerList={players.data} tickets={tickets.data} likes={likes.data} myPlayerId={identity?.playerId ?? null} canEdit={canAnimate} />}
+          {tab === 'rankings' && <Rankings players={players.byId} tickets={tickets.data} likes={likes.data} />}
+          {tab === 'coum' && <CoumPanel match={match} players={players.data} coums={coums.data} loading={coums.loading} />}
+        </>
+      )}
     </div>
   )
 }

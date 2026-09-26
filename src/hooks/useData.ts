@@ -1,9 +1,10 @@
-import { collection, limit, orderBy, query, where } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
 import { db } from '@/lib/firebase'
 import { useCollection } from './useCollection'
-import type { Coum, Fine, FineType, Goal, Like, Match, Player, StaffMember, StatCategory, StatEntry, Ticket, ActivityLog } from '@/lib/types'
+import type { CalendarConfig, Coum, Fine, FineType, Goal, Like, Match, Player, StaffMember, StatCategory, StatEntry, Ticket, ActivityLog } from '@/lib/types'
 import { playerName } from '@/lib/format'
+import { withEffectiveStatus } from '@/lib/matches'
 import { useAuth } from '@/auth/AuthProvider'
 
 export function usePlayers(includeInactive = false) {
@@ -22,9 +23,24 @@ export function usePlayers(includeInactive = false) {
   return { ...res, data, byId }
 }
 
+/** Tous les matchs, les plus récents d'abord. Un match à venir apparaît « votes ouverts » le jour même. */
 export function useMatches() {
   const { user } = useAuth()
-  return useCollection<Match>(() => (user ? query(collection(db, 'matches'), orderBy('date', 'desc')) : null), [user?.uid])
+  const res = useCollection<Match>(() => (user ? query(collection(db, 'matches'), orderBy('date', 'desc')) : null), [user?.uid])
+  const data = useMemo(() => res.data.map((m) => withEffectiveStatus(m)), [res.data])
+  return { ...res, data }
+}
+
+/** Un match suivi en temps réel : undefined pendant le chargement, null s'il n'existe plus. */
+export function useMatch(matchId: string | undefined) {
+  const [match, setMatch] = useState<Match | null | undefined>(undefined)
+  useEffect(() => {
+    if (!matchId) return
+    return onSnapshot(doc(db, 'matches', matchId), (snap) =>
+      setMatch(snap.exists() ? withEffectiveStatus({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) }) : null),
+    )
+  }, [matchId])
+  return match
 }
 
 export function useTickets(matchId: string | undefined) {
@@ -110,4 +126,22 @@ export function useAllReadTickets() {
 export function useAllLikes() {
   const { user } = useAuth()
   return useCollection<Like>(() => (user ? query(collection(db, 'likes')) : null), [user?.uid])
+}
+
+/** Agenda Sportlink (lien et dernière synchronisation) : lisible par le staff seulement. */
+export function useCalendarConfig() {
+  const { isStaff } = useAuth()
+  const [config, setConfig] = useState<CalendarConfig | null | undefined>(undefined)
+  useEffect(() => {
+    if (!isStaff) return
+    return onSnapshot(
+      doc(db, 'config', 'calendar'),
+      (snap) => setConfig(snap.exists() ? (snap.data() as CalendarConfig) : null),
+      (e) => {
+        console.warn('Agenda indisponible', e)
+        setConfig(null)
+      },
+    )
+  }, [isStaff])
+  return config
 }

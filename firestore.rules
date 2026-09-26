@@ -64,6 +64,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---- Agenda Sportlink : lien secret et état de la dernière synchronisation (staff seulement) ----
+    // La synchronisation quotidienne (GitHub Actions, compte de service) écrit sans passer par ces règles.
+    match /config/calendar {
+      allow read, write: if isStaff();
+    }
+
     // ---- Comptes staff ----
     match /staff/{uid} {
       allow read: if isStaff() || (signedIn() && request.auth.uid == uid);
