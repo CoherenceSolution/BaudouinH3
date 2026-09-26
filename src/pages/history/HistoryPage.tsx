@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Star, Bookmark, Sparkles, Trophy } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useAllGoals, useAllLikes, useAllReadTickets, useFines, useMatches, usePlayers, useStatCategories, useStatEntries } from '@/hooks/useData'
+import { isPlayed } from '@/lib/matches'
 import { goalTotals, likeCounts, nominationRanking, readTickets } from '@/lib/rankings'
 import { currentSeason, formatDate, matchResult, matchTitle, playerName, seasonOf } from '@/lib/format'
 import { formatEuro } from '@/lib/fines'
@@ -17,7 +18,10 @@ import { useCategories } from '@/hooks/useSettings'
 export function HistoryPage() {
   const { isStaff } = useAuth()
   const players = usePlayers(true)
-  const matches = useMatches()
+  const allMatches = useMatches()
+  // Les matchs à venir n'entrent ni dans les statistiques ni dans les listes de choix.
+  const played = useMemo(() => allMatches.data.filter(isPlayed), [allMatches.data])
+  const matches = { ...allMatches, data: played }
   const tickets = useAllReadTickets()
   const likes = useAllLikes()
   const goals = useAllGoals()

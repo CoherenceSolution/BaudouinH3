@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Trash2, Handshake, Goal as GoalIcon } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
-import { useGoals, usePlayers } from '@/hooks/useData'
+import { useGoals, useMatch, usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Goal, Match } from '@/lib/types'
@@ -22,13 +22,9 @@ export function MatchStatsPage() {
   const goals = useGoals(matchId)
   const actor = useActor()
   const toast = useToast()
-  const [match, setMatch] = useState<Match | null | undefined>(undefined)
+  const match = useMatch(matchId)
   const [add, setAdd] = useState(false)
 
-  useEffect(() => {
-    if (!matchId) return
-    return onSnapshot(doc(db, 'matches', matchId), (s) => setMatch(s.exists() ? ({ id: s.id, ...(s.data() as Omit<Match, 'id'>) }) : null))
-  }, [matchId])
 
   const ours = useMemo(() => (match ? (match.home ? match.homeScore : match.awayScore) : null), [match])
 

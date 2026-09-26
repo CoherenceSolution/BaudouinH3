@@ -4,6 +4,7 @@ import { Plus, Euro, Check, Trash2, ChevronDown, ChevronUp, Settings2 } from 'lu
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useFines, useFineTypes, useMatches, usePlayers } from '@/hooks/useData'
+import { isPlayed } from '@/lib/matches'
 import { useActor } from '@/hooks/useActor'
 import { logActivity } from '@/lib/activity'
 import type { Fine, Player } from '@/lib/types'
@@ -21,7 +22,10 @@ export function FinesPage() {
   const players = usePlayers(true)
   const fines = useFines()
   const types = useFineTypes()
-  const matches = useMatches()
+  const allMatches = useMatches()
+  // Les matchs à venir n'entrent ni dans les statistiques ni dans les listes de choix.
+  const played = useMemo(() => allMatches.data.filter(isPlayed), [allMatches.data])
+  const matches = { ...allMatches, data: played }
   const [tab, setTab] = useState<Tab>('players')
   const [add, setAdd] = useState(false)
   const [season, setSeason] = useState(currentSeason())

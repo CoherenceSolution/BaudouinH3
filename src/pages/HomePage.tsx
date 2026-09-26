@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Euro, Mic, Trophy, Vote, Target, Sparkles } from 'lucide-react'
+import { ArrowRight, Clock, Euro, MapPin, Mic, Trophy, Vote, Target, Sparkles } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useAllGoals, useAllReadTickets, useFines, useMatches, usePlayers } from '@/hooks/useData'
-import { currentSeason, matchTitle, playerName, seasonOf } from '@/lib/format'
+import { currentSeason, formatDate, matchTitle, playerName, seasonOf } from '@/lib/format'
+import { formatTime, isPlayed, nextMatch } from '@/lib/matches'
 import { goalTotals, nominationRanking, readTickets } from '@/lib/rankings'
 import { formatEuro } from '@/lib/fines'
 import { useCategories } from '@/hooks/useSettings'
@@ -20,10 +21,11 @@ export function HomePage() {
   const categories = useCategories()
 
   const me = identity ? players.byId.get(identity.playerId) : null
-  const live = matches.data.find((m) => m.status !== 'closed')
+  const live = matches.data.find((m) => m.status === 'voting' || m.status === 'reading')
+  const next = nextMatch(matches.data)
   const recent = matches.data.filter((m) => m.status === 'closed').slice(0, 3)
 
-  const seasonMatchIds = new Set(matches.data.filter((m) => seasonOf(m.date) === season).map((m) => m.id))
+  const seasonMatchIds = new Set(matches.data.filter((m) => isPlayed(m) && seasonOf(m.date) === season).map((m) => m.id))
   const seasonGoals = goals.data.filter((g) => seasonMatchIds.has(g.matchId))
   const totals = goalTotals(seasonGoals)
   const seasonTickets = readTickets(tickets.data.filter((t) => seasonMatchIds.has(t.matchId)))
@@ -66,7 +68,7 @@ export function HomePage() {
         <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
             <div className="text-[15px] font-semibold">Aucun vote en cours</div>
-            <div className="text-[13px] text-muted">{isStaff ? 'Créez un match pour ouvrir les votes.' : 'Le secrétaire ouvrira les votes après le prochain match.'}</div>
+            <div className="text-[13px] text-muted">{isStaff && !next ? 'Créez un match pour ouvrir les votes.' : 'Les votes s’ouvriront le jour du prochain match.'}</div>
           </div>
           {isStaff && (
             <Link to="/votes" className="inline-flex items-center gap-1.5 text-[14px] font-medium text-ink hover:underline">
@@ -74,6 +76,28 @@ export function HomePage() {
             </Link>
           )}
         </Card>
+      )}
+
+      {next && (
+        <section>
+          <h2 className="mb-2 text-[15px] font-semibold">Prochain match</h2>
+          <Link to={`/votes/${next.id}`} className="card flex flex-wrap items-center gap-4 px-5 py-4 transition hover:-translate-y-px hover:shadow-md">
+            <div className="flex w-14 shrink-0 flex-col items-center rounded-xl bg-slate-100 py-2 leading-tight">
+              <span className="text-[11px] font-semibold uppercase text-muted">{formatDate(next.date, { weekday: 'short' }).replace('.', '')}</span>
+              <span className="text-[20px] font-bold">{formatDate(next.date, { day: 'numeric' })}</span>
+              <span className="text-[11px] font-semibold uppercase text-muted">{formatDate(next.date, { month: 'short' }).replace('.', '')}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[16px] font-semibold">{matchTitle(next)}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
+                <span className="inline-flex items-center gap-1 font-medium text-ink-2"><Clock className="size-3.5" /> {next.time ? formatTime(next.time) : 'Heure à confirmer'}</span>
+                <span>{next.home ? 'À domicile' : 'À l’extérieur'}</span>
+                {next.venue && <span className="inline-flex min-w-0 items-center gap-1"><MapPin className="size-3.5 shrink-0" /> <span className="truncate">{next.venue}</span></span>}
+              </div>
+            </div>
+            <ArrowRight className="size-4 shrink-0 text-muted" />
+          </Link>
+        </section>
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

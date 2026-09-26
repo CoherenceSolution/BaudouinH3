@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { doc, onSnapshot } from 'firebase/firestore'
 import { ArrowLeft } from 'lucide-react'
-import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
-import { useCoums, useLikes, usePlayers, useTickets } from '@/hooks/useData'
-import type { Match } from '@/lib/types'
+import { useCoums, useLikes, useMatch, usePlayers, useTickets } from '@/hooks/useData'
 import { formatDate, matchTitle } from '@/lib/format'
 import { Spinner, Tabs } from '@/components/ui'
-import { MatchStatusBadge, ResultPill } from '@/components/MatchCard'
+import { MatchStatusBadge, ResultPill, VenueLink } from '@/components/MatchCard'
+import { UpcomingMatchPanel } from '@/components/UpcomingMatch'
+import { formatTime } from '@/lib/matches'
 import { VoteCountdown } from '@/components/VoteTimer'
 import { TicketForm } from './TicketForm'
 import { SpeakerConsole } from './SpeakerConsole'
@@ -27,15 +26,11 @@ export function MatchVotePage() {
   const tickets = useTickets(matchId)
   const likes = useLikes(matchId)
   const coums = useCoums(matchId)
-  const [match, setMatch] = useState<Match | null | undefined>(undefined)
+  const match = useMatch(matchId)
 
   const isSpeaker = identity?.mode === 'speaker'
   const canAnimate = isSpeaker || isStaff
 
-  useEffect(() => {
-    if (!matchId) return
-    return onSnapshot(doc(db, 'matches', matchId), (snap) => setMatch(snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) }) : null))
-  }, [matchId])
 
   const tabs = useMemo(() => {
     const list: { key: Tab; label: string }[] = []
@@ -68,6 +63,9 @@ export function MatchVotePage() {
       </div>
     )
 
+  // Match à venir : seulement sa fiche (date, heure, lieu). Les onglets de vote apparaissent le jour du match.
+  const upcoming = match.status === 'scheduled'
+
   return (
     <div>
       <Link to="/votes" className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowLeft className="size-4" /> Tous les matchs</Link>
@@ -78,25 +76,34 @@ export function MatchVotePage() {
             <ResultPill match={match} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-            <span>{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-            <MatchStatusBadge status={match.status} />
-            {match.speakerName && match.status !== 'voting' && <span>Orateur : {match.speakerName}</span>}
+            <span>{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long' })}{match.time ? ` · ${formatTime(match.time)}` : ''}</span>
+            <MatchStatusBadge status={match.status} cancelled={match.cancelled} />
+            {match.speakerName && !upcoming && match.status !== 'voting' && <span>Orateur : {match.speakerName}</span>}
           </div>
+          {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
         </div>
-        <div className="overflow-x-auto">
-          <Tabs value={tab} onChange={setTab} items={tabs} />
-        </div>
+        {!upcoming && (
+          <div className="overflow-x-auto">
+            <Tabs value={tab} onChange={setTab} items={tabs} />
+          </div>
+        )}
       </div>
 
-      {/* La console a son propre bloc minuteur : inutile d'y répéter le bandeau. */}
-      {tab !== 'console' && <VoteCountdown match={match} pending={votePending} />}
+      {upcoming && <UpcomingMatchPanel match={match} />}
 
-      {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
-      {tab === 'console' && <SpeakerConsole match={match} players={players.byId} tickets={tickets.data} likes={likes.data} />}
-      {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}
-      {tab === 'live' && <LiveReading match={match} players={players.byId} tickets={tickets.data} likes={likes.data} myPlayerId={identity?.playerId ?? null} />}
-      {tab === 'rankings' && <Rankings players={players.byId} tickets={tickets.data} likes={likes.data} />}
-      {tab === 'coum' && <CoumPanel match={match} players={players.data} coums={coums.data} loading={coums.loading} />}
+      {/* La console a son propre bloc minuteur : inutile d'y répéter le bandeau. */}
+      {!upcoming && tab !== 'console' && <VoteCountdown match={match} pending={votePending} />}
+
+      {!upcoming && (
+        <>
+          {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
+          {tab === 'console' && <SpeakerConsole match={match} players={players.byId} tickets={tickets.data} likes={likes.data} />}
+          {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}
+          {tab === 'live' && <LiveReading match={match} players={players.byId} tickets={tickets.data} likes={likes.data} myPlayerId={identity?.playerId ?? null} />}
+          {tab === 'rankings' && <Rankings players={players.byId} tickets={tickets.data} likes={likes.data} />}
+          {tab === 'coum' && <CoumPanel match={match} players={players.data} coums={coums.data} loading={coums.loading} />}
+        </>
+      )}
     </div>
   )
 }

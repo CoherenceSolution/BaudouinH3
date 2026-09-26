@@ -8,8 +8,9 @@ import { logActivity } from '@/lib/activity'
 import { DEFAULT_CATEGORIES, DEFAULT_LIVE_ALERT_THRESHOLD, type VoteCategory } from '@/lib/types'
 import { Button, Card, Input } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
+import { CalendarSettings } from './CalendarSettings'
 
-/** Paramètres modifiables par le staff : libellés et emojis des trois catégories de vote. */
+/** Paramètres modifiables par le staff : agenda Sportlink, catégories de vote, alerte du direct. */
 export function SettingsAdmin() {
   const { categories, settings } = useSettings()
   const actor = useActor()
@@ -65,6 +66,8 @@ export function SettingsAdmin() {
 
   return (
     <div className="space-y-4">
+      <CalendarSettings />
+
       <Card className="p-5">
         <h3 className="font-semibold">Catégories de vote</h3>
         <p className="mb-4 mt-1 text-[13px] text-muted">Ces noms apparaissent partout : formulaire de vote, lecture, classements, rétrospective. Les votes déjà enregistrés sont conservés.</p>
