@@ -150,7 +150,9 @@ Points de conception :
   manuel de la tâche GitHub.
 - **Matchs à venir** : état `scheduled`, votes fermés, carte grisée et fiche « date, heure, lieu ». Le jour du match,
   l'application les affiche en « votes ouverts » (`withEffectiveStatus`, calculé à la lecture) : aucune tâche
-  planifiée ni geste n'est nécessaire, et un match reporté se referme de lui-même. Les matchs à venir sont exclus
+  planifiée ni geste n'est nécessaire, et un match reporté se referme de lui-même. Le staff et les orateurs désignés peuvent aussi **ouvrir les votes à la
+  main** (« Ouvrir les votes maintenant » sur la fiche du match), avant le jour J ou pour un match marqué annulé :
+  l'état `voting` est alors écrit dans la base. Une lecture terminée peut de même **rouvrir les votes**. Les matchs à venir sont exclus
   des statistiques, de la rétrospective et des listes de choix (amendes, listes maison).
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
 - **Journal d'activité — toute modification est traçable**, en ajout seul (rien ne peut y être modifié ni supprimé) :

@@ -90,7 +90,7 @@ export function MatchVotePage() {
           </div>
           {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
           {/* Le rôle d'orateur se prend ici, sans se déconnecter (le staff a la console d'office). */}
-          {!isStaff && identity && canSpeak && !upcoming && match.status !== 'closed' && (
+          {!isStaff && identity && canSpeak && !upcoming && (
             isSpeaker ? (
               <StepDownButton match={match} players={players.byId} onDone={() => setMode('public')} />
             ) : (

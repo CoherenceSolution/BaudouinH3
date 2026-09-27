@@ -388,6 +388,23 @@ await speaker.getByRole('button', { name: 'Console orateur' }).click()
 await speaker.getByText(/Nom corrigé par Maxim Leonard/).first().waitFor()
 await speaker.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await speaker.getByText('Lecture des votes terminée').first().waitFor()
+// Une lecture terminée peut rouvrir les votes (un retardataire), puis se refermer.
+await speaker.getByRole('button', { name: 'Rouvrir les votes' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await speaker.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
+await speaker.getByText('Lecture des votes terminée').first().waitFor()
+
+// Match à venir : les votes peuvent être ouverts à la main, sans attendre le jour du match.
+await admin.goto(BASE + '/votes')
+await admin.getByRole('button', { name: 'Nouveau match' }).click()
+await admin.getByLabel('Adversaire').fill('Match avancé FC')
+await admin.getByLabel('Date').fill('2099-06-01')
+await admin.getByRole('button', { name: 'Ajouter le match' }).click()
+await admin.getByText('Match avancé FC').first().click()
+await admin.getByText('Les votes s’ouvriront le jour du match.').waitFor()
+await admin.getByRole('button', { name: 'Ouvrir les votes maintenant' }).click()
+await admin.getByText('Votes ouverts', { exact: true }).first().waitFor()
+await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
 
 // 8. Admin : rétrospective + activité + accueil
 await admin.goto(BASE + '/historique')

@@ -1,17 +1,45 @@
 import { useState } from 'react'
-import { CalendarClock, Clock, House, Info, Pencil, RefreshCw } from 'lucide-react'
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { CalendarClock, Clock, House, Info, Pencil, RefreshCw, Vote } from 'lucide-react'
 import type { Match } from '@/lib/types'
+import { db } from '@/lib/firebase'
 import { formatDate } from '@/lib/format'
 import { formatTime } from '@/lib/matches'
+import { logActivity } from '@/lib/activity'
 import { useAuth } from '@/auth/AuthProvider'
+import { useActor } from '@/hooks/useActor'
+import { useSpeaker } from '@/hooks/useSpeaker'
+import { useToast } from './ui/Toast'
 import { Button, Card } from './ui'
 import { VenueLink } from './MatchCard'
 import { MatchFormModal } from './MatchFormModal'
 
-/** Fiche d'un match à venir : date, heure, lieu. Les votes s'ouvriront le jour du match. */
+/**
+ * Fiche d'un match à venir : date, heure, lieu. Les votes s'ouvrent seuls le jour du match ;
+ * le staff et les orateurs désignés peuvent les ouvrir plus tôt (ou pour un match marqué annulé).
+ */
 export function UpcomingMatchPanel({ match }: { match: Match }) {
   const { isStaff } = useAuth()
+  const { canSpeak } = useSpeaker()
+  const actor = useActor()
+  const toast = useToast()
   const [editing, setEditing] = useState(false)
+  const [opening, setOpening] = useState(false)
+
+  async function openVotes() {
+    if (match.cancelled && !confirm('Ce match est marqué annulé dans l’agenda. Ouvrir quand même les votes ?')) return
+    setOpening(true)
+    try {
+      await updateDoc(doc(db, 'matches', match.id), { status: 'voting', updatedAt: serverTimestamp() })
+      await logActivity(actor, 'update', 'match', match.id, `Votes ouverts à la main pour ${match.opponent}`, [{ field: 'Statut', before: 'À venir', after: 'Votes ouverts' }])
+      toast('Votes ouverts')
+    } catch (e) {
+      console.error(e)
+      toast('Impossible d’ouvrir les votes', 'error')
+    } finally {
+      setOpening(false)
+    }
+  }
   return (
     <Card className="space-y-4 p-5">
       {match.cancelled ? (
@@ -20,6 +48,11 @@ export function UpcomingMatchPanel({ match }: { match: Match }) {
         <p className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-[14px] text-ink-2">
           <CalendarClock className="size-4 shrink-0" /> Les votes s’ouvriront le jour du match.
         </p>
+      )}
+      {(isStaff || canSpeak) && (
+        <Button variant="accent" icon={<Vote className="size-4" />} loading={opening} onClick={openVotes}>
+          Ouvrir les votes maintenant
+        </Button>
       )}
       <dl className="grid gap-3 text-[14px] sm:grid-cols-2">
         <Row icon={CalendarClock} label="Date">{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</Row>

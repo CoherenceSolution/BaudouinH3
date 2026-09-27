@@ -406,7 +406,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       {match.status !== 'voting' && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
           <div className="text-[13px] text-muted">
-            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée. Besoin d’un vote en plus ? Rouvrez les votes.' : 'La lecture des votes est terminée. Vous pouvez la reprendre si besoin.'}
+            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée. Besoin d’un vote en plus ? Rouvrez les votes.' : 'La lecture des votes est terminée. Vous pouvez la reprendre ou rouvrir les votes si besoin.'}
           </div>
           <div className="flex flex-wrap gap-2">
             {match.status === 'reading' && (
@@ -416,7 +416,10 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
               </>
             )}
             {match.status === 'closed' && (
-              <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>Reprendre la lecture</Button>
+              <>
+                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>Rouvrir les votes</Button>
+                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>Reprendre la lecture</Button>
+              </>
             )}
           </div>
         </Card>
