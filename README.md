@@ -90,9 +90,9 @@ rétrospective affichent le vote normalement pour tout le monde.
 | Qui | Comment se connecter | Que faire |
 |---|---|---|
 | Votant | Prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
-| Orateur (liste désignée par l'admin) | Prénom et nom, case « Je suis l'orateur ce soir » (ou bouton « Je suis l'orateur » sur la page du match) | Console : son propre vote, minuteur, clôture des votes, file de lecture avec « Valider le vote », votes lus grisés, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur, correction d'un nom |
+| Orateur (liste désignée par l'admin) | Prénom et nom, case « Je suis l'orateur ce soir » (ou bouton « Je suis l'orateur » sur la page du match) | Console : son propre vote, minuteur, clôture des votes, file de lecture avec « Valider le vote », votes lus grisés, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur (s'il a la main), correction d'un nom |
 | Secrétaire | Prénom et nom, puis le code commun (une fois par téléphone) | Console orateur, vote hors plateforme, correction d'un nom, matchs, **coum** (qui a payé, absents, recoum), amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
-| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs et code commun (Gestion → Staff) |
+| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs et code commun (Gestion → Staff), rouvrir les votes de n'importe quel match (Gestion → Matchs ou page du match) |
 
 ### Agenda Sportlink (matchs automatiques)
 
@@ -169,8 +169,10 @@ dans l'onglet Stats.
 
 - Les votants n'ont pas de mot de passe : l'identité est déclarative (saisie du nom), comme souhaité.
 - Les secrétaires n'ont pas de mot de passe personnel : un code commun, fixé par l'admin, active leurs droits.
-- Les tickets restent anonymes pour l'orateur tant qu'il ne choisit pas d'afficher un nom ; le staff connecté
-  voit les auteurs.
+- Les tickets sont anonymes. Seuls **l'orateur en cours** (celui qui « a la main » sur la lecture) et **l'admin**
+  peuvent afficher le nom d'un votant, pour eux seuls ; les secrétaires et les autres orateurs non. Si quelqu'un
+  prend la main (« Prendre la main » dans la console), l'ancien orateur perd l'accès aux noms et un bandeau le
+  prévient. Limite : dans la base, l'auteur d'un vote reste lisible par un connecté qui l'interrogerait directement.
 - Seuls les comptes staff peuvent écrire amendes, coums, buts, joueurs et matchs : c'est garanti par `firestore.rules`,
   pas seulement par l'interface. Le minuteur des votes est lui aussi réservé à l'admin et aux secrétaires.
 - Le journal d'activité (Gestion → Activité) est en ajout seul.

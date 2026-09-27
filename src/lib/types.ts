@@ -60,8 +60,17 @@ export interface Match {
   cancelled?: boolean
   syncedAt?: Timestamp
   status: MatchStatus
+  /**
+   * Orateur en cours (« qui a la main ») : un seul appareil à la fois, identifié par l'uid
+   * Firebase ET le joueur (le compte des secrétaires est partagé). Lui seul, avec l'admin,
+   * peut consulter le nom des votants dans la console.
+   */
   speakerName?: string | null
   speakerUid?: string | null
+  speakerPlayerId?: string | null
+  speakerSince?: Timestamp | null
+  /** Dernière prise de main : l'orateur dépossédé, pour qu'il en soit informé sur son appareil. */
+  speakerTakeover?: SpeakerTakeover | null
   readingStartedAt?: Timestamp | null
   closedAt?: Timestamp | null
   /** Minuteur des votes : instant de fin affiché en compte à rebours (posé par le staff). */
@@ -73,6 +82,16 @@ export interface Match {
   createdBy: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
+}
+
+export interface SpeakerTakeover {
+  /** Orateur qui avait la main. */
+  uid: string
+  playerId: string | null
+  name: string
+  /** Celui qui l'a prise. */
+  byName: string
+  at: Timestamp
 }
 
 export type VoteCategory = 'best' | 'worst' | 'moment'
@@ -127,6 +146,7 @@ export interface Ticket {
   readOrder: number | null
   starred: boolean
   saved: boolean
+  /** Ancien indicateur partagé « nom de l'auteur affiché ». N'est plus lu : l'affichage est local à l'orateur en cours. */
   revealAuthor: boolean
   /** Vote encodé par le staff pour quelqu'un qui a voté hors de la plateforme (papier, à voix haute…). */
   manual?: boolean
