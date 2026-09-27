@@ -21,6 +21,19 @@ export function upcomingMatches(matches: Match[], today = todayIso()): Match[] {
   return matches.filter((m) => m.status === 'scheduled' && m.date >= today).sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')))
 }
 
+/**
+ * « Match du jour » : les matchs joués aujourd'hui, plus celui d'hier soir dont les votes ou la lecture
+ * se prolongent après minuit. Mis en avant en tête de la liste des matchs.
+ */
+export function todayMatches(matches: Match[], today = todayIso()): Match[] {
+  const d = new Date(today + 'T12:00:00')
+  d.setDate(d.getDate() - 1)
+  const yesterday = `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`
+  return matches
+    .filter((m) => m.date === today || (m.date === yesterday && (m.status === 'voting' || m.status === 'reading')))
+    .sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')))
+}
+
 /** Prochain match qui aura bien lieu. */
 export function nextMatch(matches: Match[], today = todayIso()): Match | undefined {
   return upcomingMatches(matches, today).find((m) => !m.cancelled)

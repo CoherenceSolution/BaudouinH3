@@ -3,10 +3,10 @@ import { Plus, Vote } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useMatches, usePlayers } from '@/hooks/useData'
 import { Button, EmptyState, PageHeader, Spinner } from '@/components/ui'
-import { MatchCard } from '@/components/MatchCard'
+import { FeaturedMatchCard, MatchCard } from '@/components/MatchCard'
 import { MatchFormModal } from '@/components/MatchFormModal'
 import { seasonOf } from '@/lib/format'
-import { upcomingMatches } from '@/lib/matches'
+import { todayMatches, upcomingMatches } from '@/lib/matches'
 import { useCategories } from '@/hooks/useSettings'
 
 export function VotesPage() {
@@ -16,17 +16,21 @@ export function VotesPage() {
   const [create, setCreate] = useState(false)
   const categories = useCategories()
 
-  const upcoming = useMemo(() => upcomingMatches(matches.data), [matches.data])
+  const today = useMemo(() => todayMatches(matches.data), [matches.data])
+  const upcoming = useMemo(() => {
+    const featured = new Set(today.map((t) => t.id))
+    return upcomingMatches(matches.data).filter((m) => !featured.has(m.id))
+  }, [matches.data, today])
   const groups = useMemo(() => {
     const m = new Map<string, typeof matches.data>()
-    const shown = new Set(upcoming.map((u) => u.id))
+    const shown = new Set([...today, ...upcoming].map((u) => u.id))
     for (const match of matches.data) {
       if (shown.has(match.id)) continue
       const s = seasonOf(match.date)
       m.set(s, [...(m.get(s) ?? []), match])
     }
     return [...m.entries()]
-  }, [matches.data])
+  }, [matches.data, today, upcoming])
 
   return (
     <div>
@@ -41,6 +45,11 @@ export function VotesPage() {
         <EmptyState icon={<Vote className="size-6" />} title="Aucun match pour le moment" description={isStaff ? 'Les matchs de l’agenda Sportlink arrivent ici tout seuls ; vous pouvez aussi en créer un à la main.' : 'Les matchs apparaîtront ici dès leur publication dans l’agenda.'} action={isStaff && <Button onClick={() => setCreate(true)}>Créer un match</Button>} />
       ) : (
         <div className="space-y-6">
+          {today.length > 0 && (
+            <section aria-label="Match du jour" className="space-y-3">
+              {today.map((m) => <FeaturedMatchCard key={m.id} match={m} to={`/votes/${m.id}`} />)}
+            </section>
+          )}
           {upcoming.length > 0 && (
             <section>
               <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-muted">À venir</h2>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronRight, Mic, Vote, CheckCircle2, CalendarClock, Ban, MapPin } from 'lucide-react'
+import { ArrowRight, ChevronRight, Mic, Vote, CheckCircle2, CalendarClock, Ban, MapPin, Star } from 'lucide-react'
 import type { Match } from '@/lib/types'
 import { cx, formatDate, matchResult, matchScore, matchTitle } from '@/lib/format'
 import { formatTime, mapsUrl } from '@/lib/matches'
@@ -55,6 +55,36 @@ export function MatchCard({ match, to, meta }: { match: Match; to: string; meta?
         </div>
       </div>
       <ChevronRight className="size-5 shrink-0 text-muted" />
+    </Link>
+  )
+}
+
+/** Le match du jour, mis en avant en tête de liste : grande carte, bordure verte et appel à l'action. */
+export function FeaturedMatchCard({ match, to }: { match: Match; to: string }) {
+  const action = match.cancelled && match.status === 'scheduled'
+    ? 'Voir le match'
+    : match.status === 'voting' ? 'Voter maintenant' : match.status === 'reading' ? 'Suivre la lecture' : match.status === 'closed' ? 'Voir les résultats' : 'Voir le match'
+  return (
+    <Link to={to} className="card block overflow-hidden border-2 border-accent-strong shadow-md ring-4 ring-accent-soft transition hover:-translate-y-px hover:shadow-lg">
+      <div className="flex items-center gap-2 bg-ink px-4 py-2 text-[12px] font-bold uppercase tracking-wider text-accent">
+        <Star className="size-3.5 fill-current" /> Match du jour
+        <span className="ml-auto font-semibold normal-case tracking-normal text-white/70">{formatDate(match.date, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+      </div>
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cx('text-[20px] font-extrabold leading-tight sm:text-[22px]', match.cancelled && 'line-through')}>{matchTitle(match)}</span>
+          <ResultPill match={match} />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+          <MatchStatusBadge status={match.status} cancelled={match.cancelled} />
+          {match.time && <span className="font-semibold text-ink-2">{formatTime(match.time)}</span>}
+          {match.competition && <span>{match.competition}</span>}
+          {match.venue && <span className="inline-flex items-center gap-1"><MapPin className="size-3.5 shrink-0" />{match.venue}</span>}
+        </div>
+        <span className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-[15px] font-bold text-ink">
+          {action} <ArrowRight className="size-4" />
+        </span>
+      </div>
     </Link>
   )
 }

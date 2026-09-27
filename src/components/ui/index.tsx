@@ -149,9 +149,9 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 
 /* ---------- Layout bits ---------- */
 
-export function Card({ className, children, onClick }: { className?: string; children: ReactNode; onClick?: () => void }) {
+export function Card({ id, className, children, onClick }: { id?: string; className?: string; children: ReactNode; onClick?: () => void }) {
   return (
-    <div onClick={onClick} className={cx('card', onClick && 'cursor-pointer transition hover:-translate-y-px hover:shadow-md', className)}>
+    <div id={id} onClick={onClick} className={cx('card', onClick && 'cursor-pointer transition hover:-translate-y-px hover:shadow-md', className)}>
       {children}
     </div>
   )
