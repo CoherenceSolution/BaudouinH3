@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Mic, MicOff } from 'lucide-react'
+import { ArrowLeft, Mic, MicOff, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useSpeakerLead } from '@/hooks/useSpeakerLead'
 import { useCoums, useLikes, useMatch, usePlayers, useTickets } from '@/hooks/useData'
 import { formatDate, matchTitle } from '@/lib/format'
 import type { Match, Player } from '@/lib/types'
+import { reopenVotes } from '@/lib/matchActions'
+import { useActor } from '@/hooks/useActor'
+import { useToast } from '@/components/ui/Toast'
 import { formatTime } from '@/lib/matches'
 import { Button, Spinner, Tabs } from '@/components/ui'
 import { MatchStatusBadge, ResultPill, VenueLink } from '@/components/MatchCard'
@@ -24,7 +27,7 @@ type Tab = 'ticket' | 'console' | 'participation' | 'live' | 'rankings' | 'coum'
 
 export function MatchVotePage() {
   const { matchId } = useParams<{ matchId: string }>()
-  const { identity, isStaff, setMode } = useAuth()
+  const { identity, isStaff, isAdmin, setMode } = useAuth()
   const players = usePlayers()
   const tickets = useTickets(matchId)
   const likes = useLikes(matchId)
@@ -89,6 +92,8 @@ export function MatchVotePage() {
             {match.speakerName && !upcoming && <span>Orateur : {match.speakerName}</span>}
           </div>
           {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
+          {/* L'admin rouvre les votes d'un match terminé ou en lecture, directement depuis sa page. */}
+          {isAdmin && (match.status === 'closed' || match.status === 'reading') && <ReopenButton match={match} />}
           {/* Le rôle d'orateur se prend ici, sans se déconnecter (le staff a la console d'office). */}
           {!isStaff && identity && canSpeak && !upcoming && (
             isSpeaker ? (
@@ -141,5 +146,28 @@ function StepDownButton({ match, players, onDone }: { match: Match; players: Map
   }
   return (
     <Button size="sm" variant="ghost" className="mt-2" icon={<MicOff className="size-4" />} loading={busy} onClick={stepDown}>Je ne suis plus l’orateur</Button>
+  )
+}
+
+/** Admin : rouvre les votes du match (les votes déjà lus le restent). */
+function ReopenButton({ match }: { match: Match }) {
+  const actor = useActor()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  async function reopen() {
+    if (!confirm('Rouvrir les votes de ce match ? Les votes déjà lus le restent.')) return
+    setBusy(true)
+    try {
+      await reopenVotes(match, actor)
+      toast('Votes rouverts')
+    } catch (e) {
+      console.error(e)
+      toast('Impossible de rouvrir les votes', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Button size="sm" variant="secondary" className="mr-2 mt-2" icon={<RotateCcw className="size-4" />} loading={busy} onClick={reopen}>Rouvrir les votes</Button>
   )
 }

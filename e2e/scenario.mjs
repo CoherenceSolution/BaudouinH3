@@ -406,6 +406,21 @@ await admin.getByRole('button', { name: 'Ouvrir les votes maintenant' }).click()
 await admin.getByText('Votes ouverts', { exact: true }).first().waitFor()
 await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
 
+// L'admin rouvre un match terminé : depuis Gestion → Matchs, puis depuis la page du match.
+await admin.goto(BASE + '/admin/matchs')
+const doneRow = admin.locator('div', { has: admin.getByText('RSC Anderlecht Vétérans') }).filter({ has: admin.getByRole('button', { name: 'Rouvrir les votes' }) }).last()
+await doneRow.getByRole('button', { name: 'Rouvrir les votes' }).click()
+await admin.getByText('Votes rouverts').first().waitFor()
+await admin.goto(BASE + `/votes/${matchId}`)
+await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
+await admin.getByText('Lecture des votes terminée').first().waitFor()
+await admin.getByRole('button', { name: 'Rouvrir les votes' }).first().click()
+await admin.getByText('Votes rouverts').first().waitFor()
+await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
+await admin.getByText('Lecture des votes terminée').first().waitFor()
+
 // 8. Admin : rétrospective + activité + accueil
 await admin.goto(BASE + '/historique')
 await admin.waitForTimeout(800)

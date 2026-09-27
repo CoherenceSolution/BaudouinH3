@@ -92,7 +92,7 @@ rétrospective affichent le vote normalement pour tout le monde.
 | Votant | Prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
 | Orateur (liste désignée par l'admin) | Prénom et nom, case « Je suis l'orateur ce soir » (ou bouton « Je suis l'orateur » sur la page du match) | Console : son propre vote, minuteur, clôture des votes, file de lecture avec « Valider le vote », votes lus grisés, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur (s'il a la main), correction d'un nom |
 | Secrétaire | Prénom et nom, puis le code commun (une fois par téléphone) | Console orateur, vote hors plateforme, correction d'un nom, matchs, **coum** (qui a payé, absents, recoum), amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
-| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs et code commun (Gestion → Staff) |
+| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs et code commun (Gestion → Staff), rouvrir les votes de n'importe quel match (Gestion → Matchs ou page du match) |
 
 ### Agenda Sportlink (matchs automatiques)
 
