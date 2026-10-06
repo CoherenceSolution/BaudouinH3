@@ -139,10 +139,15 @@ Points de conception :
   créées, renommées, masquées ou **supprimées** depuis Gestion → Listes (ou depuis la page Stats). La suppression
   d'une liste efface aussi toutes ses entrées, par lots de 400 écritures.
 - **Agenda Sportlink** (`src/lib/calendar/`, `scripts/calendar/sync.mjs`, `.github/workflows/sync-calendar.yml`) :
-  chaque matin, et quand l'admin appuie sur « Mettre à jour le calendrier », l'agenda iCal est lu et comparé aux matchs `source: 'sportlink'`. L'identifiant du match dérive de l'UID de l'événement
-  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Seuls `date, time, opponent, home, venue, details,
+  chaque matin, et quand l'admin appuie sur « Mettre à jour le calendrier », l'agenda iCal est lu et comparé aux matchs existants. L'identifiant du match dérive de l'UID de l'événement
+  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Si l'UID change (Sportlink republie l'agenda) ou si le
+  match a été saisi à la main, l'événement est relié au match existant de même jour et même adversaire (ou au seul
+  match à venir contre cet adversaire) : `externalId` est mis à jour, rien n'est dupliqué. Seuls `date, time, opponent, home, venue, details,
   cancelled` sont écrits ; score, compétition et état des votes jamais. Les événements passés ne sont ni importés
-  ni modifiés ; un match futur qui disparaît de l'agenda est marqué `cancelled`, jamais supprimé. Le lien (qui
+  ni modifiés ; un match futur qui disparaît de l'agenda est marqué `cancelled`, jamais supprimé, mais seulement s'il
+  tombe dans la période couverte par l'agenda (un agenda vide ou limité aux prochaines semaines n'annule rien). Les
+  doublons annulés laissés par d'anciennes synchronisations (même jour, même adversaire, jamais ouverts aux votes)
+  sont supprimés. Le lien (qui
   contient un jeton) vit dans `config/calendar`, lisible par le staff seul, et n'est jamais écrit dans le journal.
   La logique (lecture iCal, plan, écritures) est un seul code TypeScript pur, partagé : le bouton l'applique avec
   le SDK web et les droits de l'admin, la tâche du matin avec firebase-admin (Node exécute le TypeScript

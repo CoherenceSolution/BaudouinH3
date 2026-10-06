@@ -47,7 +47,7 @@ export function CalendarSettings() {
       <h3 className="flex items-center gap-2 font-semibold"><CalendarSync className="size-4" /> Agenda Sportlink</h3>
       <p className="mb-4 mt-1 text-[13px] text-muted">
         Collez le lien de l’agenda de l’équipe (« ical-team »). Chaque matin, les matchs à venir sont ajoutés et tenus à jour :
-        date, heure, lieu, adversaire. Les matchs passés, les scores et les votes ne sont jamais modifiés.
+        date, heure, lieu, adversaire. Un match déjà présent (importé ou saisi à la main) est retrouvé et mis à jour, jamais dupliqué. Les matchs passés, les scores et les votes ne sont jamais modifiés.
       </p>
       <div className="space-y-3">
         <Input label="Lien de l’agenda" type="url" placeholder="https://data.sportlink.com/ical-team?token=…" value={url} onChange={(e) => setUrl(e.target.value)} autoComplete="off" spellCheck={false} />

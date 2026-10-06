@@ -485,6 +485,41 @@ await m.goto(BASE + '/amendes')
 await m.waitForTimeout(800)
 await shot(m, '22-mobile-amendes')
 
+// 23. Liste des matchs triée : match du jour à l'affiche, onglets « À venir » / « Joués », recherche
+async function addMatch(date, opponent) {
+  await admin.goto(BASE + '/votes')
+  await admin.getByRole('button', { name: 'Nouveau match' }).click()
+  await admin.getByLabel('Date').fill(date)
+  await admin.getByLabel('Adversaire').fill(opponent)
+  await admin.locator('button[form=match-form]').click()
+  await admin.getByRole('dialog').waitFor({ state: 'hidden' })
+}
+const isoIn = (days) => {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+await addMatch(isoIn(20), 'Dragons H4')
+await addMatch(isoIn(6), 'Léopold H3')
+await addMatch(isoIn(-14), 'Watducks H2')
+await admin.goto(BASE + '/votes')
+const featured = admin.getByRole('region', { name: 'Match du jour' })
+await featured.getByText('RSC Anderlecht Vétérans').waitFor()
+const upcomingTab = admin.getByRole('button', { name: /^À venir \(2\)$/ })
+await upcomingTab.waitFor()
+const firstUpcoming = await admin.locator('a[href^="/votes/"]').nth(1).innerText()
+if (!firstUpcoming.includes('Léopold H3')) throw new Error('le match à venir le plus proche devrait venir en premier')
+await shot(admin, '23-liste-matchs')
+await admin.getByRole('button', { name: /^Joués/ }).click()
+await admin.getByText('Watducks H2').waitFor()
+if (await admin.getByText('Dragons H4').count()) throw new Error('un match à venir ne devrait pas être dans « Joués »')
+await admin.getByPlaceholder('Rechercher un adversaire').fill('dragons')
+await admin.getByRole('button', { name: /^À venir \(1\)$/ }).click()
+await admin.getByText('Dragons H4').waitFor()
+await m.goto(BASE + '/votes')
+await m.getByText('Match du jour').waitFor()
+await shot(m, '23b-mobile-liste-matchs')
+
 await browser.close()
 
 // Bruit d'environnement, pas des défauts de l'application : polices Google et autres ressources

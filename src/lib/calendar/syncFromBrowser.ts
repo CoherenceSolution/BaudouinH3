@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Actor } from '@/lib/activity'
 import type { CalendarConfig } from '@/lib/types'
@@ -31,7 +31,8 @@ export async function syncCalendarFromBrowser(actor: Actor): Promise<SyncSummary
   }
 
   try {
-    const snap = await getDocs(query(collection(db, 'matches'), where('source', '==', 'sportlink')))
+    // Tous les matchs : un match saisi à la main peut être relié à son événement Sportlink.
+    const snap = await getDocs(collection(db, 'matches'))
     const existing = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ExistingMatch)
     const { plan, summary } = await prepareSync(ics, existing, { teamKeyword: config.teamKeyword })
 
@@ -40,6 +41,7 @@ export async function syncCalendarFromBrowser(actor: Actor): Promise<SyncSummary
     for (const w of writes) {
       if (w.kind === 'add') batch.set(doc(collection(db, w.collection)), w.data)
       else if (w.kind === 'update') batch.update(doc(db, w.path), w.data)
+      else if (w.kind === 'delete') batch.delete(doc(db, w.path))
       else batch.set(doc(db, w.path), w.data, { merge: true })
     }
     await batch.commit()

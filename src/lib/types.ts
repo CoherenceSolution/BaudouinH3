@@ -288,6 +288,7 @@ export interface CalendarConfig {
     created?: number
     updated?: number
     cancelled?: number
+    removed?: number
     error?: string | null
   }
 }
