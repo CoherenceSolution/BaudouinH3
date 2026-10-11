@@ -68,6 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** Joueur déclaré dans identities/{uid} (confirmé par la base) et droits de secrétaire de ce joueur. */
   const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
   const [playerIsSecretary, setPlayerIsSecretary] = useState(false)
+  /** Joueur dont les droits sont connus, et échec d'enregistrement de l'identité : pour ne pas afficher l'appli trop tôt. */
+  const [roleKnownFor, setRoleKnownFor] = useState<string | null>(null)
+  /** Nom du joueur de cet appareil, pour signer le journal même avant le chargement de la liste des joueurs. */
+  const [myName, setMyName] = useState<string | null>(null)
+  const [linkFailed, setLinkFailed] = useState(false)
 
   useEffect(() => {
     if (!firebaseConfigured) {
@@ -134,7 +139,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!uid || !anonymous || !playerId || linkedPlayerId === playerId) return
-    setDoc(doc(db, 'identities', uid), { playerId, updatedAt: serverTimestamp() }).catch((e) => console.error('Identité non enregistrée', e))
+    setLinkFailed(false)
+    setDoc(doc(db, 'identities', uid), { playerId, updatedAt: serverTimestamp() }).catch((e) => {
+      console.error('Identité non enregistrée', e)
+      setLinkFailed(true)
+    })
   }, [uid, anonymous, playerId, linkedPlayerId])
 
   // Droits de secrétaire du joueur : accordés ou retirés par l'admin, appliqués en direct.
@@ -145,8 +154,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return onSnapshot(
       doc(db, 'players', playerId),
-      (snap) => setPlayerIsSecretary(snap.exists() && snap.data().role === 'secretary'),
-      () => setPlayerIsSecretary(false),
+      (snap) => {
+        setPlayerIsSecretary(snap.exists() && snap.data().role === 'secretary')
+        setMyName(snap.exists() ? `${snap.data().firstName} ${snap.data().lastName}` : null)
+        setRoleKnownFor(playerId)
+      },
+      () => {
+        setPlayerIsSecretary(false)
+        setRoleKnownFor(playerId)
+      },
     )
   }, [uid, anonymous, playerId])
 
@@ -206,9 +222,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const effectiveIdentity: PublicIdentity | null = staff?.playerId ? { playerId: staff.playerId, mode: 'public' } : identity
     // Secrétaire par son nom : dès que la base a enregistré le joueur de cet appareil (sinon les règles refuseraient).
     const namedSecretary = !staff && playerIsSecretary && !!identity && linkedPlayerId === identity.playerId
+    const secretaryReady = !uid || !anonymous || !playerId || (roleKnownFor === playerId && (!playerIsSecretary || linkedPlayerId === playerId || linkFailed))
     const role: Role | null = staff?.role ?? (namedSecretary ? 'secretary' : null)
     return {
-      ready: authReady && staffReady && bootstrapped !== null,
+      // Un secrétaire n'entre qu'une fois ses droits établis : sinon il verrait un instant l'appli d'un simple
+      // votant (onglets, pages de gestion refusées).
+      ready: authReady && staffReady && bootstrapped !== null && secretaryReady,
       bootstrapped,
       user,
       staff,
@@ -227,12 +246,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (staff) return { uid: staff.id, name: p ? `${p.firstName} ${p.lastName}` : staff.displayName || staff.email, role: staff.role }
         return {
           uid: user?.uid ?? 'anonymous',
-          name: p ? `${p.firstName} ${p.lastName}` : 'Membre',
+          name: p ? `${p.firstName} ${p.lastName}` : (roleKnownFor === effectiveIdentity?.playerId && myName) || 'Membre',
           role: namedSecretary ? 'secretary' : effectiveIdentity?.mode === 'speaker' ? 'speaker' : 'public',
         }
       },
     }
-  }, [authReady, staffReady, bootstrapped, user, staff, identity, linkedPlayerId, playerIsSecretary, setIdentity, setMode, clearIdentity, loginStaff, ensureAnonymous, logout])
+  }, [authReady, staffReady, bootstrapped, user, staff, identity, linkedPlayerId, playerIsSecretary, roleKnownFor, linkFailed, myName, uid, anonymous, playerId, setIdentity, setMode, clearIdentity, loginStaff, ensureAnonymous, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

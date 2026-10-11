@@ -112,7 +112,8 @@ Points de conception :
   à tous les présents (ou à un joueur précis) : `rounds` passe à 2, 3… et ceux qui avaient payé repassent
   « pas encore ». Tout le monde voit qui a coumé ; seul le staff écrit (règles Firestore).
 - **Console orateur, tout au même endroit** : l'orateur et le staff n'ont plus d'onglet « Mon vote » séparé ; la console
-  enchaîne les étapes **1. Mon vote → 2. Minuteur → 3. Clôturer les votes de tout le monde → Lecture**. Pendant la
+  commence par une carte de **pilotage** (minuteur et gros bouton « Clôturer les votes » ; une fois clôturé,
+  « Rouvrir les votes » au même endroit), puis **1. Mon vote → 2. Lecture**. Pendant la
   lecture, les votes forment une **file d'attente** : le premier est mis en avant avec le bouton **« Valider le vote »**
   (qui pose `readAt` : le vote apparaît chez tous et compte dans les classements), les suivants attendent, et les votes
   déjà lus sont **grisés** dans une section repliable « Déjà lus », d'où l'on peut les remettre dans la file.
@@ -166,6 +167,20 @@ Points de conception :
   La lecture est aussi entièrement tracée : clôture, vote validé (n° de lecture), vote remis dans la file, ordre
   modifié ou mélangé, étoiles, nom d'auteur consulté, prise de main sur l'orateur, vote hors plateforme, coups de cœur, minuteur, fin de lecture.
   Gestion → Activité : filtres par type et par personne, recherche, « Charger plus ancien ».
+- **Annulation groupée (Gestion → Surveillance, admin)** : chaque entrée garde aussi `undo`, les écritures inverses
+  (lecture de l'état brut juste avant d'écrire : `readBefore`, puis `undoCreate` / `undoUpdate` / `undoDelete`, qui
+  pour une modification ne remet que les champs touchés). L'admin filtre par personne (un appareil = un `actorUid`)
+  et par période, puis applique ces écritures de la plus récente à la plus ancienne ; une entrée « Annulation »
+  (`undoOf`, avec ses propres `undo`) s'ajoute au journal, qui reste en ajout seul. Les anciennes créations
+  s'annulent par suppression du document. Garde-fous (`lib/undoRules.ts`, testé) : une action dont les mêmes
+  champs ont été modifiés ensuite par quelqu'un d'autre n'est pas cochée d'office ; une écriture au-delà des droits
+  actuels de l'auteur n'est appliquée que si l'admin la coche ; staff, identités, journal et installation ne sont
+  jamais touchés — le journal étant écrit par les appareils, une entrée pourrait contenir une annulation fabriquée.
+  Les règles imposent `actorUid == request.auth.uid`. Alertes calculées sur 7 jours : rafales, suppressions en série,
+  nuit, plusieurs appareils pour un même secrétaire, score modifié plusieurs fois.
+- **Résumé du match** (`components/MatchSummary`) : score saisi en « nous / eux » (`saveScore`), buts et passes,
+  meilleurs de chaque catégorie sur les votes lus, amendes et coum du match ; onglet par défaut d'un match terminé,
+  et match du jour (ou dernier joué) sur l'accueil.
   Exception volontaire : les brouillons auto-sauvegardés d'un vote (toutes les 800 ms) ne sont pas journalisés,
   seul l'envoi ou la mise à jour du vote l'est ; et le contenu d'un vote n'est jamais écrit dans le journal, pour
   préserver l'anonymat (seules les corrections de nom y figurent, sans l'auteur du vote).

@@ -90,7 +90,7 @@ const QUICK_MINUTES = [5, 10, 15]
  * Réglage du minuteur, dans la console : l'orateur, un secrétaire ou l'admin déclenche le décompte,
  * que tous les appareils affichent en même temps.
  */
-export function VoteTimerControl({ match }: { match: Match }) {
+export function VoteTimerControl({ match, compact }: { match: Match; compact?: boolean }) {
   const actor = useActor()
   const toast = useToast()
   const remaining = useRemaining(match)
@@ -133,6 +133,29 @@ export function VoteTimerControl({ match }: { match: Match }) {
 
   const custom = Number(minutes)
   const customValid = Number.isFinite(custom) && custom > 0 && custom <= 180
+
+  // Version compacte (pilotage de la console, accueil) : une ligne de boutons, sans explications.
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cx('inline-flex items-center gap-1.5 text-[13px] font-semibold', running ? (remaining! > 0 ? 'text-accent-strong' : 'text-rose') : 'text-ink-2')}>
+          <AlarmClock className="size-4" />
+          {running ? (remaining! > 0 ? <span className="tabular-nums">{formatRemaining(remaining!)}</span> : 'Temps écoulé') : 'Minuteur'}
+        </span>
+        {QUICK_MINUTES.map((m) => (
+          <Button key={m} size="sm" variant={running ? 'ghost' : 'secondary'} icon={<Play className="size-4" />} loading={busy} onClick={() => start(m)}>
+            {m} min
+          </Button>
+        ))}
+        {running && (
+          <>
+            <Button size="sm" variant="secondary" icon={<Plus className="size-4" />} loading={busy} onClick={() => extend(2)}>2 min</Button>
+            <Button size="sm" variant="ghost" icon={<Square className="size-4" />} loading={busy} onClick={stop}>Arrêter</Button>
+          </>
+        )}
+      </div>
+    )
+  }
 
   return (
     <Card className="p-4 sm:p-5">

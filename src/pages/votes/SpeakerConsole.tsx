@@ -33,7 +33,7 @@ interface Props {
 
 /**
  * Console de l'orateur (et du staff), tout au même endroit :
- * 1. son propre vote, 2. le minuteur, 3. la clôture des votes de tout le monde,
+ * en haut le pilotage (minuteur, clôture des votes, réouverture d'un geste), puis son propre vote,
  * puis la lecture : une file d'attente, « Valider le vote » qui l'envoie à tous, les votes lus grisés.
  */
 export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoaded, likes }: Props) {
@@ -237,6 +237,38 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
         </div>
       </Card>
 
+      {/* Pilotage, toujours en haut : minuteur et clôture pendant les votes ; réouverture d'un geste ensuite
+          (un orateur qui a clôturé trop tôt rouvre aussitôt, les votes déjà lus le restent). */}
+      <Card className="border-2 border-ink/80 p-4 sm:p-5">
+        {match.status === 'voting' ? (
+          <div className="space-y-4">
+            <VoteTimerControl match={match} compact />
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+              <div className="text-[14px]">
+                <b>{submitted.length}</b> vote{submitted.length > 1 ? 's' : ''} envoyé{submitted.length > 1 ? 's' : ''}
+                {drafts > 0 && <span className="text-amber-700"> · {drafts} encore en cours</span>}
+              </div>
+              <Button size="lg" variant="accent" className="w-full sm:w-auto" icon={<Lock className="size-5" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>
+                Clôturer les votes
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-[14px]">
+              <b>{match.status === 'reading' ? 'Votes clôturés' : 'Lecture terminée'}</b>
+              {match.status === 'reading' && match.readingStartedAt?.toDate && (
+                <span className="text-muted"> à {match.readingStartedAt.toDate().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+              <div className="text-[13px] text-muted">Clôturé trop tôt ? Rouvrez : chacun peut de nouveau voter, les votes déjà lus le restent.</div>
+            </div>
+            <Button size="lg" variant="secondary" className="w-full sm:w-auto" icon={<RotateCcw className="size-5" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>
+              Rouvrir les votes
+            </Button>
+          </div>
+        )}
+      </Card>
+
       {match.status === 'voting' && (
         <>
           {/* 1. Mon vote : l'orateur vote comme tout le monde, sans quitter sa console. */}
@@ -248,31 +280,12 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
             )}
           </Step>
 
-          {/* 2. Minuteur : visible par tout le monde, sur toutes les pages. */}
-          <Step n={2} title="Minuteur (facultatif)" hint="Donnez un temps limite aux retardataires : le compte à rebours s’affiche chez tout le monde.">
-            <VoteTimerControl match={match} />
-          </Step>
-
-          {/* 3. Clôture : les votes de tout le monde sont figés, la lecture peut commencer. */}
-          <Step n={3} title="Clôturer les votes" hint="Plus personne ne peut voter ni modifier son vote. Vous pourrez rouvrir si besoin.">
-            <Card className="p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-[14px]">
-                  <b>{submitted.length}</b> vote{submitted.length > 1 ? 's' : ''} prêt{submitted.length > 1 ? 's' : ''} à lire
-                  {drafts > 0 && <span className="text-amber-700"> · {drafts} encore en cours (non envoyé{drafts > 1 ? 's' : ''})</span>}
-                </div>
-                <Button variant="accent" icon={<Lock className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>
-                  Clôturer les votes de tout le monde
-                </Button>
-              </div>
-            </Card>
-          </Step>
         </>
       )}
 
       {/* Lecture : file d'attente des votes à lire, puis les votes déjà lus, grisés. */}
       <Step
-        n={match.status === 'voting' ? 4 : undefined}
+        n={match.status === 'voting' ? 2 : undefined}
         title={match.status === 'voting' ? 'Préparer la lecture' : 'Lecture des votes'}
         hint={
           match.status === 'voting'
@@ -418,20 +431,14 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       {match.status !== 'voting' && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
           <div className="text-[13px] text-muted">
-            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée. Besoin d’un vote en plus ? Rouvrez les votes.' : 'La lecture des votes est terminée. Vous pouvez la reprendre ou rouvrir les votes si besoin.'}
+            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée.' : 'La lecture des votes est terminée. Vous pouvez la reprendre si besoin.'}
           </div>
           <div className="flex flex-wrap gap-2">
             {match.status === 'reading' && (
-              <>
-                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>Rouvrir les votes</Button>
-                <Button icon={<Flag className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('closed')}>La lecture des votes est terminée</Button>
-              </>
+              <Button icon={<Flag className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('closed')}>La lecture des votes est terminée</Button>
             )}
             {match.status === 'closed' && (
-              <>
-                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>Rouvrir les votes</Button>
-                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>Reprendre la lecture</Button>
-              </>
+              <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>Reprendre la lecture</Button>
             )}
           </div>
         </Card>

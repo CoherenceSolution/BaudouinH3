@@ -132,10 +132,28 @@ de qui a coumé — pas de montants, pas de caisse, pas d'historique de saison, 
 - Quand tous les présents ont payé, la feuille affiche « Tout le monde a coumé » : c'est terminé.
 - Tout le monde voit qui a coumé ; seuls le secrétaire et l'admin tiennent la liste à jour.
 
+### Page du match : le résumé
+
+L'onglet **Résumé** montre le match d'un coup d'œil : score (victoire, défaite, nul), buts et passes, résultats des
+votes lus, amendes et coum du match, avec un lien vers chaque détail. Le match du jour (ou le dernier joué) est
+résumé de la même façon sur l'accueil. Un secrétaire **entre ou corrige le score** directement ici (« nous / eux »),
+et ajoute un but ou une amende sans quitter la page ; tant que le score manque, un bouton « Entrer le score »
+apparaît dans l'en-tête du match.
+
+### Surveillance et annulation (admin)
+
+**Gestion → Surveillance** signale ce qui sort de l'ordinaire (rafales de modifications, suppressions en série,
+actions en pleine nuit, droits de secrétaire utilisés depuis plusieurs téléphones, score modifié plusieurs fois).
+L'admin choisit une personne et une période (**dernière heure**, **24 h** ou **un jour précis**) : ses actions
+s'affichent et s'annulent d'un geste, les données revenant à leur état d'avant. Une action modifiée ensuite par
+quelqu'un d'autre, ou qui dépasse les droits de son auteur, n'est pas cochée d'office. L'annulation est inscrite au
+journal et peut elle-même être annulée.
+
 ### Minuteur des votes
 
-Dans la console, l'admin ou un secrétaire lance un compte à rebours (5, 10, 15 minutes ou une durée libre),
-le prolonge (+ 2 min) ou l'arrête. Tout le monde voit le temps restant sur les pages du match ; ceux qui n'ont
+En haut de la console (et sur l'accueil pendant les votes), l'orateur, un secrétaire ou l'admin lance un compte à
+rebours (5, 10, 15 minutes), le prolonge (+ 2 min) ou l'arrête. Juste à côté, **« Clôturer les votes »** ; une fois
+clôturé, le même endroit propose **« Rouvrir les votes »** pour un orateur qui a clôturé trop tôt. Tout le monde voit le temps restant sur les pages du match ; ceux qui n'ont
 pas encore envoyé leur vote lisent « Il vous reste du temps pour voter ». Rien ne se ferme tout seul : la clôture
 reste un geste de l'orateur.
 

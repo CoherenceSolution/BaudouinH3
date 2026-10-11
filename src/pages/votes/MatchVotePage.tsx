@@ -68,12 +68,12 @@ export function MatchVotePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match?.id])
-  // Prendre le rôle d'orateur ouvre directement la console.
-  const wasAnimating = useRef(canAnimate)
+  // Prendre le rôle d'orateur (« Je suis l'orateur ») ouvre directement la console.
+  const wasSpeaker = useRef(identity?.mode)
   useEffect(() => {
-    if (canAnimate && !wasAnimating.current) setTab('console')
-    wasAnimating.current = canAnimate
-  }, [canAnimate])
+    if (identity?.mode === 'speaker' && wasSpeaker.current !== 'speaker' && canAnimate) setTab('console')
+    wasSpeaker.current = identity?.mode
+  }, [identity?.mode, canAnimate])
 
   // Un votant bascule automatiquement sur la lecture quand l'orateur commence.
   useEffect(() => {

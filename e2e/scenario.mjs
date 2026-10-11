@@ -191,10 +191,10 @@ await shot(admin, '07-stats-duos')
 // 4b. Minuteur des votes, depuis la console
 await admin.goto(BASE + `/votes/${matchId}`)
 await admin.getByRole('button', { name: 'Console orateur', exact: true }).click()
-await admin.getByText('Minuteur des votes').waitFor()
+// Le minuteur est en haut de la console, avec le bouton de clôture.
 await admin.getByRole('button', { name: '10 min' }).click()
 await admin.getByText('Minuteur lancé : 10 minutes').first().waitFor()
-await admin.getByText(/Il reste (9:5\d|10:00) aux votants/).waitFor()
+await admin.getByRole('button', { name: 'Arrêter' }).waitFor()
 await shot(admin, '07c-minuteur')
 
 // 5. Votants
@@ -270,7 +270,12 @@ await speaker.getByText('Minuteur lancé : 5 minutes').first().waitFor()
 await ronny.getByText(/Minuteur lancé par Maxim Leonard/).waitFor()
 await shot(speaker, '11b-console-vote-minuteur')
 // …et clôture les votes de tout le monde
-await speaker.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
+// Clôturé trop tôt : l'orateur rouvre d'un geste, depuis le même endroit, puis clôture pour de bon.
+await speaker.getByText('Clôturé trop tôt ?').waitFor()
+await speaker.getByRole('button', { name: 'Rouvrir les votes' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
+await speaker.getByText('Clôturé trop tôt ?').waitFor()
 await speaker.getByText('Lecture par Maxim Leonard').waitFor()
 await speaker.getByRole('button', { name: 'Mélanger' }).click()
 await speaker.waitForTimeout(500)
@@ -378,7 +383,7 @@ await speaker.getByRole('button', { name: 'La lecture des votes est terminée' }
 await speaker.getByText('Lecture des votes terminée').first().waitFor()
 // Une lecture terminée peut rouvrir les votes (un retardataire), puis se refermer.
 await speaker.getByRole('button', { name: 'Rouvrir les votes' }).click()
-await speaker.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await speaker.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await speaker.getByText('Lecture des votes terminée').first().waitFor()
 
@@ -400,14 +405,26 @@ const doneRow = admin.locator('div', { has: admin.getByText('RSC Anderlecht Vét
 await doneRow.getByRole('button', { name: 'Rouvrir les votes' }).click()
 await admin.getByText('Votes rouverts').first().waitFor()
 await admin.goto(BASE + `/votes/${matchId}`)
-await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await admin.getByText('Lecture des votes terminée').first().waitFor()
 await admin.getByRole('button', { name: 'Rouvrir les votes' }).first().click()
 await admin.getByText('Votes rouverts').first().waitFor()
-await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await admin.getByText('Lecture des votes terminée').first().waitFor()
+
+// 7c. Une secrétaire corrige le score depuis le résumé du match, sans passer par la gestion.
+await jarne.goto(BASE + `/votes/${matchId}?tab=resume`)
+await jarne.getByRole('button', { name: 'Corriger le score' }).click()
+await jarne.getByLabel('Score Baudouin H3').fill('4')
+await jarne.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+await jarne.getByText('Score enregistré').first().waitFor()
+await jarne.getByText('Victoire').waitFor()
+// Résumé condensé : buts et passes, votes lus, amendes, coum
+await jarne.getByText('Buts et passes').waitFor()
+await jarne.getByText(/votes? lus? sur/).waitFor()
+await shot(jarne, '14b-resume-match')
 
 // 8. Admin : rétrospective + activité + accueil
 await admin.goto(BASE + '/historique')
@@ -451,6 +468,27 @@ await admin.getByTitle('Supprimer la liste').nth(1).click()
 await admin.getByText('Liste supprimée').first().waitFor()
 await admin.waitForTimeout(600)
 if ((await admin.getByText('Homme du match', { exact: true }).count()) !== 0) throw new Error('La liste devrait avoir disparu')
+
+// 8d. Surveillance : l'admin annule d'un geste les actions de Jarne de la dernière heure.
+await admin.goto(BASE + '/admin/surveillance')
+await admin.getByText('À surveiller (7 derniers jours)').waitFor()
+// La liste des personnes se remplit avec le journal.
+await admin.waitForFunction(() => [...document.querySelectorAll('select[title="Personne"] option')].some((o) => o.textContent.includes('Jarne')))
+const jarneUid = await admin.locator('select[title="Personne"] option', { hasText: 'Jarne' }).first().getAttribute('value')
+await admin.getByTitle('Personne').selectOption(jarneUid)
+await admin.getByText(/Score corrigé : RSC Anderlecht Vétérans/).waitFor()
+// La prise de main de Jarne a été reprise ensuite par l'orateur : signalée, pas cochée d'office.
+await admin.getByText('Modifié ensuite', { exact: true }).first().waitFor()
+await shot(admin, '17d-surveillance')
+await admin.getByRole('button', { name: /^Annuler \d+ actions?$/ }).click()
+await admin.getByText(/actions? annulées?/).first().waitFor({ timeout: 20000 })
+await admin.getByText('Déjà annulée', { exact: true }).first().waitFor()
+// Le score revient à 3 – 2.
+await admin.goto(BASE + `/votes/${matchId}?tab=resume`)
+await admin.getByRole('button', { name: 'Corriger le score' }).waitFor()
+if ((await admin.getByText('Victoire').count()) !== 1) throw new Error('Le match devrait rester une victoire')
+const ours = await admin.locator('.text-3xl').first().textContent()
+if (ours?.trim() !== '3') throw new Error(`Score non rétabli : ${ours}`)
 
 // 9. Mobile
 const m = await ctx('mobile', true)

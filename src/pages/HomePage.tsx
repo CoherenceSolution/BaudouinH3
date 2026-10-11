@@ -11,6 +11,7 @@ import { useCategories } from '@/hooks/useSettings'
 import { Card, Stat } from '@/components/ui'
 import { MatchCard, MatchStatusBadge } from '@/components/MatchCard'
 import { MatchSummary } from '@/components/MatchSummary'
+import { VoteTimerControl } from '@/components/VoteTimer'
 
 export function HomePage() {
   const { identity, staff, isStaff } = useAuth()
@@ -69,6 +70,12 @@ export function HomePage() {
               <ArrowRight className="size-4" />
             </Link>
           </div>
+          {/* Orateur et staff : le minuteur des votes à portée de main, dès l'accueil. */}
+          {(isSpeaker || isStaff) && live.status === 'voting' && (
+            <div className="px-5 py-3">
+              <VoteTimerControl match={live} compact />
+            </div>
+          )}
         </Card>
       ) : (
         <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
