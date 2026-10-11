@@ -1,9 +1,17 @@
-import type { Goal, Like, Ticket, VoteCategory } from './types'
-import { VOTE_CATEGORIES } from './types'
+import type { Goal, Like, Ticket, VoteCategory } from './types.ts'
+import { VOTE_CATEGORIES } from './types.ts'
 
 export interface RankRow {
   playerId: string
   count: number
+  /** Information secondaire affichée à côté du compteur (ex. le total de voix derrière des titres). */
+  votes?: number
+}
+
+/** Tous les premiers ex æquo d'un classement trié (vide si le classement est vide). */
+export function leaders<T extends { count: number }>(rows: T[]): T[] {
+  if (rows.length === 0) return []
+  return rows.filter((r) => r.count === rows[0].count)
 }
 
 /** Tickets envoyés et déjà lus par l'orateur : les seuls qui comptent dans les classements. */
@@ -41,6 +49,32 @@ export function nominationRanking(tickets: Ticket[], category: VoteCategory): Ra
     if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
   }
   return [...counts.entries()].map(([playerId, count]) => ({ playerId, count })).sort((a, b) => b.count - a.count)
+}
+
+/**
+ * Classement « titres » d'une catégorie sur plusieurs matchs : pour chaque match, le ou les joueurs
+ * qui ont reçu le plus de voix dans la catégorie remportent le titre (en cas d'égalité, chacun
+ * des ex æquo le remporte). On compte ensuite combien de fois chaque joueur a été désigné, le total
+ * de voix de la saison restant disponible en `votes` (et départageant l'ordre d'affichage).
+ */
+export function titleRanking(tickets: Ticket[], category: VoteCategory): RankRow[] {
+  const byMatch = new Map<string, Ticket[]>()
+  for (const t of tickets) {
+    const list = byMatch.get(t.matchId) ?? []
+    list.push(t)
+    byMatch.set(t.matchId, list)
+  }
+  const titles = new Map<string, number>()
+  const votes = new Map<string, number>()
+  for (const list of byMatch.values()) {
+    const ranking = nominationRanking(list, category)
+    for (const r of ranking) votes.set(r.playerId, (votes.get(r.playerId) ?? 0) + r.count)
+    for (const r of leaders(ranking)) titles.set(r.playerId, (titles.get(r.playerId) ?? 0) + 1)
+  }
+  return [...votes.entries()]
+    .map(([playerId, v]) => ({ playerId, count: titles.get(playerId) ?? 0, votes: v }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count || b.votes - a.votes)
 }
 
 /** Un joueur qui atteint le seuil de voix dans une catégorie pendant la lecture. */
