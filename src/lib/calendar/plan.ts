@@ -9,21 +9,28 @@ export const SYNCED_FIELDS = ['date', 'time', 'opponent', 'home', 'venue', 'deta
 type SyncedField = (typeof SYNCED_FIELDS)[number]
 export type SyncedData = Pick<FeedMatch, SyncedField>
 
-/** Match Sportlink déjà présent dans l'application (seuls les champs utiles ici). */
+/** Match déjà présent dans l'application (seuls les champs utiles ici). */
 export interface ExistingMatch extends Partial<SyncedData> {
   id: string
   date: string
   opponent: string
   status: string
-  cancelled?: boolean
+  /** 'sportlink' pour un match importé ; absent pour un match saisi à la main. */
+  source?: string
+  externalId?: string
+  /** Doublon fusionné dans un autre match (voir lib/matchMerge) : masqué, jamais repris tel quel. */
+  mergedInto?: string | null
 }
+
+/** Lien vers l'agenda, ajouté quand un match est retrouvé sous un nouvel identifiant Sportlink. */
+type Link = { externalId: string; source: 'sportlink' }
 
 export interface SyncPlan {
   create: { id: string; data: SyncedData & { externalId: string } }[]
-  update: { id: string; before: ExistingMatch; data: SyncedData }[]
+  update: { id: string; before: ExistingMatch; data: SyncedData & Partial<Link> }[]
   cancel: { id: string; before: ExistingMatch }[]
-  /** Doublons laissés par les anciennes synchronisations : annulés, sans votes, remplacés par un autre match. */
-  purge: { id: string; before: ExistingMatch }[]
+  /** Doublons laissés par d'anciennes synchronisations : à venir, annulés, jamais ouverts aux votes. */
+  remove: { id: string; before: ExistingMatch }[]
 }
 
 /** Identifiant stable d'un match Sportlink, dérivé de l'UID de l'événement : « sl_ » + SHA-1 tronqué. */
@@ -40,88 +47,118 @@ function pick(m: FeedMatch): SyncedData {
 }
 
 /**
- * Clé « naturelle » d'un match : adversaire + domicile/extérieur.
- * Sportlink change l'UID de ses événements à chaque lecture de l'agenda : l'UID seul ne suffit donc pas
- * à reconnaître un match. Les anciens imports gardaient le titre entier comme adversaire
- * (« Baudouin H-3-Rapid H-3 ») : il est relu pour retrouver la même clé.
+ * Adversaire et domicile / extérieur, tels que l'agenda les donne aujourd'hui. Les matchs importés avant le
+ * découpage des titres collés gardent le titre entier comme adversaire (« Baudouin H-3-Rapid H-3 », toujours
+ * « à domicile ») : on les relit de la même façon pour les reconnaître.
  */
-export function matchKey(m: { opponent?: string | null; home?: boolean | null }, teamKeyword = 'Baudouin'): string {
-  let opponent = String(m.opponent ?? '')
-  let home = m.home !== false
+export function opponentOf(m: { opponent?: string | null; home?: boolean | null }, teamKeyword = 'Baudouin'): { opponent: string; home: boolean } {
+  const opponent = String(m.opponent ?? '')
   const key = normalizeTeam(teamKeyword)
-  if (key && normalizeTeam(opponent).includes(key)) ({ opponent, home } = parseTeams(opponent, teamKeyword))
-  return `${home ? 'dom' : 'ext'}|${normalizeTeam(opponent)}`
+  if (key && normalizeTeam(opponent).includes(key)) return parseTeams(opponent, teamKeyword)
+  return { opponent, home: m.home !== false }
 }
 
-const dayNumber = (iso: string) => Date.parse(iso + 'T12:00:00Z') / 86_400_000
-
 /**
+ * Compare l'agenda aux matchs de l'application et décide quoi écrire.
+ *
+ * Un événement est relié à un match existant, dans l'ordre :
+ *   1. par son identifiant Sportlink (cas normal) ;
+ *   2. par le même jour et le même adversaire : Sportlink change parfois l'identifiant de ses événements
+ *      quand il republie l'agenda, et un match saisi à la main avant l'import est ainsi repris ;
+ *   3. par le même adversaire (domicile / extérieur compris) s'il n'y a qu'un seul candidat : match déplacé.
+ * Ainsi, l'agenda se met à jour sans jamais dupliquer ni annuler les matchs déjà connus.
+ *
  * @param feed      matchs de l'agenda, avec leur identifiant (voir matchIdFor)
- * @param existing  matchs Sportlink déjà présents
+ * @param existing  matchs déjà présents (importés ou saisis à la main)
  * @param today     'YYYY-MM-DD' à Bruxelles
  */
 export function planSync(feed: (FeedMatch & { id: string })[], existing: ExistingMatch[], today: string, { teamKeyword = 'Baudouin' } = {}): SyncPlan {
-  const plan: SyncPlan = { create: [], update: [], cancel: [], purge: [] }
-  const keyOf = (m: { opponent?: string | null; home?: boolean | null }) => matchKey(m, teamKeyword)
-  const unclaimed = new Map(existing.map((m) => [m.id, m]))
+  /** Même jour, même adversaire : c'est le même match, quel que soit son identifiant. */
+  const sameMatchKey = (m: { date: string; opponent: string; home?: boolean }) => `${m.date}|${normalizeTeam(opponentOf(m, teamKeyword).opponent)}`
+  const sameOpponent = (a: { opponent: string; home?: boolean }, b: { opponent: string; home?: boolean }) => {
+    const [x, y] = [opponentOf(a, teamKeyword), opponentOf(b, teamKeyword)]
+    return normalizeTeam(x.opponent) === normalizeTeam(y.opponent) && x.home === y.home
+  }
+  const byId = new Map(existing.map((m) => [m.id, m]))
+  // Un match fusionné et le match qui l'a remplacé peuvent porter le même identifiant : le second l'emporte.
+  const byExternal = new Map<string, ExistingMatch>()
+  for (const m of [...existing.filter((e) => e.mergedInto), ...existing.filter((e) => !e.mergedInto)]) {
+    if (m.externalId) byExternal.set(m.externalId, m)
+  }
+  /** Un doublon fusionné renvoie au match qui le remplace (fusions successives comprises). */
+  const resolve = (m: ExistingMatch | undefined) => {
+    for (let i = 0; m?.mergedInto && i < 10; i++) m = byId.get(m.mergedInto)
+    return m?.mergedInto ? undefined : m
+  }
+  const plan: SyncPlan = { create: [], update: [], cancel: [], remove: [] }
+
+  // Dédoublonnage de l'agenda, puis matchs déjà reliés par leur identifiant.
+  const events: (FeedMatch & { id: string })[] = []
   const claimed = new Set<string>()
-  const events = [...new Map(feed.map((m) => [m.id, m])).values()]
-  const pairs = new Map<FeedMatch & { id: string }, ExistingMatch | undefined>()
-
-  // 1. Même UID qu'à la lecture précédente.
-  for (const m of events) {
-    const before = unclaimed.get(m.id)
-    if (!before) continue
-    unclaimed.delete(m.id)
-    pairs.set(m, before)
-  }
-  // 2. Sinon, même adversaire et même terrain (domicile / extérieur). Parmi plusieurs candidats, on garde
-  //    d'abord celui dont les votes ont commencé, puis celui qui n'est pas annulé, puis la date la plus proche.
-  for (const m of events) {
-    if (pairs.has(m)) continue
-    const key = keyOf(m)
-    const rank = (e: ExistingMatch) => [e.status !== 'scheduled' ? 0 : 1, e.cancelled ? 1 : 0, Math.abs(dayNumber(e.date) - dayNumber(m.date))]
-    const candidates = [...unclaimed.values()].filter((e) => keyOf(e) === key)
-    candidates.sort((a, b) => {
-      const ra = rank(a)
-      const rb = rank(b)
-      return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2] || a.id.localeCompare(b.id)
-    })
-    const before = candidates[0]
-    if (before) unclaimed.delete(before.id)
-    pairs.set(m, before)
+  const direct = new Map<string, ExistingMatch>()
+  /** Événements dont le match a été fusionné : jamais recréés, même si le match conservé est déjà pris. */
+  const absorbed = new Set<string>()
+  for (const m of feed) {
+    if (events.some((e) => e.id === m.id)) continue
+    events.push(m)
+    const raw = byId.get(m.id) ?? byExternal.get(m.externalId)
+    if (raw?.mergedInto) absorbed.add(m.id)
+    const found = resolve(raw)
+    if (found && !claimed.has(found.id)) {
+      claimed.add(found.id)
+      direct.set(m.id, found)
+    }
   }
 
+  const free = (m: ExistingMatch) => !claimed.has(m.id) && !m.mergedInto && m.date >= today
+  const known = new Set<string>()
   for (const m of events) {
-    const before = pairs.get(m)
-    if (before) claimed.add(before.id)
     // Les matchs passés ne sont ni importés ni modifiés : l'historique reste tel quel.
     if (m.date < today) continue
+    let before = direct.get(m.id)
+    if (!before && absorbed.has(m.id)) continue
+    if (!before) {
+      // Plusieurs copies possibles (anciennes lectures) : d'abord celle dont les votes ont commencé, puis celle
+      // qui n'est pas annulée ; les autres partent ensuite comme doublons.
+      const rank = (e: ExistingMatch) => (e.status !== 'scheduled' ? 0 : e.cancelled ? 2 : 1)
+      before = existing.filter((e) => free(e) && sameMatchKey(e) === sameMatchKey(m)).sort((a, b) => rank(a) - rank(b))[0]
+      if (!before) {
+        const candidates = existing.filter((e) => free(e) && e.status === 'scheduled' && sameOpponent(e, m))
+        if (candidates.length === 1) before = candidates[0]
+      }
+      if (before) claimed.add(before.id)
+    }
+    known.add(sameMatchKey(m))
     const data = pick(m)
     if (!before) {
-      // Identifiant déjà pris par un autre match : on ne l'écrase jamais.
-      if (existing.some((e) => e.id === m.id)) continue
       plan.create.push({ id: m.id, data: { ...data, externalId: m.externalId } })
-    } else if (SYNCED_FIELDS.some((k) => (before[k] ?? fallback(k)) !== data[k])) {
-      plan.update.push({ id: before.id, before, data })
+      continue
+    }
+    const relink = before.externalId !== m.externalId || before.source !== 'sportlink'
+    if (relink || SYNCED_FIELDS.some((k) => (before[k] ?? fallback(k)) !== data[k])) {
+      plan.update.push({ id: before.id, before, data: relink ? { ...data, externalId: m.externalId, source: 'sportlink' } : data })
     }
   }
 
-  // Un match à venir qui disparaît de l'agenda est marqué annulé (jamais supprimé : rien ne se perd).
-  // Le jour même ou une fois les votes lancés, on n'y touche plus. Un agenda vide (lien expiré, erreur de
-  // Sportlink) n'annule rien.
-  if (events.length > 0) {
-    for (const m of unclaimed.values()) {
-      if (m.cancelled || m.date <= today || m.status !== 'scheduled') continue
-      plan.cancel.push({ id: m.id, before: m })
-    }
+  // Un match à venir qui disparaît de l'agenda est marqué annulé (jamais supprimé : rien ne se perd),
+  // mais seulement s'il tombe dans la période que couvre l'agenda : un agenda qui ne montre que les
+  // prochaines semaines, ou qui revient vide, n'annule rien. Le jour même ou une fois les votes lancés,
+  // on n'y touche plus. Les matchs saisis à la main ne sont jamais annulés.
+  const dates = events.map((e) => e.date).sort()
+  const [first, last] = [dates[0], dates.at(-1)]
+  for (const m of existing) {
+    if (m.source !== 'sportlink' || m.mergedInto || claimed.has(m.id) || m.date <= today || m.status !== 'scheduled' || m.cancelled) continue
+    if (first && last && m.date >= first && m.date <= last) plan.cancel.push({ id: m.id, before: m })
   }
 
-  // Doublons des anciennes synchronisations : un match annulé, jamais ouvert aux votes, dont l'adversaire
-  // et le terrain sont déjà portés par un autre match que l'on garde.
-  const kept = new Set(existing.filter((e) => claimed.has(e.id) || !e.cancelled || e.status !== 'scheduled').map(keyOf))
-  for (const m of unclaimed.values()) {
-    if (m.cancelled && m.status === 'scheduled' && kept.has(keyOf(m))) plan.purge.push({ id: m.id, before: m })
+  // Doublons laissés par les anciennes lectures (un par jour, chacun annulé le lendemain) : copie annulée,
+  // jamais ouverte aux votes, d'un match que l'on garde ou que l'agenda donne encore — passé compris.
+  // prepareSync écarte encore ceux qui portent des données (votes, coum, buts, amendes…).
+  const kept = new Set(existing.filter((e) => !e.mergedInto && (claimed.has(e.id) || !e.cancelled || e.status !== 'scheduled')).map(sameMatchKey))
+  for (const m of existing) {
+    if (m.source !== 'sportlink' || m.mergedInto || claimed.has(m.id) || m.status !== 'scheduled' || !m.cancelled) continue
+    const key = sameMatchKey(m)
+    if (known.has(key) || kept.has(key)) plan.remove.push({ id: m.id, before: m })
   }
   return plan
 }
@@ -177,14 +214,24 @@ export interface SyncSummary {
   created: number
   updated: number
   cancelled: number
-  /** Doublons supprimés. */
-  removed: number
+  /** Doublons retirés (facultatif : absent des bilans enregistrés avant son ajout). */
+  removed?: number
 }
 
-/** Lit l'agenda et prépare le plan, sans rien écrire. */
+/** Collections qui rattachent des données à un match : un match qui en porte n'est jamais supprimé. */
+export const LINKED_COLLECTIONS = ['tickets', 'likes', 'coums', 'goals', 'fines', 'statEntries'] as const
+
+/** Découpe une liste en paquets (requêtes « in » limitées à 30 valeurs, lots d'écritures à 500). */
+export function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
 /**
+ * Lit l'agenda et prépare le plan, sans rien écrire.
  * @param referenced  parmi ces matchs, ceux qui portent déjà des données (votes, coum, buts, amendes…) :
- *                    ils ne sont jamais supprimés comme doublons.
+ *                    ils ne sont jamais supprimés comme doublons. Sans elle, aucun doublon n'est supprimé.
  */
 export async function prepareSync(
   ics: string,
@@ -196,23 +243,12 @@ export async function prepareSync(
   const feed = eventsToMatches(ics, { teamKeyword: keyword })
   const withIds = await Promise.all(feed.map(async (m) => ({ ...m, id: await matchIdFor(m.externalId) })))
   const plan = planSync(withIds, existing, localParts(now).date, { teamKeyword: keyword })
-  if (plan.purge.length) {
-    // Sans moyen de vérifier, on ne supprime rien.
-    const used = referenced ? await referenced(plan.purge.map((p) => p.id)) : new Set(plan.purge.map((p) => p.id))
-    plan.purge = plan.purge.filter((p) => !used.has(p.id))
+  if (plan.remove.length) {
+    const used = referenced ? await referenced(plan.remove.map((r) => r.id)) : new Set(plan.remove.map((r) => r.id))
+    plan.remove = plan.remove.filter((r) => !used.has(r.id))
   }
-  const summary: SyncSummary = { events: feed.length, created: plan.create.length, updated: plan.update.length, cancelled: plan.cancel.length, removed: plan.purge.length }
+  const summary: SyncSummary = { events: feed.length, created: plan.create.length, updated: plan.update.length, cancelled: plan.cancel.length, removed: plan.remove.length }
   return { plan, summary }
-}
-
-/** Collections qui rattachent des données à un match : un match qui en porte n'est jamais supprimé. */
-export const LINKED_COLLECTIONS = ['tickets', 'likes', 'coums', 'goals', 'fines', 'statEntries'] as const
-
-/** Découpe une liste en paquets (requêtes « in » limitées à 30 valeurs, lots d'écritures à 500). */
-export function chunks<T>(items: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
 }
 
 /** Une écriture Firestore, indépendante du SDK. `now` est remplacé par l'horodatage serveur. */
@@ -248,16 +284,16 @@ export function syncWrites(plan: SyncPlan, summary: SyncSummary, actor: SyncActo
   }
   for (const { id, before, data } of plan.update) {
     writes.push({ kind: 'update', path: `matches/${id}`, data: { ...data, updatedAt: now, syncedAt: now } })
-    log('update', id, describeUpdate(before, data), describeChanges(before, data))
+    const changes = describeChanges(before, data)
+    log('update', id, data.externalId && !changes.length ? `Match relié à l’agenda Sportlink : ${data.opponent} (${describeWhen(data)})` : describeUpdate(before, data), changes)
   }
   for (const { id, before } of plan.cancel) {
     writes.push({ kind: 'update', path: `matches/${id}`, data: { cancelled: true, updatedAt: now, syncedAt: now } })
     log('update', id, `Match retiré de l’agenda Sportlink, marqué annulé : ${before.opponent} (${describeWhen(before)})`, [{ field: 'Annulé', before: 'non', after: 'oui' }])
   }
-  for (const { id } of plan.purge) writes.push({ kind: 'delete', path: `matches/${id}` })
-  if (plan.purge.length) {
-    const n = plan.purge.length
-    log('delete', 'sportlink', `${n} doublon${n > 1 ? 's' : ''} de l’agenda Sportlink supprimé${n > 1 ? 's' : ''} (matchs annulés en double, sans votes)`)
+  for (const { id, before } of plan.remove) {
+    writes.push({ kind: 'delete', path: `matches/${id}` })
+    log('delete', id, `Doublon retiré (ancienne copie de l’agenda) : ${before.opponent} (${describeWhen(before)})`)
   }
   writes.push({ kind: 'set', path: 'config/calendar', data: { lastSync: { at: now, ok: true, by: actor.actorName, ...summary, error: null } } })
   return writes
@@ -269,7 +305,7 @@ export function describeSummary(s: Partial<SyncSummary>): string {
     s.created ? `${s.created} match${s.created > 1 ? 's' : ''} ajouté${s.created > 1 ? 's' : ''}` : '',
     s.updated ? `${s.updated} mis à jour` : '',
     s.cancelled ? `${s.cancelled} annulé${s.cancelled > 1 ? 's' : ''}` : '',
-    s.removed ? `${s.removed} doublon${s.removed > 1 ? 's' : ''} supprimé${s.removed > 1 ? 's' : ''}` : '',
+    s.removed ? `${s.removed} doublon${s.removed > 1 ? 's' : ''} retiré${s.removed > 1 ? 's' : ''}` : '',
   ].filter(Boolean)
   return parts.length ? parts.join(', ') : 'aucun changement'
 }

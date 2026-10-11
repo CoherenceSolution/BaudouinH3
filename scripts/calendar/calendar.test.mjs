@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { eventsToMatches, parseStart, parseTeams } from '../../src/lib/calendar/ical.ts'
-import { describeChanges, matchIdFor, matchKey, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
+import { chunks, describeChanges, matchIdFor, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
 
 const withIds = (feed) => Promise.all(feed.map(async (m) => ({ ...m, id: await matchIdFor(m.externalId) })))
 
@@ -68,8 +68,8 @@ test('crée les matchs à venir, ignore les matchs passés', async () => {
 test('un match déplacé est mis à jour ; un match inchangé ne l’est pas', async () => {
   const [a, b] = await withIds(eventsToMatches(ICS))
   const existing = [
-    { status: 'scheduled', ...a, date: '2026-10-03', time: '20:00', homeScore: 5 },
-    { status: 'scheduled', ...b },
+    { status: 'scheduled', source: 'sportlink', ...a, date: '2026-10-03', time: '20:00', homeScore: 5 },
+    { status: 'scheduled', source: 'sportlink', ...b },
   ]
   const plan = planSync([a, b], existing, TODAY)
   assert.equal(plan.create.length, 0)
@@ -83,16 +83,98 @@ test('un match déplacé est mis à jour ; un match inchangé ne l’est pas', a
   ])
 })
 
-test('un match à venir retiré de l’agenda est annulé, jamais supprimé ; le passé et le jour même restent', async () => {
+test('un match à venir retiré de l’agenda est annulé, jamais supprimé ; le passé et le jour même restent', () => {
   const existing = [
-    { id: 'sl_futur', status: 'scheduled', date: '2026-10-20', opponent: 'Futur' },
-    { id: 'sl_jour', status: 'scheduled', date: TODAY, opponent: 'Aujourd’hui' },
-    { id: 'sl_passe', status: 'closed', date: '2026-09-01', opponent: 'Passé' },
-    { id: 'sl_vote', status: 'voting', date: '2026-10-20', opponent: 'Votes lancés' },
+    { id: 'sl_futur', source: 'sportlink', status: 'scheduled', date: '2026-10-20', opponent: 'Futur' },
+    { id: 'sl_jour', source: 'sportlink', status: 'scheduled', date: TODAY, opponent: 'Aujourd’hui' },
+    { id: 'sl_passe', source: 'sportlink', status: 'closed', date: '2026-09-01', opponent: 'Passé' },
+    { id: 'sl_vote', source: 'sportlink', status: 'voting', date: '2026-10-20', opponent: 'Votes lancés' },
+    { id: 'manuel', status: 'scheduled', date: '2026-10-20', opponent: 'Saisi à la main' },
   ]
-  const autre = (await withIds(eventsToMatches(ICS))).slice(0, 1)
-  const plan = planSync(autre, existing, TODAY)
+  const feed = [
+    { id: 'sl_a', externalId: 'a', date: '2026-10-10', time: null, opponent: 'Autre', home: true, venue: null, details: null, cancelled: false },
+    { id: 'sl_b', externalId: 'b', date: '2026-10-30', time: null, opponent: 'Encore', home: true, venue: null, details: null, cancelled: false },
+  ]
+  const plan = planSync(feed, existing, TODAY)
   assert.deepEqual(plan.cancel.map((c) => c.id), ['sl_futur'])
+})
+
+test('un agenda vide ou qui ne couvre que les prochaines semaines n’annule rien au-delà', () => {
+  const existing = [{ id: 'sl_loin', source: 'sportlink', status: 'scheduled', date: '2027-02-20', opponent: 'Loin' }]
+  assert.equal(planSync([], existing, TODAY).cancel.length, 0)
+  const feed = [{ id: 'sl_a', externalId: 'a', date: '2026-10-10', time: null, opponent: 'Proche', home: true, venue: null, details: null, cancelled: false }]
+  assert.equal(planSync(feed, existing, TODAY).cancel.length, 0)
+})
+
+const ev = (externalId, date, opponent, extra = {}) => ({ externalId, date, time: '14:30', opponent, home: true, venue: 'Club', details: null, cancelled: false, ...extra })
+
+test('identifiant Sportlink changé : le match existant est repris, ni dupliqué ni annulé', async () => {
+  const before = await withIds([ev('ancien-uid', '2026-10-04', 'Dragons H4')])
+  const existing = [{ ...before[0], source: 'sportlink', status: 'scheduled' }]
+  const after = await withIds([ev('nouvel-uid', '2026-10-04', 'Dragons H4'), ev('nouveau-match', '2026-10-11', 'Léopold H3')])
+  const plan = planSync(after, existing, TODAY)
+  assert.deepEqual(plan.create.map((c) => c.data.opponent), ['Léopold H3'])
+  assert.equal(plan.cancel.length, 0)
+  assert.equal(plan.update.length, 1)
+  assert.equal(plan.update[0].id, existing[0].id)
+  assert.equal(plan.update[0].data.externalId, 'nouvel-uid')
+})
+
+test('identifiant changé et match déplacé : repris s’il n’y a qu’un match contre cet adversaire', async () => {
+  const [old] = await withIds([ev('ancien-uid', '2026-10-04', 'Dragons H4')])
+  const existing = [{ ...old, source: 'sportlink', status: 'scheduled' }]
+  const plan = planSync(await withIds([ev('nouvel-uid', '2026-10-18', 'Dragons H4')]), existing, TODAY)
+  assert.equal(plan.create.length, 0)
+  assert.deepEqual([plan.update[0].id, plan.update[0].data.date], [old.id, '2026-10-18'])
+})
+
+test('un match saisi à la main est relié à son événement au lieu d’être dupliqué', async () => {
+  const existing = [{ id: 'manuel', status: 'scheduled', date: '2026-10-04', opponent: 'dragons h4', homeScore: null }]
+  const plan = planSync(await withIds([ev('uid', '2026-10-04', 'Dragons H4')]), existing, TODAY)
+  assert.equal(plan.create.length, 0)
+  assert.equal(plan.update[0].id, 'manuel')
+  assert.equal(plan.update[0].data.source, 'sportlink')
+  const writes = syncWrites(plan, { events: 1, created: 0, updated: 1, cancelled: 0, removed: 0 }, { actorUid: 'u', actorName: 'B', actorRole: 'admin' }, 'NOW')
+  assert.equal(writes[0].path, 'matches/manuel')
+})
+
+test('les doublons annulés laissés par une ancienne synchronisation sont retirés', async () => {
+  const [cur] = await withIds([ev('nouvel-uid', '2026-10-04', 'Dragons H4')])
+  const existing = [
+    { ...cur, source: 'sportlink', status: 'scheduled' },
+    { id: 'sl_vieux', externalId: 'ancien-uid', source: 'sportlink', status: 'scheduled', cancelled: true, date: '2026-10-04', opponent: 'Dragons H4' },
+    { id: 'sl_vote', externalId: 'x', source: 'sportlink', status: 'voting', cancelled: true, date: '2026-10-04', opponent: 'Dragons H4' },
+  ]
+  const plan = planSync([cur], existing, TODAY)
+  assert.deepEqual(plan.remove.map((r) => r.id), ['sl_vieux'])
+  assert.equal(plan.create.length + plan.update.length + plan.cancel.length, 0)
+  const writes = syncWrites(plan, { events: 1, created: 0, updated: 0, cancelled: 0, removed: 1 }, { actorUid: 'u', actorName: 'B', actorRole: 'admin' }, 'NOW')
+  assert.deepEqual(writes[0], { kind: 'delete', path: 'matches/sl_vieux' })
+})
+
+test('match fusionné : l’agenda met à jour le match conservé, sans recréer le doublon', async () => {
+  const [a, b] = await withIds([ev('uid-a', '2026-10-04', 'Dragons H4'), ev('uid-b', '2026-10-04', 'Dragons H4', { time: '20:00' })])
+  const existing = [
+    { ...a, source: 'sportlink', status: 'closed', mergedInto: 'fusion' },
+    { ...b, source: 'sportlink', status: 'closed', mergedInto: 'fusion' },
+    { id: 'fusion', status: 'scheduled', date: '2026-10-04', time: '14:30', opponent: 'Dragons H4', home: true, venue: 'Club', details: null },
+  ]
+  const plan = planSync([a, b], existing, TODAY)
+  assert.equal(plan.create.length, 0, 'aucun doublon recréé')
+  assert.equal(plan.cancel.length + plan.remove.length, 0)
+  assert.deepEqual(plan.update.map((u) => [u.id, u.data.externalId, u.data.source]), [['fusion', 'uid-a', 'sportlink']])
+  // Synchronisation suivante : le match conservé est relié, plus rien à écrire.
+  const linked = existing.map((e) => (e.id === 'fusion' ? { ...e, externalId: 'uid-a', source: 'sportlink' } : e))
+  const again = planSync([a, b], linked, TODAY)
+  assert.equal(again.create.length + again.update.length + again.cancel.length + again.remove.length, 0)
+})
+
+test('une synchronisation relancée sans changement n’écrit aucun match', async () => {
+  const feed = await withIds(eventsToMatches(ICS))
+  const first = planSync(feed, [], TODAY)
+  const existing = first.create.map((c) => ({ id: c.id, ...c.data, source: 'sportlink', status: 'scheduled' }))
+  const again = planSync(feed, existing, TODAY)
+  assert.equal(again.create.length + again.update.length + again.cancel.length + again.remove.length, 0)
 })
 
 test('écritures : match créé « à venir », journal, bilan ; le lien n’apparaît nulle part', async () => {
@@ -117,65 +199,45 @@ test('titres Sportlink collés : « Baudouin H-3-Rapid H-3 »', () => {
   assert.deepEqual(parseTeams('Baudouin H-3-Rapid H-3'), { home: true, opponent: 'Rapid H-3' })
   assert.deepEqual(parseTeams('Leuven H-8-Baudouin H-3'), { home: false, opponent: 'Leuven H-8' })
   assert.deepEqual(parseTeams('Old-Club H-3-Baudouin H-3'), { home: false, opponent: 'Old-Club H-3' })
-  assert.equal(matchKey({ opponent: 'Baudouin H-3-Rapid H-3', home: true }), matchKey({ opponent: 'Rapid H-3', home: true }))
-  assert.notEqual(matchKey({ opponent: 'Leuven H-7', home: true }), matchKey({ opponent: 'Leuven H-7', home: false }))
 })
 
-// Sportlink régénère l'UID de chaque événement à chaque lecture (constaté dans la tâche du matin :
-// « 15 matchs ajoutés, 15 annulés » chaque jour).
-const feedWithUids = (suffix) =>
-  [
-    ['2026-10-18', 'Baudouin H-3-Herakles H-6'],
-    ['2026-10-25', 'Dragons H-5-Baudouin H-3'],
-    ['2027-04-11', 'Herakles H-6-Baudouin H-3'],
-  ].map(([date, summary]) => ({ externalId: `${summary}-${suffix}`, date, time: '10:00', ...parseTeams(summary), venue: null, details: null, cancelled: false, summary }))
+// Situation réelle constatée dans la tâche du matin : « 15 matchs ajoutés, 15 annulés » chaque jour, avec des
+// adversaires enregistrés sous le titre entier.
+const event = (summary, date, uid) => ({ externalId: uid, id: `sl_${uid}`, date, time: '10:00', ...parseTeams(summary), venue: null, details: null, cancelled: false, summary })
 
-test('UID différent à chaque lecture : rien n’est recréé ni annulé', async () => {
+test('réparation : ancien import au titre entier repris et corrigé, doublons annulés retirés (passé compris)', async () => {
   const today = '2026-10-11'
-  const first = planSync(await withIds(feedWithUids('a')), [], today)
-  const existing = first.create.map((c) => ({ id: c.id, status: 'scheduled', ...c.data }))
-  const second = planSync(await withIds(feedWithUids('b')), existing, today)
-  assert.deepEqual([second.create.length, second.update.length, second.cancel.length, second.purge.length], [0, 0, 0, 0])
-})
-
-test('réparation : ancien import (titre entier), doublons annulés supprimés, votes préservés', async () => {
-  const today = '2026-10-11'
-  const old = (id, extra) => ({ id, status: 'scheduled', date: '2026-10-18', time: '10:00', opponent: 'Baudouin H-3-Herakles H-6', home: true, venue: null, details: null, ...extra })
+  const old = (id, date, cancelled, extra = {}) => ({ id, source: 'sportlink', externalId: id, status: 'scheduled', date, time: '10:00', opponent: 'Baudouin H-3-Herakles H-6', home: true, venue: null, details: null, cancelled, ...extra })
   const existing = [
-    old('sl_jour1', { cancelled: true }),
-    old('sl_jour2', { cancelled: true }),
-    old('sl_jour3', { cancelled: false }),
-    { id: 'sl_dragons', status: 'scheduled', date: '2026-10-25', time: '10:00', opponent: 'Dragons H-5-Baudouin H-3', home: true, cancelled: true },
-    { id: 'sl_dragons_vote', status: 'voting', date: '2026-10-25', time: '10:00', opponent: 'Dragons H-5-Baudouin H-3', home: true, cancelled: true },
+    old('jour1', '2026-10-18', true),
+    old('jour2', '2026-10-18', true),
+    old('jour3', '2026-10-18', false),
+    // Match passé : l'original gardé et une copie annulée.
+    { ...old('passe', '2026-10-04', false, { opponent: 'Dragons H-5-Baudouin H-3', status: 'closed' }) },
+    { ...old('passe-copie', '2026-10-04', true, { opponent: 'Dragons H-5-Baudouin H-3' }) },
   ]
-  const plan = planSync(await withIds(feedWithUids('c')), existing, today)
-  // Le match encore actif est repris et corrigé (adversaire, extérieur), pas recréé.
-  assert.deepEqual(plan.update.map((u) => [u.id, u.data.opponent, u.data.home, u.data.cancelled]), [
-    ['sl_jour3', 'Herakles H-6', true, false],
-    ['sl_dragons_vote', 'Dragons H-5', false, false],
-  ])
-  assert.equal(plan.create.length, 1, 'seul le match d’avril est nouveau')
+  const plan = planSync([event('Baudouin H-3-Herakles H-6', '2026-10-18', 'nouveau')], existing, today)
+  assert.equal(plan.create.length, 0)
+  assert.deepEqual(plan.update.map((u) => [u.id, u.data.opponent, u.data.home]), [['jour3', 'Herakles H-6', true]])
   assert.deepEqual(plan.cancel, [])
-  assert.deepEqual(plan.purge.map((p) => p.id).sort(), ['sl_dragons', 'sl_jour1', 'sl_jour2'])
+  assert.deepEqual(plan.remove.map((r) => r.id).sort(), ['jour1', 'jour2', 'passe-copie'])
 })
 
-test('un doublon qui porte des données n’est jamais supprimé', async () => {
+test('un doublon qui porte des données n’est jamais retiré ; sans vérification possible, rien ne l’est', async () => {
   const existing = [
-    { id: 'sl_a', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: false },
-    { id: 'sl_b', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: true },
-    { id: 'sl_c', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: true },
+    { id: 'a', source: 'sportlink', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: false },
+    { id: 'b', source: 'sportlink', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: true },
+    { id: 'c', source: 'sportlink', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: true },
   ]
   const ics = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:x', 'DTSTART:20261018T080000Z', 'SUMMARY:Baudouin H-3-Herakles H-6', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
-  const { plan, summary } = await prepareSync(ics, existing, { now: new Date('2026-10-11T08:00:00Z'), referenced: async () => new Set(['sl_c']) })
-  assert.deepEqual(plan.purge.map((p) => p.id), ['sl_b'])
+  const now = new Date('2026-10-11T08:00:00Z')
+  const { plan, summary } = await prepareSync(ics, existing, { now, referenced: async () => new Set(['c']) })
+  assert.deepEqual(plan.remove.map((r) => r.id), ['b'])
   assert.equal(summary.removed, 1)
-  const writes = syncWrites(plan, summary, { actorUid: 'u', actorName: 'Bruno', actorRole: 'admin' }, 'NOW')
-  assert.deepEqual(writes.filter((w) => w.kind === 'delete').map((w) => w.path), ['matches/sl_b'])
-  // Sans vérification possible, rien n'est supprimé.
-  assert.equal((await prepareSync(ics, existing, { now: new Date('2026-10-11T08:00:00Z') })).plan.purge.length, 0)
+  assert.equal((await prepareSync(ics, existing, { now })).plan.remove.length, 0)
 })
 
-test('un agenda vide n’annule rien', () => {
-  const existing = [{ id: 'sl_futur', status: 'scheduled', date: '2026-10-20', opponent: 'Futur' }]
-  assert.deepEqual(planSync([], existing, TODAY).cancel, [])
+test('gros nettoyage : écritures découpées en lots de moins de 500', () => {
+  const parts = chunks(Array.from({ length: 901 }, (_, i) => i), 400)
+  assert.deepEqual(parts.map((p) => p.length), [400, 400, 101])
 })

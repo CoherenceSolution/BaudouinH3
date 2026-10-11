@@ -54,6 +54,7 @@ await scores.nth(0).fill('3')
 await scores.nth(1).fill('2')
 await admin.getByRole('button', { name: 'Créer et ouvrir les votes' }).click()
 await admin.getByText('Votes ouverts').first().waitFor()
+await admin.getByRole('dialog').waitFor({ state: 'hidden' })
 await shot(admin, '03-votes-list')
 const href = await admin.locator('a[href^="/votes/"]').first().getAttribute('href')
 const matchId = href.split('/').pop()
@@ -564,6 +565,44 @@ await shot(m, '21b-mobile-coum')
 await m.goto(BASE + '/amendes')
 await m.waitForTimeout(800)
 await shot(m, '22-mobile-amendes')
+
+// 23. Liste des matchs triée : match du jour à l'affiche, onglets « À venir » / « Joués », recherche
+async function addMatch(date, opponent) {
+  await admin.goto(BASE + '/votes')
+  await admin.getByRole('button', { name: 'Nouveau match' }).click()
+  await admin.getByLabel('Date').fill(date)
+  await admin.getByLabel('Adversaire').fill(opponent)
+  await admin.locator('button[form=match-form]').click()
+  await admin.getByRole('dialog').waitFor({ state: 'hidden' })
+}
+const isoIn = (days) => {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+await addMatch(isoIn(20), 'Dragons H4')
+await addMatch(isoIn(6), 'Léopold H3')
+await addMatch(isoIn(-14), 'Watducks H2')
+await admin.goto(BASE + '/votes')
+const featured = admin.getByRole('region', { name: 'Match du jour' })
+await featured.getByText('RSC Anderlecht Vétérans').waitFor()
+await admin.getByRole('button', { name: /^À venir \(\d+\)$/ }).waitFor()
+await admin.getByText('Dragons H4').waitFor()
+const listed = await admin.locator('a[href^="/votes/"]').allInnerTexts()
+const at = (name) => listed.findIndex((t) => t.includes(name))
+if (!(at('Léopold H3') >= 0 && at('Léopold H3') < at('Dragons H4') && at('Dragons H4') < at('Match avancé FC'))) {
+  throw new Error('les matchs à venir devraient être triés du plus proche au plus lointain : ' + listed.join(' | '))
+}
+await shot(admin, '23-liste-matchs')
+await admin.getByRole('button', { name: /^Joués/ }).click()
+await admin.getByText('Watducks H2').waitFor()
+if (await admin.getByText('Dragons H4').count()) throw new Error('un match à venir ne devrait pas être dans « Joués »')
+await admin.getByPlaceholder('Rechercher un adversaire').fill('dragons')
+await admin.getByRole('button', { name: /^À venir \(1\)$/ }).click()
+await admin.getByText('Dragons H4').waitFor()
+await m.goto(BASE + '/votes')
+await m.getByText('Match du jour').first().waitFor()
+await shot(m, '23b-mobile-liste-matchs')
 
 await browser.close()
 

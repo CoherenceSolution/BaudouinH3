@@ -29,7 +29,8 @@ async function main() {
 
   const res = await fetch(url, { headers: { Accept: 'text/calendar, */*' } })
   if (!res.ok) throw new Error(`Agenda inaccessible (HTTP ${res.status})`)
-  const snap = await db.collection('matches').where('source', '==', 'sportlink').get()
+  // Tous les matchs : un match saisi à la main peut être relié à son événement Sportlink.
+  const snap = await db.collection('matches').get()
   const existing = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
   const { plan, summary } = await prepareSync(await res.text(), existing, { teamKeyword: config.teamKeyword, referenced })
 
@@ -37,7 +38,7 @@ async function main() {
   for (const c of plan.create) console.log(`  + ${describeWhen(c.data)} ${c.data.home ? 'vs' : '@'} ${c.data.opponent}`)
   for (const u of plan.update) console.log(`  ~ ${describeUpdate(u.before, u.data)}`)
   for (const c of plan.cancel) console.log(`  × ${describeWhen(c.before)} ${c.before.opponent}`)
-  if (plan.purge.length) console.log(`  ${plan.purge.length} doublon(s) supprimé(s)`)
+  for (const r of plan.remove) console.log(`  − doublon ${describeWhen(r.before)} ${r.before.opponent}`)
   if (DRY_RUN) return
 
   // Lots de 400 écritures (limite Firestore : 500) ; le bilan, en dernier, n'est écrit que si tout est passé.

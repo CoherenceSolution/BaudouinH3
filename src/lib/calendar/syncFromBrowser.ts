@@ -31,7 +31,8 @@ export async function syncCalendarFromBrowser(actor: Actor): Promise<SyncSummary
   }
 
   try {
-    const snap = await getDocs(query(collection(db, 'matches'), where('source', '==', 'sportlink')))
+    // Tous les matchs : un match saisi à la main peut être relié à son événement Sportlink.
+    const snap = await getDocs(collection(db, 'matches'))
     const existing = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ExistingMatch)
     const { plan, summary } = await prepareSync(ics, existing, { teamKeyword: config.teamKeyword, referenced })
 

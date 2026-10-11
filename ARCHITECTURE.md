@@ -141,14 +141,19 @@ Points de conception :
   créées, renommées, masquées ou **supprimées** depuis Gestion → Listes (ou depuis la page Stats). La suppression
   d'une liste efface aussi toutes ses entrées, par lots de 400 écritures.
 - **Agenda Sportlink** (`src/lib/calendar/`, `scripts/calendar/sync.mjs`, `.github/workflows/sync-calendar.yml`) :
-  chaque matin, et quand l'admin appuie sur « Mettre à jour le calendrier », l'agenda iCal est lu et comparé aux matchs `source: 'sportlink'`. L'identifiant du match dérive de l'UID de l'événement
-  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Sportlink régénérant l'UID à chaque lecture, un événement
-  sans UID connu est relié au match de même adversaire et même terrain (domicile/extérieur), le plus proche en date.
-  Les titres collés (« Baudouin H-3-Rapid H-3 ») sont coupés au tiret entre un chiffre et une lettre. Un agenda vide
-  n'annule rien ; les doublons annulés laissés par les anciennes lectures sont supprimés s'ils ne portent aucune
-  donnée (votes, coum, buts, amendes…). Seuls `date, time, opponent, home, venue, details,
+  chaque matin, et quand l'admin appuie sur « Mettre à jour le calendrier », l'agenda iCal est lu et comparé aux matchs existants. L'identifiant du match dérive de l'UID de l'événement
+  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Si l'UID change (Sportlink le régénère à chaque lecture) ou si le
+  match a été saisi à la main, l'événement est relié au match existant de même jour et même adversaire (ou au seul
+  match à venir contre cet adversaire) : `externalId` est mis à jour, rien n'est dupliqué. Les titres collés
+  (« Baudouin H-3-Rapid H-3 ») sont coupés au tiret entre un chiffre et une lettre ; les matchs importés avant ce
+  correctif, dont l'adversaire est le titre entier, sont relus de la même façon pour être reconnus. Les doublons
+  annulés laissés par les anciennes lectures sont supprimés, sauf s'ils portent des données (votes, coum, buts,
+  amendes…) ; les écritures partent par lots de 400 (limite Firestore : 500). Seuls `date, time, opponent, home, venue, details,
   cancelled` sont écrits ; score, compétition et état des votes jamais. Les événements passés ne sont ni importés
-  ni modifiés ; un match futur qui disparaît de l'agenda est marqué `cancelled`, jamais supprimé. Le lien (qui
+  ni modifiés ; un match futur qui disparaît de l'agenda est marqué `cancelled`, jamais supprimé, mais seulement s'il
+  tombe dans la période couverte par l'agenda (un agenda vide ou limité aux prochaines semaines n'annule rien). Les
+  doublons annulés laissés par d'anciennes synchronisations (même jour, même adversaire, jamais ouverts aux votes)
+  sont supprimés. Le lien (qui
   contient un jeton) vit dans `config/calendar`, lisible par le staff seul, et n'est jamais écrit dans le journal.
   La logique (lecture iCal, plan, écritures) est un seul code TypeScript pur, partagé : le bouton l'applique avec
   le SDK web et les droits de l'admin, la tâche du matin avec firebase-admin (Node exécute le TypeScript
@@ -173,7 +178,7 @@ Points de conception :
   Chaque document est créé et supprimé dans la même écriture atomique ; un second passage rattrape un vote envoyé
   sur le doublon pendant la fusion. Si l'un des deux matchs a ses votes ouverts, ils le restent. Les deux anciens
   ne sont pas supprimés (un match Sportlink supprimé reviendrait à la synchronisation) : ils sont marqués `mergedInto`,
-  masqués partout, et leurs liens mènent au nouveau match. Le nouveau match n'est pas relié à Sportlink. La fusion est journalisée avec le détail de ce qui a été déplacé.
+  masqués partout, et leurs liens mènent au nouveau match. Le nouveau match n'est pas relié à Sportlink à la création ; la synchronisation suivante, qui suit `mergedInto`, le relie à l'événement des doublons (sans jamais les recréer). La fusion est journalisée avec le détail de ce qui a été déplacé.
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
 - **Journal d'activité — toute modification est traçable**, en ajout seul (rien ne peut y être modifié ni supprimé) :
   chaque création, modification ou suppression écrit une ligne lisible avec qui, quoi et quand
