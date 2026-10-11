@@ -26,7 +26,7 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture et le compte à rebours, voter « coup de cœur », voir qui a coumé, consulter amendes et stats. |
 | **Orateur** | Choisi parmi la **liste des orateurs désignés par l'admin** (`players.canSpeak`, Gestion → Staff). Même formulaire que tout le monde (prénom + nom), en cochant « Je suis l'orateur ce soir » — ou plus tard via le bouton « Je suis l'orateur » de la page du match, visible seulement pour un orateur désigné. | Tout dans la **console orateur** : voter lui-même, lancer / prolonger / arrêter le minuteur, clôturer les votes de tout le monde, puis lire la file d'attente (« Valider le vote » envoie chaque vote à tous), réorganiser / mélanger, étoiles, conserver, consigne « commentaire avant le nom », afficher le nom d'un auteur (**seulement s'il est l'orateur en cours**, qui « a la main » ; l'admin aussi), corriger un nom mal choisi, indiquer que « La lecture des votes est terminée ». |
 | **Secrétaire** | Même formulaire que tout le monde ; aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur (sauf voir le nom des votants, à moins de prendre la main) + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité, encoder un **vote hors plateforme**. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume ». |
-| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, tenir la liste des orateurs, définir ou changer le code commun, **rouvrir les votes de n'importe quel match** en un geste (Gestion → Matchs, ou bouton « Rouvrir les votes » sur la page d'un match en lecture ou terminé ; les votes déjà lus le restent). |
+| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, tenir la liste des orateurs, définir ou changer le code commun, **rouvrir les votes de n'importe quel match** en un geste (Gestion → Matchs, ou bouton « Rouvrir les votes » sur la page d'un match en lecture ou terminé ; les votes déjà lus le restent), **fusionner deux matchs en double** (Gestion → Matchs → « Fusionner »). |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
 « Première installation » qui crée le compte admin, le document `config/bootstrap` et précharge l'équipe
@@ -54,11 +54,12 @@ matches/{id}                  { date, time, venue, details, opponent, competitio
                                 speakerTakeover: { uid, playerId, name, byName, at },
                                 readingStartedAt, closedAt,
                                 voteDeadline, voteTimerMinutes, voteTimerBy,
+                                mergedInto, mergedAt, mergedBy,
                                 createdBy, createdAt, updatedAt }
 tickets/{matchId_authorId}    { matchId, authorPlayerId, authorUids[],
                                 best:{playerId, proposal, comment, commentFirst}, worst:{…}, moment:{…},
                                 status: 'draft'|'submitted', readAt, readOrder, starred, saved, revealAuthor,
-                                manual, enteredByName, correctedByName, createdAt, updatedAt }
+                                manual, enteredByName, correctedByName, mergedFrom, mergeDuplicate, createdAt, updatedAt }
 likes/{matchId_voterId_cat}   { matchId, voterPlayerId, category, ticketId, createdAt }
 coums/{matchId_playerId}      { matchId, playerId, rounds, paid, absent, lastPaidAt,
                                 collectedBy, collectedByName, createdAt, updatedAt }
@@ -154,6 +155,19 @@ Points de conception :
   main** (« Ouvrir les votes maintenant » sur la fiche du match), avant le jour J ou pour un match marqué annulé :
   l'état `voting` est alors écrit dans la base. Une lecture terminée peut de même **rouvrir les votes**. Les matchs à venir sont exclus
   des statistiques, de la rétrospective et des listes de choix (amendes, listes maison).
+- **Fusion de deux matchs en double** (`lib/matchMerge.ts`, plan pur et testé ; `mergeMatches` dans `lib/matchActions.ts`) :
+  l'admin choisit le match conservé, voit un aperçu de ce qui sera récupéré, puis tout ce qui est rattaché au doublon
+  passe sur le match conservé — **rien n'est perdu** :
+  votes (brouillons compris, votes hors plateforme, état lu / non lu, étoiles, ordre de lecture placé à la suite),
+  coups de cœur (qui suivent leur vote), coum, buts, amendes, entrées des listes maison.
+  Un joueur qui a voté dans les deux matchs garde **ses deux votes** : le second (`…__<doublon>`, `mergeDuplicate`)
+  porte le badge « Doublon de fusion » dans la console, l'orateur décide. Seul un brouillon **vide** s'efface devant
+  un vrai vote. Deux coups de cœur du même votant sont gardés tous les deux ; deux feuilles de coum du même joueur
+  se combinent (le plus grand nombre de coums demandées et payées ; absent seulement s'il l'est des deux côtés).
+  Chaque document est créé et supprimé dans la même écriture atomique ; un second passage rattrape un vote envoyé
+  sur le doublon pendant la fusion. Si l'un des deux matchs a ses votes ouverts, ils le restent. Le doublon n'est
+  pas supprimé (un match Sportlink supprimé reviendrait à la synchronisation) : il est marqué `mergedInto`, masqué
+  partout, et ses liens mènent au match conservé. La fusion est journalisée avec le détail de ce qui a été déplacé.
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
 - **Journal d'activité — toute modification est traçable**, en ajout seul (rien ne peut y être modifié ni supprimé) :
   chaque création, modification ou suppression écrit une ligne lisible avec qui, quoi et quand
@@ -201,6 +215,8 @@ src/
     statCategories.ts        Suppression d'une liste maison et de ses entrées
     rankings.ts              Classements (nominations, coups de cœur, buts, duos), complétion des tickets
     format.ts                Dates, noms et surnoms, recherche de joueur, saisons, titres de match
+    matchMerge.ts            Fusion de deux matchs en double : plan des écritures, sans perte (testé dans scripts/merge/)
+    matchActions.ts          Rouvrir les votes, fusionner deux matchs (exécution Firestore)
     matches.ts               Matchs à venir : ouverture des votes le jour J, prochain match, heure, lien Maps
     calendar/                Agenda Sportlink : lecture iCal, plan de synchronisation, bouton « Mettre à jour » (navigateur)
     activity.ts              Journal d'activité
