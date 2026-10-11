@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Mic, MicOff, PenLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
@@ -56,14 +56,15 @@ export function MatchVotePage() {
   const defaultTab = (status: Match['status'] | undefined): Tab =>
     status === 'closed' ? 'resume' : canAnimate ? 'console' : status === 'voting' ? 'ticket' : status === 'reading' ? 'live' : 'resume'
   const [tab, setTab] = useState<Tab>(asked && TABS.includes(asked) ? asked : 'resume')
-  const chosen = useRef(Boolean(asked))
+  // Match pour lequel l'onglet a été choisi (une ancienne adresse de match fusionné redirige vers un autre).
+  const chosen = useRef<string | null>(asked ? (matchId ?? null) : null)
   useEffect(() => {
     if (!tabs.some((t) => t.key === tab)) setTab(tabs[0].key)
   }, [tabs, tab])
   // Une fois le match chargé, on se place sur l'onglet utile (sauf si le lien en demandait un).
   useEffect(() => {
-    if (match && !chosen.current) {
-      chosen.current = true
+    if (match && !match.mergedInto && chosen.current !== match.id) {
+      chosen.current = match.id
       setTab(defaultTab(match.status))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,6 +86,8 @@ export function MatchVotePage() {
   const votePending = Boolean(identity) && myTicket?.status !== 'submitted'
 
   if (match === undefined || players.loading) return <Spinner />
+  // Doublon fusionné : ses votes sont sur le match conservé.
+  if (match?.mergedInto) return <Navigate to={`/votes/${match.mergedInto}`} replace />
   if (match === null)
     return (
       <div>

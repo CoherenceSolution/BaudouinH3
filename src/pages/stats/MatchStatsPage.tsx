@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { ArrowLeft, Plus, Trash2, Handshake, Goal as GoalIcon } from 'lucide-react'
 import { db } from '@/lib/firebase'
@@ -43,6 +43,7 @@ export function MatchStatsPage() {
 
   if (match === undefined || players.loading) return <Spinner />
   if (!match) return <p className="text-muted">Ce match n’existe plus.</p>
+  if (match.mergedInto) return <Navigate to={`/stats/${match.mergedInto}`} replace />
 
   return (
     <div>
