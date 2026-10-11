@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Mic, MicOff, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
@@ -66,6 +66,8 @@ export function MatchVotePage() {
   const votePending = Boolean(identity) && myTicket?.status !== 'submitted'
 
   if (match === undefined || players.loading) return <Spinner />
+  // Doublon fusionné : ses votes sont sur le match conservé.
+  if (match?.mergedInto) return <Navigate to={`/votes/${match.mergedInto}`} replace />
   if (match === null)
     return (
       <div>

@@ -79,6 +79,10 @@ export interface Match {
   voteTimerMinutes?: number | null
   /** Nom de la personne qui a lancé le minuteur. */
   voteTimerBy?: string | null
+  /** Doublon fusionné dans un autre match : masqué partout, ses liens mènent au match conservé. */
+  mergedInto?: string | null
+  mergedAt?: Timestamp | null
+  mergedBy?: string | null
   createdBy: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
@@ -154,6 +158,10 @@ export interface Ticket {
   enteredByName?: string | null
   /** Nom de la dernière personne (orateur, secrétaire, admin) qui a corrigé un nom dans ce vote. */
   correctedByName?: string | null
+  /** Match en double d'où vient ce vote (fusion de deux matchs). */
+  mergedFrom?: string | null
+  /** Second vote du même auteur, récupéré lors d'une fusion : gardé et signalé à l'orateur. */
+  mergeDuplicate?: boolean
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

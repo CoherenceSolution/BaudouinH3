@@ -23,11 +23,14 @@ export function usePlayers(includeInactive = false) {
   return { ...res, data, byId }
 }
 
-/** Tous les matchs, les plus récents d'abord. Un match à venir apparaît « votes ouverts » le jour même. */
+/**
+ * Tous les matchs, les plus récents d'abord. Un match à venir apparaît « votes ouverts » le jour même.
+ * Un doublon fusionné dans un autre match n'apparaît plus nulle part.
+ */
 export function useMatches() {
   const { user } = useAuth()
   const res = useCollection<Match>(() => (user ? query(collection(db, 'matches'), orderBy('date', 'desc')) : null), [user?.uid])
-  const data = useMemo(() => res.data.map((m) => withEffectiveStatus(m)), [res.data])
+  const data = useMemo(() => res.data.filter((m) => !m.mergedInto).map((m) => withEffectiveStatus(m)), [res.data])
   return { ...res, data }
 }
 

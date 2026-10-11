@@ -3,7 +3,7 @@
 // Il couvre : installation, création de match, surnoms, la coum, amendes, buts, minuteur des votes, trois votants,
 // vote « commentaire d'abord », orateur (vote, minuteur et clôture depuis sa console), file de lecture et « Valider le vote »,
 // lecture guidée dans la console, vote hors plateforme, correction d'un nom, lecture en direct (alerte à 3 voix),
-// coups de cœur, listes maison, rétrospective, mobile.
+// coups de cœur, fusion de deux matchs en double, listes maison, rétrospective, mobile.
 import { chromium } from 'playwright'
 
 const BASE = 'http://localhost:5173'
@@ -421,6 +421,61 @@ await admin.getByText('Votes rouverts').first().waitFor()
 await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
 await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await admin.getByText('Lecture des votes terminée').first().waitFor()
+
+// 7f. Deux matchs en double, des votes ouverts des deux côtés : l'admin crée un 3e match qui reçoit tout, rien ne se perd.
+const dupIds = []
+for (let i = 0; i < 2; i++) {
+  await admin.goto(BASE + '/votes')
+  await admin.getByRole('button', { name: 'Nouveau match' }).click()
+  await admin.getByLabel('Adversaire').fill('Doublon HC')
+  await admin.getByRole('button', { name: 'Créer et ouvrir les votes' }).click()
+  await admin.getByRole('dialog').waitFor({ state: 'hidden' })
+}
+await admin.goto(BASE + '/votes')
+await admin.locator('a[href^="/votes/"]', { hasText: 'Doublon HC' }).nth(1).waitFor()
+for (const a of await admin.locator('a[href^="/votes/"]', { hasText: 'Doublon HC' }).all()) dupIds.push((await a.getAttribute('href')).split('/').pop())
+async function voteIn(p, id, best) {
+  await p.goto(BASE + `/votes/${id}`)
+  await p.getByText('Vous votez en tant que').waitFor()
+  await fillTicket(p, best, 'Leyder', 'Le doublé', 'Vote du match en double.')
+  await p.getByRole('button', { name: 'Envoyer mon vote' }).click()
+  await p.getByText('Vote envoyé', { exact: true }).waitFor()
+}
+// Ronny a voté dans les deux matchs, Mathis seulement dans le second.
+await voteIn(ronny, dupIds[0], 'Vigne')
+await voteIn(ronny, dupIds[1], 'Verast')
+await voteIn(mathis, dupIds[1], 'Vigne')
+await admin.goto(BASE + '/admin/matchs')
+const dupRow = admin.locator('div.flex.items-center', { has: admin.getByText('Doublon HC') }).filter({ has: admin.getByRole('button', { name: 'Fusionner' }) }).first()
+await dupRow.getByRole('button', { name: 'Fusionner' }).click()
+const mergeDlg = admin.getByRole('dialog')
+await mergeDlg.getByText('Match en double').waitFor()
+// Le doublon probable (même jour, même adversaire) est proposé d'office.
+const proposed = await mergeDlg.locator('select').inputValue()
+if (!dupIds.includes(proposed)) throw new Error('Le doublon devrait être proposé d’office')
+await mergeDlg.getByText(/Le nouveau match recevra tout le contenu des deux : 3 votes/).waitFor()
+await mergeDlg.getByText(/a voté dans les deux matchs : les deux votes sont gardés/).waitFor()
+await shot(admin, '14d-fusion-apercu')
+await mergeDlg.getByRole('button', { name: 'Créer le match fusionné' }).click()
+await admin.getByText(/Matchs fusionnés/).first().waitFor()
+await admin.getByRole('dialog').waitFor({ state: 'hidden' })
+if (await admin.getByText('Doublon HC').count() !== 1) throw new Error('Seul le nouveau match devrait rester dans la liste')
+// Les deux anciennes adresses mènent au nouveau match, qui a les trois votes (dont le second vote de Ronny, signalé).
+await admin.goto(BASE + `/votes/${dupIds[0]}`)
+await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
+const keptUrl = admin.url()
+if (dupIds.some((id) => keptUrl.endsWith(id))) throw new Error('Un nouveau match devrait avoir été créé')
+await admin.goto(BASE + `/votes/${dupIds[1]}`)
+await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
+await admin.waitForURL(keptUrl)
+await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByText('Doublon de fusion : 2ᵉ vote du même auteur').first().waitFor()
+await admin.getByRole('button', { name: 'Participation' }).click()
+await admin.getByText(/2 envoyés/).waitFor()
+await admin.getByRole('button', { name: 'Console orateur', exact: true }).click()
+for (let i = 0; i < 3; i++) await admin.getByRole('button', { name: 'Valider le vote' }).click()
+await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).waitFor()
+await shot(admin, '14e-fusion-lecture')
 
 // 8. Admin : rétrospective + activité + accueil
 await admin.goto(BASE + '/historique')

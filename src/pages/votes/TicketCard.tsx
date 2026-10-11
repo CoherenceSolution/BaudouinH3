@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone, Flame, CheckCheck, ClipboardPen, Pencil } from 'lucide-react'
+import { Heart, Star, Bookmark, Eye, EyeOff, Smartphone, Megaphone, Flame, CheckCheck, ClipboardPen, Pencil, Copy } from 'lucide-react'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { useCategories } from '@/hooks/useSettings'
 import { cx, playerName } from '@/lib/format'
@@ -64,6 +64,7 @@ export function TicketCard({ ticket, players, likes, showAuthor, speakerView, ac
         </span>
         {readBadge && <Badge tone="accent"><CheckCheck className="size-3" /> Lu</Badge>}
         {speakerView && ticket.manual && <Badge tone="violet"><ClipboardPen className="size-3" /> Hors plateforme</Badge>}
+        {speakerView && ticket.mergeDuplicate && <Badge tone="gold"><Copy className="size-3" /> Doublon de fusion : 2ᵉ vote du même auteur</Badge>}
         {speakerView && ticket.correctedByName && <Badge><Pencil className="size-3" /> Nom corrigé par {ticket.correctedByName}</Badge>}
         {ticket.starred && <Badge tone="gold"><Star className="size-3 fill-current" /> Petite étoile</Badge>}
         {ticket.saved && <Badge tone="sky"><Bookmark className="size-3 fill-current" /> Conservé</Badge>}
