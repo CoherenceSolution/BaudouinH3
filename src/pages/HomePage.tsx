@@ -3,13 +3,14 @@ import { ArrowRight, Clock, Euro, MapPin, Mic, Trophy, Vote, Target, Sparkles } 
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useAllGoals, useAllReadTickets, useFines, useMatches, usePlayers } from '@/hooks/useData'
-import { currentSeason, formatDate, matchTitle, playerName, seasonOf } from '@/lib/format'
+import { currentSeason, formatDate, matchTitle, playerName, seasonOf, todayIso } from '@/lib/format'
 import { formatTime, isPlayed, nextMatch } from '@/lib/matches'
 import { goalTotals, nominationRanking, readTickets } from '@/lib/rankings'
 import { formatEuro } from '@/lib/fines'
 import { useCategories } from '@/hooks/useSettings'
 import { Card, Stat } from '@/components/ui'
 import { MatchCard, MatchStatusBadge } from '@/components/MatchCard'
+import { MatchSummary } from '@/components/MatchSummary'
 
 export function HomePage() {
   const { identity, staff, isStaff } = useAuth()
@@ -25,7 +26,10 @@ export function HomePage() {
   const me = identity ? players.byId.get(identity.playerId) : null
   const live = matches.data.find((m) => m.status === 'voting' || m.status === 'reading')
   const next = nextMatch(matches.data)
-  const recent = matches.data.filter((m) => m.status === 'closed').slice(0, 3)
+  // Match du jour (ou, à défaut, le dernier joué) : résumé condensé sur l'accueil.
+  const featured = live ?? matches.data.find((m) => m.status !== 'scheduled')
+  const featuredToday = featured?.date === todayIso()
+  const recent = matches.data.filter((m) => m.status === 'closed' && m.id !== featured?.id).slice(0, 3)
 
   const seasonMatchIds = new Set(matches.data.filter((m) => isPlayed(m) && seasonOf(m.date) === season).map((m) => m.id))
   const seasonGoals = goals.data.filter((g) => seasonMatchIds.has(g.matchId))
@@ -78,6 +82,20 @@ export function HomePage() {
             </Link>
           )}
         </Card>
+      )}
+
+      {featured && (
+        <section>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[15px] font-semibold">
+              {featuredToday ? 'Match du jour' : 'Dernier match'} · <span className="font-normal text-muted">{matchTitle(featured)}{featuredToday ? '' : `, ${formatDate(featured.date, { day: 'numeric', month: 'long' })}`}</span>
+            </h2>
+            <Link to={`/votes/${featured.id}?tab=resume`} className="inline-flex items-center gap-1 text-[13px] font-medium text-muted hover:text-ink">
+              Page du match <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+          <MatchSummary match={featured} />
+        </section>
       )}
 
       {next && (

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Mic, MicOff, RotateCcw } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Mic, MicOff, PenLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useSpeakerLead } from '@/hooks/useSpeakerLead'
@@ -14,6 +14,7 @@ import { formatTime } from '@/lib/matches'
 import { Button, Spinner, Tabs } from '@/components/ui'
 import { MatchStatusBadge, ResultPill, VenueLink } from '@/components/MatchCard'
 import { UpcomingMatchPanel } from '@/components/UpcomingMatch'
+import { MatchSummary } from '@/components/MatchSummary'
 import { VoteCountdown } from '@/components/VoteTimer'
 import { TicketForm } from './TicketForm'
 import { SpeakerConsole } from './SpeakerConsole'
@@ -23,7 +24,8 @@ import { Participation } from './Participation'
 import { ChooseIdentity } from './ChooseIdentity'
 import { CoumPanel } from './CoumPanel'
 
-type Tab = 'ticket' | 'console' | 'participation' | 'live' | 'rankings' | 'coum'
+type Tab = 'resume' | 'ticket' | 'console' | 'participation' | 'live' | 'rankings' | 'coum'
+const TABS: Tab[] = ['resume', 'ticket', 'console', 'participation', 'live', 'rankings', 'coum']
 
 export function MatchVotePage() {
   const { matchId } = useParams<{ matchId: string }>()
@@ -40,20 +42,37 @@ export function MatchVotePage() {
 
   // L'orateur et le staff ont tout au même endroit : la console contient aussi leur propre vote.
   const tabs = useMemo(() => {
-    const list: { key: Tab; label: string }[] = []
+    const list: { key: Tab; label: string }[] = [{ key: 'resume', label: 'Résumé' }]
     if (canAnimate) list.push({ key: 'console', label: 'Console orateur' }, { key: 'participation', label: 'Participation' })
     else list.push({ key: 'ticket', label: 'Mon vote' })
     list.push({ key: 'live', label: 'En direct' }, { key: 'rankings', label: 'Classement' }, { key: 'coum', label: 'Coum' })
     return list
   }, [canAnimate])
 
-  const [tab, setTab] = useState<Tab>(tabs[0].key)
+  // Onglet d'arrivée : celui demandé dans le lien (?tab=coum), sinon ce qui compte à ce moment de la soirée :
+  // la console pour l'orateur et le staff, le vote pour les autres, le résumé une fois la lecture terminée.
+  const [params] = useSearchParams()
+  const asked = params.get('tab') as Tab | null
+  const defaultTab = (status: Match['status'] | undefined): Tab =>
+    status === 'closed' ? 'resume' : canAnimate ? 'console' : status === 'voting' ? 'ticket' : status === 'reading' ? 'live' : 'resume'
+  const [tab, setTab] = useState<Tab>(asked && TABS.includes(asked) ? asked : 'resume')
+  const chosen = useRef(Boolean(asked))
   useEffect(() => {
     if (!tabs.some((t) => t.key === tab)) setTab(tabs[0].key)
   }, [tabs, tab])
-  // Prendre le rôle d'orateur ouvre directement la console.
+  // Une fois le match chargé, on se place sur l'onglet utile (sauf si le lien en demandait un).
   useEffect(() => {
-    if (canAnimate) setTab('console')
+    if (match && !chosen.current) {
+      chosen.current = true
+      setTab(defaultTab(match.status))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match?.id])
+  // Prendre le rôle d'orateur ouvre directement la console.
+  const wasAnimating = useRef(canAnimate)
+  useEffect(() => {
+    if (canAnimate && !wasAnimating.current) setTab('console')
+    wasAnimating.current = canAnimate
   }, [canAnimate])
 
   // Un votant bascule automatiquement sur la lecture quand l'orateur commence.
@@ -92,6 +111,10 @@ export function MatchVotePage() {
             {match.speakerName && !upcoming && <span>Orateur : {match.speakerName}</span>}
           </div>
           {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
+          {/* Score pas encore encodé : un geste depuis l'en-tête. */}
+          {isStaff && !upcoming && (match.homeScore == null || match.awayScore == null) && tab !== 'resume' && (
+            <Button size="sm" variant="secondary" className="mr-2 mt-2" icon={<PenLine className="size-4" />} onClick={() => setTab('resume')}>Entrer le score</Button>
+          )}
           {/* L'admin rouvre les votes d'un match terminé ou en lecture, directement depuis sa page. */}
           {isAdmin && (match.status === 'closed' || match.status === 'reading') && <ReopenButton match={match} />}
           {/* Le rôle d'orateur se prend ici, sans se déconnecter (le staff a la console d'office). */}
@@ -117,6 +140,7 @@ export function MatchVotePage() {
           {/* Le compte à rebours reste visible partout, console comprise. */}
           <VoteCountdown match={match} pending={votePending} />
 
+          {tab === 'resume' && <MatchSummary match={match} onOpenTab={setTab} />}
           {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
           {tab === 'console' && <SpeakerConsole match={match} players={players.byId} playerList={players.data} tickets={tickets.data} ticketsLoaded={!tickets.loading} likes={likes.data} />}
           {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}

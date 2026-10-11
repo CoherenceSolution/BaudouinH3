@@ -85,7 +85,7 @@ export function MatchStatsPage() {
   )
 }
 
-function AddGoalModal({ match, nextOrder, onClose }: { match: Match; nextOrder: number; onClose: () => void }) {
+export function AddGoalModal({ match, nextOrder, onClose }: { match: Match; nextOrder: number; onClose: () => void }) {
   const players = usePlayers()
   const actor = useActor()
   const toast = useToast()
