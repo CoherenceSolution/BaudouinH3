@@ -18,6 +18,8 @@ export interface ExistingMatch extends Partial<SyncedData> {
   /** 'sportlink' pour un match importé ; absent pour un match saisi à la main. */
   source?: string
   externalId?: string
+  /** Doublon fusionné dans un autre match (voir lib/matchMerge) : masqué, jamais repris tel quel. */
+  mergedInto?: string | null
 }
 
 /** Lien vers l'agenda, ajouté quand un match est retrouvé sous un nouvel identifiant Sportlink. */
@@ -65,29 +67,43 @@ const sameOpponent = (a: { opponent: string; home?: boolean }, b: { opponent: st
  */
 export function planSync(feed: (FeedMatch & { id: string })[], existing: ExistingMatch[], today: string): SyncPlan {
   const byId = new Map(existing.map((m) => [m.id, m]))
-  const byExternal = new Map(existing.filter((m) => m.externalId).map((m) => [m.externalId!, m]))
+  // Un match fusionné et le match qui l'a remplacé peuvent porter le même identifiant : le second l'emporte.
+  const byExternal = new Map<string, ExistingMatch>()
+  for (const m of [...existing.filter((e) => e.mergedInto), ...existing.filter((e) => !e.mergedInto)]) {
+    if (m.externalId) byExternal.set(m.externalId, m)
+  }
+  /** Un doublon fusionné renvoie au match qui le remplace (fusions successives comprises). */
+  const resolve = (m: ExistingMatch | undefined) => {
+    for (let i = 0; m?.mergedInto && i < 10; i++) m = byId.get(m.mergedInto)
+    return m?.mergedInto ? undefined : m
+  }
   const plan: SyncPlan = { create: [], update: [], cancel: [], remove: [] }
 
   // Dédoublonnage de l'agenda, puis matchs déjà reliés par leur identifiant.
   const events: (FeedMatch & { id: string })[] = []
   const claimed = new Set<string>()
   const direct = new Map<string, ExistingMatch>()
+  /** Événements dont le match a été fusionné : jamais recréés, même si le match conservé est déjà pris. */
+  const absorbed = new Set<string>()
   for (const m of feed) {
     if (events.some((e) => e.id === m.id)) continue
     events.push(m)
-    const found = byId.get(m.id) ?? byExternal.get(m.externalId)
+    const raw = byId.get(m.id) ?? byExternal.get(m.externalId)
+    if (raw?.mergedInto) absorbed.add(m.id)
+    const found = resolve(raw)
     if (found && !claimed.has(found.id)) {
       claimed.add(found.id)
       direct.set(m.id, found)
     }
   }
 
-  const free = (m: ExistingMatch) => !claimed.has(m.id) && m.date >= today
+  const free = (m: ExistingMatch) => !claimed.has(m.id) && !m.mergedInto && m.date >= today
   const known = new Set<string>()
   for (const m of events) {
     // Les matchs passés ne sont ni importés ni modifiés : l'historique reste tel quel.
     if (m.date < today) continue
     let before = direct.get(m.id)
+    if (!before && absorbed.has(m.id)) continue
     if (!before) {
       before = existing.find((e) => free(e) && sameMatchKey(e) === sameMatchKey(m))
       if (!before) {
@@ -115,7 +131,7 @@ export function planSync(feed: (FeedMatch & { id: string })[], existing: Existin
   const dates = events.map((e) => e.date).sort()
   const [first, last] = [dates[0], dates.at(-1)]
   for (const m of existing) {
-    if (m.source !== 'sportlink' || claimed.has(m.id) || m.date <= today || m.status !== 'scheduled') continue
+    if (m.source !== 'sportlink' || m.mergedInto || claimed.has(m.id) || m.date <= today || m.status !== 'scheduled') continue
     if (m.cancelled) {
       // Doublon d'un match bien présent dans l'agenda (ancien identifiant) : on le retire de la liste.
       if (known.has(sameMatchKey(m))) plan.remove.push({ id: m.id, before: m })

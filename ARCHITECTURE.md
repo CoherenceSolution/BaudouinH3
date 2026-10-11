@@ -173,7 +173,7 @@ Points de conception :
   Chaque document est créé et supprimé dans la même écriture atomique ; un second passage rattrape un vote envoyé
   sur le doublon pendant la fusion. Si l'un des deux matchs a ses votes ouverts, ils le restent. Les deux anciens
   ne sont pas supprimés (un match Sportlink supprimé reviendrait à la synchronisation) : ils sont marqués `mergedInto`,
-  masqués partout, et leurs liens mènent au nouveau match. Le nouveau match n'est pas relié à Sportlink. La fusion est journalisée avec le détail de ce qui a été déplacé.
+  masqués partout, et leurs liens mènent au nouveau match. Le nouveau match n'est pas relié à Sportlink à la création ; la synchronisation suivante, qui suit `mergedInto`, le relie à l'événement des doublons (sans jamais les recréer). La fusion est journalisée avec le détail de ce qui a été déplacé.
 - **Saisons** : août → juillet, calculées depuis la date (`2026-27`). Tout est filtrable par saison.
 - **Journal d'activité — toute modification est traçable**, en ajout seul (rien ne peut y être modifié ni supprimé) :
   chaque création, modification ou suppression écrit une ligne lisible avec qui, quoi et quand

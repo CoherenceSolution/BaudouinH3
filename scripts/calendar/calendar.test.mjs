@@ -152,6 +152,23 @@ test('les doublons annulés laissés par une ancienne synchronisation sont retir
   assert.deepEqual(writes[0], { kind: 'delete', path: 'matches/sl_vieux' })
 })
 
+test('match fusionné : l’agenda met à jour le match conservé, sans recréer le doublon', async () => {
+  const [a, b] = await withIds([ev('uid-a', '2026-10-04', 'Dragons H4'), ev('uid-b', '2026-10-04', 'Dragons H4', { time: '20:00' })])
+  const existing = [
+    { ...a, source: 'sportlink', status: 'closed', mergedInto: 'fusion' },
+    { ...b, source: 'sportlink', status: 'closed', mergedInto: 'fusion' },
+    { id: 'fusion', status: 'scheduled', date: '2026-10-04', time: '14:30', opponent: 'Dragons H4', home: true, venue: 'Club', details: null },
+  ]
+  const plan = planSync([a, b], existing, TODAY)
+  assert.equal(plan.create.length, 0, 'aucun doublon recréé')
+  assert.equal(plan.cancel.length + plan.remove.length, 0)
+  assert.deepEqual(plan.update.map((u) => [u.id, u.data.externalId, u.data.source]), [['fusion', 'uid-a', 'sportlink']])
+  // Synchronisation suivante : le match conservé est relié, plus rien à écrire.
+  const linked = existing.map((e) => (e.id === 'fusion' ? { ...e, externalId: 'uid-a', source: 'sportlink' } : e))
+  const again = planSync([a, b], linked, TODAY)
+  assert.equal(again.create.length + again.update.length + again.cancel.length + again.remove.length, 0)
+})
+
 test('une synchronisation relancée sans changement n’écrit aucun match', async () => {
   const feed = await withIds(eventsToMatches(ICS))
   const first = planSync(feed, [], TODAY)

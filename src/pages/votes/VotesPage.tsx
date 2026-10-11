@@ -7,7 +7,7 @@ import { Button, EmptyState, PageHeader, Spinner, Tabs } from '@/components/ui'
 import { FeaturedMatchCard, MatchCard } from '@/components/MatchCard'
 import { MatchFormModal } from '@/components/MatchFormModal'
 import type { Match } from '@/lib/types'
-import { formatDate, seasonOf } from '@/lib/format'
+import { formatDate, seasonOf, todayIso } from '@/lib/format'
 import { matchMatchesQuery, relativeDay, todayMatches, upcomingMatches } from '@/lib/matches'
 import { useCategories } from '@/hooks/useSettings'
 
@@ -45,13 +45,15 @@ export function VotesPage() {
     const shown = new Set(featured.map((m) => m.id))
     const rest = matches.data.filter((m) => !shown.has(m.id) && matchMatchesQuery(m, q))
     const isCancelled = (m: Match) => Boolean(m.cancelled) && m.status === 'scheduled'
-    const upcomingIds = new Set(upcomingMatches(rest).map((m) => m.id))
+    // Classement par date : un match futur dont les votes ont été ouverts à la main reste « à venir ».
+    const now = todayIso()
+    const kept = rest.filter((m) => !isCancelled(m))
     return {
       featured,
       isToday: today.length > 0,
-      upcoming: upcomingMatches(rest).filter((m) => !isCancelled(m)),
+      upcoming: kept.filter((m) => m.date >= now).sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? ''))),
       // Les matchs arrivent triés du plus récent au plus ancien.
-      played: rest.filter((m) => !upcomingIds.has(m.id) && !isCancelled(m)),
+      played: kept.filter((m) => m.date < now),
       cancelled: rest.filter(isCancelled),
     }
   }, [matches.data, q])
