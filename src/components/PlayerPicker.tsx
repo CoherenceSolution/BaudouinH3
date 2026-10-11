@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Check, Plus, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronDown, Plus, Search, X } from 'lucide-react'
 import type { Player } from '@/lib/types'
 import { cx, playerMatches, playerName, playerRealName } from '@/lib/format'
 import { Avatar, Button, Input } from './ui'
@@ -19,6 +19,11 @@ interface Props {
   compact?: boolean
   /** Le staff peut ajouter un joueur manquant directement depuis le sélecteur. */
   allowCreate?: boolean
+  /**
+   * Liste repliée par défaut (menu déroulant) : seule la barre de recherche est visible ;
+   * les noms n'apparaissent qu'au focus, à la frappe ou via la flèche.
+   */
+  dropdown?: boolean
 }
 
 /**
@@ -27,8 +32,28 @@ interface Props {
  * Sur téléphone : liste verticale à grandes lignes, faciles à lire et à toucher.
  * Sur grand écran : grille sur deux ou trois colonnes.
  */
-export function PlayerPicker({ players, value, onChange, label, placeholder = 'Rechercher un joueur (nom ou surnom)…', exclude = [], allowNone, compact, allowCreate }: Props) {
+export function PlayerPicker({ players, value, onChange, label, placeholder = 'Rechercher un joueur (nom ou surnom)…', exclude = [], allowNone, compact, allowCreate, dropdown }: Props) {
   const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const showList = !dropdown || open
+
+  // Menu déroulant : un appui en dehors du sélecteur referme la liste.
+  useEffect(() => {
+    if (!dropdown || !open) return
+    const onDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [dropdown, open])
+
+  function pick(id: string | null) {
+    setOpen(false)
+    setQ('')
+    onChange(id)
+  }
   const { isStaff } = useAuth()
   const [creating, setCreating] = useState(false)
   const list = useMemo(
@@ -38,7 +63,7 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
   const selected = players.find((p) => p.id === value)
 
   return (
-    <div>
+    <div ref={rootRef}>
       {label && <label className="label">{label}</label>}
       {selected ? (
         <div className="flex items-center gap-3 rounded-xl border border-ink bg-ink px-3 py-2.5 text-white">
@@ -55,11 +80,31 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
         <>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="field pl-9" />
+            <input
+              ref={inputRef}
+              value={q}
+              onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false) }}
+              placeholder={placeholder}
+              className={cx('field pl-9', dropdown && 'pr-11')}
+              role={dropdown ? 'combobox' : undefined}
+              aria-expanded={dropdown ? open : undefined}
+            />
+            {dropdown && (
+              <button
+                type="button"
+                onClick={() => { if (open) setOpen(false); else { setOpen(true); inputRef.current?.focus() } }}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted hover:bg-slate-100 hover:text-ink"
+                aria-label={open ? 'Fermer la liste des joueurs' : 'Afficher la liste des joueurs'}
+              >
+                <ChevronDown className={cx('size-5 transition', open && 'rotate-180')} />
+              </button>
+            )}
           </div>
-          <div className={cx('mt-2 grid max-h-[19rem] gap-1.5 overflow-y-auto overscroll-contain rounded-xl border border-line bg-slate-50/60 p-1.5', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
+          {showList && <div className={cx('mt-2 grid max-h-[19rem] gap-1.5 overflow-y-auto overscroll-contain rounded-xl border border-line bg-slate-50/60 p-1.5', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
             {allowNone && (
-              <button type="button" onClick={() => onChange(null)} className="flex min-h-12 items-center gap-3 rounded-xl border border-dashed border-line px-3 text-left text-[15px] text-muted hover:bg-slate-50">
+              <button type="button" onClick={() => pick(null)} className="flex min-h-12 items-center gap-3 rounded-xl border border-dashed border-line px-3 text-left text-[15px] text-muted hover:bg-slate-50">
                 Aucun
               </button>
             )}
@@ -67,7 +112,7 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
               <button
                 key={p.id}
                 type="button"
-                onClick={() => onChange(p.id)}
+                onClick={() => pick(p.id)}
                 className="flex min-h-12 items-center gap-3 rounded-xl border border-line bg-surface px-3 text-left text-[15px] font-medium text-ink transition hover:border-ink hover:bg-slate-50 active:bg-slate-100"
               >
                 <Avatar player={p} size="sm" />
@@ -79,7 +124,7 @@ export function PlayerPicker({ players, value, onChange, label, placeholder = 'R
               </button>
             ))}
             {list.length === 0 && <p className="col-span-full py-3 text-center text-[13px] text-muted">Aucun joueur trouvé.</p>}
-          </div>
+          </div>}
           {allowCreate && isStaff && (
             creating ? (
               <QuickAddPlayer initial={q} onDone={(id) => { setCreating(false); if (id) onChange(id) }} />
