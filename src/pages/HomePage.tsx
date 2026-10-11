@@ -3,9 +3,10 @@ import { ArrowRight, Clock, Euro, MapPin, Mic, Trophy, Vote, Target, Sparkles } 
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useAllGoals, useAllReadTickets, useFines, useMatches, usePlayers } from '@/hooks/useData'
-import { currentSeason, formatDate, matchTitle, playerName, seasonOf } from '@/lib/format'
+import type { Player } from '@/lib/types'
+import { currentSeason, formatDate, matchTitle, playerName, pluralize, seasonOf } from '@/lib/format'
 import { formatTime, isPlayed, nextMatch } from '@/lib/matches'
-import { goalTotals, nominationRanking, readTickets } from '@/lib/rankings'
+import { goalTotals, leaders, readTickets, titleRanking, type RankRow } from '@/lib/rankings'
 import { formatEuro } from '@/lib/fines'
 import { useCategories } from '@/hooks/useSettings'
 import { Card, Stat } from '@/components/ui'
@@ -31,7 +32,7 @@ export function HomePage() {
   const seasonGoals = goals.data.filter((g) => seasonMatchIds.has(g.matchId))
   const totals = goalTotals(seasonGoals)
   const seasonTickets = readTickets(tickets.data.filter((t) => seasonMatchIds.has(t.matchId)))
-  const best = nominationRanking(seasonTickets, 'best')[0]
+  const seasonMatchCount = new Set(seasonTickets.map((t) => t.matchId)).size
   const unpaid = fines.data.filter((f) => !f.paid).reduce((s, f) => s + f.amount, 0)
 
   const hour = new Date().getHours()
@@ -102,10 +103,20 @@ export function HomePage() {
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label={categories[0].label} value={best ? playerName(players.byId.get(best.playerId)) : '—'} sub={best ? `${best.count} voix cette saison` : 'Aucune lecture'} tone="gold" />
-        <Stat label="Meilleur buteur" value={totals.scorers[0] ? playerName(players.byId.get(totals.scorers[0].playerId)) : '—'} sub={totals.scorers[0] ? `${totals.scorers[0].count} buts` : 'Aucun but encodé'} tone="accent" />
-        <Stat label="Meilleur passeur" value={totals.assisters[0] ? playerName(players.byId.get(totals.assisters[0].playerId)) : '—'} sub={totals.assisters[0] ? `${totals.assisters[0].count} passes` : 'Aucune passe encodée'} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {categories.map((c, i) => (
+          <LeaderStat
+            key={c.key}
+            label={`${c.emoji} ${c.label}`}
+            rows={titleRanking(seasonTickets, c.key)}
+            players={players.byId}
+            describe={(r, tied) => `${r.count} fois${tied ? ' chacun' : ''} sur ${pluralize(seasonMatchCount, 'match', 'matchs')}${tied ? '' : ` · ${pluralize(r.votes ?? 0, 'voix', 'voix')}`}`}
+            empty="Aucune lecture"
+            tone={i === 0 ? 'gold' : i === 1 ? 'rose' : 'neutral'}
+          />
+        ))}
+        <LeaderStat label="Meilleur buteur" rows={totals.scorers} players={players.byId} describe={(r, tied) => `${pluralize(r.count, 'but')}${tied ? ' chacun' : ''}`} empty="Aucun but encodé" tone="accent" />
+        <LeaderStat label="Meilleur passeur" rows={totals.assisters} players={players.byId} describe={(r, tied) => `${pluralize(r.count, 'passe')}${tied ? ' chacun' : ''}`} empty="Aucune passe encodée" />
         <Stat label="Amendes impayées" value={formatEuro(unpaid)} sub={`${fines.data.filter((f) => !f.paid).length} en attente`} tone="rose" />
       </div>
 
@@ -129,6 +140,23 @@ export function HomePage() {
         </section>
       )}
     </div>
+  )
+}
+
+/** Tête d'un classement : affiche tous les premiers ex æquo plutôt qu'un seul nom arbitraire. */
+function LeaderStat({ label, rows, players, describe, empty, tone }: { label: string; rows: RankRow[]; players: Map<string, Player>; describe: (r: RankRow, tied: boolean) => string; empty: string; tone?: 'neutral' | 'accent' | 'rose' | 'gold' }) {
+  const top = leaders(rows)
+  if (top.length === 0) return <Stat label={label} value="—" sub={empty} tone={tone} />
+  const names = top.map((r) => playerName(players.get(r.playerId)))
+  if (top.length === 1) return <Stat label={label} value={names[0]} sub={describe(top[0], false)} tone={tone} />
+  const shown = names.length > 3 ? [...names.slice(0, 3), `+${names.length - 3}`] : names
+  return (
+    <Stat
+      label={`${label} · ${top.length} ex æquo`}
+      value={<span className="block text-[16px] leading-snug" title={names.join(', ')}>{shown.join(' · ')}</span>}
+      sub={describe(top[0], true)}
+      tone={tone}
+    />
   )
 }
 

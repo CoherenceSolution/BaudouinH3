@@ -4,10 +4,10 @@ import { Star, Bookmark, Sparkles, Trophy } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useAllGoals, useAllLikes, useAllReadTickets, useFines, useMatches, usePlayers, useStatCategories, useStatEntries } from '@/hooks/useData'
 import { isPlayed } from '@/lib/matches'
-import { goalTotals, likeCounts, nominationRanking, readTickets } from '@/lib/rankings'
+import { goalTotals, leaders, likeCounts, nominationRanking, readTickets, titleRanking } from '@/lib/rankings'
 import { currentSeason, formatDate, matchResult, matchTitle, playerName, seasonOf } from '@/lib/format'
 import { formatEuro } from '@/lib/fines'
-import { Card, PageHeader, SectionTitle, Select, Spinner, Stat } from '@/components/ui'
+import { Card, Chip, PageHeader, SectionTitle, Select, Spinner, Stat } from '@/components/ui'
 import { RankingList } from '@/components/RankingList'
 import { ResultPill } from '@/components/MatchCard'
 import { TicketCard } from '../votes/TicketCard'
@@ -40,9 +40,12 @@ export function HistoryPage() {
   const seasonMatches = useMemo(() => matches.data.filter((m) => seasonOf(m.date) === season), [matches.data, season])
   const ids = useMemo(() => new Set(seasonMatches.map((m) => m.id)), [seasonMatches])
   const read = useMemo(() => readTickets(tickets.data.filter((t) => ids.has(t.matchId))), [tickets.data, ids])
-  const best = useMemo(() => nominationRanking(read, 'best'), [read])
-  const worst = useMemo(() => nominationRanking(read, 'worst'), [read])
-  const moment = useMemo(() => nominationRanking(read, 'moment'), [read])
+  // Par défaut : combien de fois chacun a été désigné sur un match ; le total de voix reste consultable.
+  const [mode, setMode] = useState<'titles' | 'votes'>('titles')
+  const voteRankings = useMemo(
+    () => categories.map((c) => ({ category: c, rows: mode === 'titles' ? titleRanking(read, c.key) : nominationRanking(read, c.key) })),
+    [categories, read, mode],
+  )
   const counts = useMemo(() => likeCounts(likes.data.filter((l) => ids.has(l.matchId))), [likes.data, ids])
   const starred = useMemo(() => read.filter((t) => t.starred), [read])
   const saved = useMemo(() => read.filter((t) => t.saved && !t.starred), [read])
@@ -97,18 +100,26 @@ export function HistoryPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="p-5">
-          <SectionTitle>{categories[0].emoji} {categories[0].label} de la saison</SectionTitle>
-          <RankingList rows={best} players={players.byId} tone="gold" unit="voix" empty="Aucun vote lu cette saison." />
-        </Card>
-        <Card className="p-5">
-          <SectionTitle>{categories[1].emoji} {categories[1].label} de la saison</SectionTitle>
-          <RankingList rows={worst} players={players.byId} tone="rose" unit="voix" empty="Aucun vote lu cette saison." />
-        </Card>
-        <Card className="p-5 md:col-span-2">
-          <SectionTitle>{categories[2].emoji} {categories[2].label} de la saison</SectionTitle>
-          <RankingList rows={moment} players={players.byId} tone="sky" unit="voix" empty="Aucun vote lu cette saison." />
-        </Card>
+        <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+          <Chip active={mode === 'titles'} onClick={() => setMode('titles')}>Nombre de matchs</Chip>
+          <Chip active={mode === 'votes'} onClick={() => setMode('votes')}>Total des voix</Chip>
+          <span className="text-[12px] text-muted">
+            {mode === 'titles' ? 'Combien de fois chacun a été le plus cité d’un match (ex æquo inclus).' : 'Toutes les voix reçues sur la saison.'}
+          </span>
+        </div>
+        {voteRankings.map(({ category: c, rows }, i) => (
+          <Card key={c.key} className={i % 2 === 0 && i === voteRankings.length - 1 ? 'p-5 md:col-span-2' : 'p-5'}>
+            <SectionTitle>{c.emoji} {c.label} de la saison</SectionTitle>
+            <RankingList
+              rows={rows}
+              players={players.byId}
+              tone={i === 0 ? 'gold' : i === 1 ? 'rose' : 'sky'}
+              unit={mode === 'titles' ? 'fois' : 'voix'}
+              unitPlural={mode === 'titles' ? 'fois' : 'voix'}
+              empty="Aucun vote lu cette saison."
+            />
+          </Card>
+        ))}
         <Card className="p-5">
           <SectionTitle>⚽ Buteurs</SectionTitle>
           <RankingList rows={totals.scorers} players={players.byId} tone="accent" unit="but" max={5} empty="Aucun but encodé." />
@@ -214,12 +225,12 @@ export function HistoryPage() {
           <Card className="divide-y divide-line">
             {seasonMatches.map((m) => {
               const mt = readTickets(tickets.data.filter((t) => t.matchId === m.id))
-              const b = nominationRanking(mt, 'best')[0]
+              const b = leaders(nominationRanking(mt, 'best'))
               return (
                 <Link key={m.id} to={`/votes/${m.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-[14px] font-semibold">{matchTitle(m)} <ResultPill match={m} /></div>
-                    <div className="text-[12px] text-muted">{formatDate(m.date)} · {mt.length} vote{mt.length > 1 ? 's' : ''} lu{mt.length > 1 ? 's' : ''}{b ? ` · ${categories[0].emoji} ${playerName(players.byId.get(b.playerId))}` : ''}</div>
+                    <div className="text-[12px] text-muted">{formatDate(m.date)} · {mt.length} vote{mt.length > 1 ? 's' : ''} lu{mt.length > 1 ? 's' : ''}{b.length > 0 ? ` · ${categories[0].emoji} ${b.map((r) => playerName(players.byId.get(r.playerId))).join(' & ')}` : ''}</div>
                   </div>
                   <Sparkles className="size-4 text-muted" />
                 </Link>
