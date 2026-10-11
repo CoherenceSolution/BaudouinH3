@@ -2,17 +2,16 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Mic, ShieldCheck, UserRound, ArrowLeft } from 'lucide-react'
 import { useAuth, type Mode } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
-import { PinDialog } from '@/components/PinDialog'
 import type { Player } from '@/lib/types'
 import { Button, Checkbox, Input } from '@/components/ui'
-import { fullName, normalize, playerName } from '@/lib/format'
+import { normalize, playerName } from '@/lib/format'
 import { ErrorNotice } from '@/components/ErrorNotice'
 
 type Step = 'member' | 'staff'
 
 /**
  * Connexion. Tout le monde — votants, orateur, secrétaires — entre par le même formulaire :
- * prénom et nom. Les droits de secrétaire suivent le nom (code commun demandé une fois),
+ * prénom et nom. Les droits de secrétaire suivent le nom, sans code ni mot de passe,
  * et le rôle d'orateur se coche ici ou se prend plus tard depuis la page du match.
  */
 export function LoginPage() {
@@ -59,7 +58,6 @@ function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
   const [lastName, setLastName] = useState('')
   const [speaker, setSpeaker] = useState(false)
   const [error, setError] = useState('')
-  const [pinFor, setPinFor] = useState<Player | null>(null)
   const mode: Mode = speaker ? 'speaker' : 'public'
   const speakers = players.data.filter((p) => p.canSpeak)
 
@@ -78,11 +76,6 @@ function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
     // L'orateur est choisi parmi la liste désignée par l'admin.
     if (speaker && !match.canSpeak) {
       setError('Vous n’êtes pas dans la liste des orateurs désignés par l’admin. Décochez « Je suis l’orateur ce soir » pour voter normalement.')
-      return
-    }
-    // Joueur avec droits de secrétaire : le code commun active les droits sur cet appareil.
-    if (match.role === 'secretary') {
-      setPinFor(match)
       return
     }
     onPick(match.id, mode)
@@ -110,14 +103,6 @@ function PickName({ onPick }: { onPick: (id: string, mode: Mode) => void }) {
       <Button type="submit" block size="lg" className="mt-4" variant={speaker ? 'accent' : 'primary'} disabled={players.loading || !firstName.trim() || !lastName.trim()} loading={players.loading}>
         {speaker ? 'Entrer comme orateur' : 'Continuer'}
       </Button>
-      {pinFor && (
-        <PinDialog
-          open
-          playerLabel={fullName(pinFor)}
-          onClose={() => { const id = pinFor.id; setPinFor(null); onPick(id, mode) }}
-          onSuccess={() => { const id = pinFor.id; setPinFor(null); onPick(id, mode) }}
-        />
-      )}
     </form>
   )
 }

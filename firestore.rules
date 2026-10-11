@@ -6,10 +6,10 @@ rules_version = '2';
 //  - Membres publics : connexion anonyme Firebase, identité déclarative (nom choisi dans la liste).
 //    Ils peuvent créer/modifier des tickets de vote, des "coups de cœur", et piloter la lecture (orateur).
 //  - Admin : compte e-mail + mot de passe, rôle 'admin' dans staff/{uid}. Gère les droits.
-//  - Secrétaires : joueurs marqués role = 'secretary' par l'admin. Pour écrire, ils ouvrent avec un
-//    code PIN commun un compte technique partagé (staff/{uid}, role 'secretary') : la base reste
-//    verrouillée pour quiconque n'a pas le code.
-//    Seul le staff peut écrire joueurs, matchs, amendes, buts, statistiques.
+//  - Secrétaires : joueurs marqués role = 'secretary' par l'admin. Leurs droits suivent leur nom, sans
+//    code ni mot de passe : l'appareil connecté sous ce nom (identities/{uid} → playerId) écrit comme le
+//    staff. Choix assumé par l'équipe : comme pour les votes, l'identité est déclarative.
+//    Seul le staff (admin et secrétaires) peut écrire joueurs, matchs, amendes, buts, statistiques.
 //  - La coum (mise commune d'un match) est visible par tous, encaissée par le staff uniquement.
 //  - Le journal d'activité est en ajout seul.
 
@@ -24,12 +24,23 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/staff/$(request.auth.uid));
     }
 
-    function isStaff() {
+    function hasStaffDoc() {
       return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
     }
 
+    // Appareil connecté sous le nom d'un joueur à qui l'admin a donné les droits de secrétaire.
+    function isNamedSecretary() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/identities/$(request.auth.uid))
+        && get(/databases/$(database)/documents/players/$(get(/databases/$(database)/documents/identities/$(request.auth.uid)).data.playerId)).data.get('role', null) == 'secretary';
+    }
+
+    function isStaff() {
+      return hasStaffDoc() || isNamedSecretary();
+    }
+
     function isAdmin() {
-      return isStaff() && staffDoc().data.role == 'admin';
+      return hasStaffDoc() && staffDoc().data.role == 'admin';
     }
 
     function bootstrapDone() {
@@ -58,10 +69,15 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
-    // ---- Accès secrétaires : compte technique partagé, ouvert par le code PIN fixé par l'admin ----
-    match /config/secretaryAccess {
-      allow read: if signedIn();
-      allow write: if isAdmin();
+    // ---- Identité de l'appareil : le joueur sous le nom duquel il est connecté ----
+    // Chacun n'écrit que la sienne ; elle porte les droits de secrétaire du joueur (voir isNamedSecretary).
+    match /identities/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isStaff());
+      allow create, update: if signedIn() && request.auth.uid == uid
+                            && request.resource.data.keys().hasOnly(['playerId', 'updatedAt'])
+                            && request.resource.data.playerId is string
+                            && exists(/databases/$(database)/documents/players/$(request.resource.data.playerId));
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // ---- Agenda Sportlink : lien secret et état de la dernière synchronisation (staff seulement) ----

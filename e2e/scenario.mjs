@@ -87,11 +87,8 @@ async function fillTicket(p, best, worst, moment, comment, commentFirst = false)
   }
 }
 
-// 2c. Code des secrétaires + droits à Jarne
+// 2c. Droits de secrétaire à Jarne (aucun code : ils suivent son nom)
 await admin.goto(BASE + '/admin/staff')
-await admin.getByLabel('Code (4 à 8 chiffres)').fill('2468')
-await admin.getByRole('button', { name: 'Définir le code' }).click()
-await admin.getByText('Un code est défini').waitFor({ timeout: 20000 })
 await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Jarne')
 await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
 await admin.getByText('est maintenant secrétaire').waitFor()
@@ -201,7 +198,7 @@ await admin.getByText(/Il reste (9:5\d|10:00) aux votants/).waitFor()
 await shot(admin, '07c-minuteur')
 
 // 5. Votants
-async function login(name, firstName, lastName, mode = 'public', pin = null) {
+async function login(name, firstName, lastName, mode = 'public', secretary = false) {
   const p = await ctx('voter-' + name)
   await p.goto(BASE)
   // Un seul formulaire pour tout le monde ; l'orateur coche simplement la case.
@@ -209,22 +206,13 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
   await p.getByLabel('Nom', { exact: true }).fill(lastName)
   if (mode === 'speaker') await p.getByRole('checkbox').check()
   await p.getByRole('button', { name: mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer' }).click()
-  if (pin) {
-    await p.getByText('Code des secrétaires').waitFor()
-    await expectError('un code faux est refusé', async () => {
-      await p.getByLabel('Code').fill('0000')
-      await p.getByRole('button', { name: 'Valider' }).click()
-      await p.getByText('Code incorrect.').waitFor({ timeout: 15000 })
-    })
-    await p.getByLabel('Code').fill(pin)
-    await p.getByRole('button', { name: 'Valider' }).click()
-    await p.getByRole('link', { name: 'Gestion' }).first().waitFor({ timeout: 20000 })
-  }
+  // Secrétaire : les droits s'appliquent dès la connexion par le nom, sans code.
+  if (secretary) await p.getByRole('link', { name: 'Gestion' }).first().waitFor({ timeout: 20000 })
   return p
 }
-async function vote(name, best, worst, moment, comment, pin = null, commentFirst = false) {
+async function vote(name, best, worst, moment, comment, secretary = false, commentFirst = false) {
   const [firstName, lastName] = name
-  const p = await login(firstName, firstName, lastName, 'public', pin)
+  const p = await login(firstName, firstName, lastName, 'public', secretary)
   // Le compte à rebours est visible partout, pas seulement sur la page du match.
   await p.getByText(/Contre RSC Anderlecht Vétérans/).first().waitFor()
   await p.goto(BASE + `/votes/${matchId}`)
@@ -233,7 +221,7 @@ async function vote(name, best, worst, moment, comment, pin = null, commentFirst
   await fillTicket(p, best, worst, moment, comment, commentFirst)
   return p
 }
-const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', null, true)
+const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', false, true)
 await shot(ronny, '08-ticket-form')
 await ronny.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await ronny.getByText('Vote envoyé', { exact: true }).waitFor()
@@ -245,8 +233,8 @@ await shot(ronny, '09-ticket-sent')
 const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
 await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await mathis.getByText('Vote envoyé', { exact: true }).waitFor()
-const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.', '2468')
-await shot(jarne, '07b-secretaire-par-code')
+const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.', true)
+await shot(jarne, '07b-secretaire-par-nom')
 // Jarne garde un brouillon (ne pas envoyer)
 await jarne.waitForTimeout(1500)
 

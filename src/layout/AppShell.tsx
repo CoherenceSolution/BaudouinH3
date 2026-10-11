@@ -6,11 +6,8 @@ import { useMatches, usePlayers } from '@/hooks/useData'
 import { cx, playerName } from '@/lib/format'
 import { Avatar } from '@/components/ui'
 import { ErrorBoundary } from '@/components/ErrorNotice'
-import { PinDialog } from '@/components/PinDialog'
 import { GlobalVoteTimers } from '@/components/VoteTimer'
 import { SpeakerTakeoverNotices } from '@/components/SpeakerTakeoverNotice'
-import { useState } from 'react'
-import { KeyRound } from 'lucide-react'
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: Home, end: true },
@@ -29,8 +26,6 @@ export function AppShell() {
   const location = useLocation()
   const me = identity ? players.byId.get(identity.playerId) : null
   const displayName = me ? playerName(me) : isStaff ? staff?.displayName || staff?.email || '' : ''
-  const [pinOpen, setPinOpen] = useState(false)
-  const canActivate = !isStaff && me?.role === 'secretary'
   const roleLabelKey = role === 'admin' ? 'admin' : isSpeaker ? 'speaker' : role === 'secretary' ? 'secretary' : 'public'
 
   const nav = isStaff ? [...NAV, { to: '/admin', label: 'Gestion', icon: Settings }] : NAV
@@ -82,15 +77,8 @@ export function AppShell() {
           <IdentityCard compact me={displayName} player={me} mode={roleLabelKey} onLogout={handleLogout} />
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
-          {canActivate && (
-            <button onClick={() => setPinOpen(true)} className="mb-4 flex w-full items-center gap-3 rounded-xl border border-accent-strong/40 bg-accent-soft px-4 py-3 text-left text-[13px] text-ink hover:bg-lime-100">
-              <KeyRound className="size-4 shrink-0 text-accent-strong" />
-              <span><b>Vous avez des droits de secrétaire.</b> Entrez le code commun pour les activer sur cet appareil.</span>
-            </button>
-          )}
           <GlobalVoteTimers matches={matches.data} currentPath={location.pathname} playerId={identity?.playerId ?? null} />
           <SpeakerTakeoverNotices matches={matches.data} />
-          {canActivate && me && <PinDialog open={pinOpen} onClose={() => setPinOpen(false)} onSuccess={() => setPinOpen(false)} playerLabel={playerName(me)} />}
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

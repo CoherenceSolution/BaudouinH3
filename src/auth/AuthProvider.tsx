@@ -6,17 +6,18 @@ import {
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db, firebaseConfigured } from '@/lib/firebase'
 import type { Player, Role, StaffMember } from '@/lib/types'
 import type { Actor } from '@/lib/activity'
-import { signInSecretary } from '@/lib/secretaryAccess'
 
 /**
  * Session applicative.
  *  - "public"  : membre connecté anonymement, qui a choisi son nom dans la liste des joueurs.
  *  - "speaker" : idem, mais en mode orateur (rôle pris à la connexion ou depuis la page du match).
- *  - "staff"   : secrétaire ou admin (e-mail + mot de passe).
+ *  - "staff"   : admin (e-mail + mot de passe), ou secrétaire : un membre dont le joueur porte
+ *                role = 'secretary'. Ses droits suivent son nom, sans code : l'appareil déclare son
+ *                joueur dans identities/{uid}, que lisent les règles Firestore.
  */
 export type Mode = 'public' | 'speaker'
 
@@ -39,7 +40,6 @@ interface AuthState {
   setMode: (mode: Mode) => void
   clearIdentity: () => void
   loginStaff: (email: string, password: string) => Promise<void>
-  loginSecretary: (pin: string) => Promise<void>
   ensureAnonymous: () => Promise<User>
   logout: () => Promise<void>
   actorFor: (players: Player[]) => Actor
@@ -65,6 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [staffReady, setStaffReady] = useState(false)
   const [bootstrapped, setBootstrapped] = useState<boolean | null>(null)
   const [identity, setIdentityState] = useState<PublicIdentity | null>(readIdentity)
+  /** Joueur déclaré dans identities/{uid} (confirmé par la base) et droits de secrétaire de ce joueur. */
+  const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
+  const [playerIsSecretary, setPlayerIsSecretary] = useState(false)
 
   useEffect(() => {
     if (!firebaseConfigured) {
@@ -114,6 +117,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
   }, [uid, anonymous])
 
+  // Membre connecté sous un nom : l'appareil déclare son joueur (identities/{uid}). C'est ce document
+  // qui donne aux secrétaires leurs droits d'écriture dans les règles Firestore, sans code à saisir.
+  const playerId = identity?.playerId ?? null
+  useEffect(() => {
+    if (!uid || !anonymous) {
+      setLinkedPlayerId(null)
+      return
+    }
+    return onSnapshot(
+      doc(db, 'identities', uid),
+      (snap) => setLinkedPlayerId(snap.exists() ? ((snap.data().playerId as string) ?? null) : null),
+      () => setLinkedPlayerId(null),
+    )
+  }, [uid, anonymous])
+
+  useEffect(() => {
+    if (!uid || !anonymous || !playerId || linkedPlayerId === playerId) return
+    setDoc(doc(db, 'identities', uid), { playerId, updatedAt: serverTimestamp() }).catch((e) => console.error('Identité non enregistrée', e))
+  }, [uid, anonymous, playerId, linkedPlayerId])
+
+  // Droits de secrétaire du joueur : accordés ou retirés par l'admin, appliqués en direct.
+  useEffect(() => {
+    if (!uid || !anonymous || !playerId) {
+      setPlayerIsSecretary(false)
+      return
+    }
+    return onSnapshot(
+      doc(db, 'players', playerId),
+      (snap) => setPlayerIsSecretary(snap.exists() && snap.data().role === 'secretary'),
+      () => setPlayerIsSecretary(false),
+    )
+  }, [uid, anonymous, playerId])
+
   const setIdentity = useCallback((playerId: string, mode: Mode) => {
     const next = { playerId, mode }
     setIdentityState(next)
@@ -139,6 +175,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearIdentity = useCallback(() => {
     setIdentityState(null)
+    // L'appareil ne porte plus le nom (ni les droits) de ce joueur.
+    const current = auth.currentUser
+    if (current?.isAnonymous) deleteDoc(doc(db, 'identities', current.uid)).catch(() => {})
     try {
       localStorage.removeItem(IDENTITY_KEY)
     } catch {
@@ -157,20 +196,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearIdentity()
   }, [clearIdentity])
 
-  // Secrétaire : le code ouvre le compte technique partagé ; l'identité (nom) est conservée.
-  const loginSecretary = useCallback(async (pin: string) => {
-    await signInSecretary(pin)
-  }, [])
-
   const logout = useCallback(async () => {
     clearIdentity()
     await fbSignOut(auth)
   }, [clearIdentity])
 
   const value = useMemo<AuthState>(() => {
-    const role = staff?.role ?? null
     // Compte staff relié à un joueur : identité imposée par le compte, valable sur tous les appareils.
     const effectiveIdentity: PublicIdentity | null = staff?.playerId ? { playerId: staff.playerId, mode: 'public' } : identity
+    // Secrétaire par son nom : dès que la base a enregistré le joueur de cet appareil (sinon les règles refuseraient).
+    const namedSecretary = !staff && playerIsSecretary && !!identity && linkedPlayerId === identity.playerId
+    const role: Role | null = staff?.role ?? (namedSecretary ? 'secretary' : null)
     return {
       ready: authReady && staffReady && bootstrapped !== null,
       bootstrapped,
@@ -184,7 +220,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMode,
       clearIdentity,
       loginStaff,
-      loginSecretary,
       ensureAnonymous,
       logout,
       actorFor: (players: Player[]) => {
@@ -193,11 +228,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return {
           uid: user?.uid ?? 'anonymous',
           name: p ? `${p.firstName} ${p.lastName}` : 'Membre',
-          role: effectiveIdentity?.mode === 'speaker' ? 'speaker' : 'public',
+          role: namedSecretary ? 'secretary' : effectiveIdentity?.mode === 'speaker' ? 'speaker' : 'public',
         }
       },
     }
-  }, [authReady, staffReady, bootstrapped, user, staff, identity, setIdentity, setMode, clearIdentity, loginStaff, loginSecretary, ensureAnonymous, logout])
+  }, [authReady, staffReady, bootstrapped, user, staff, identity, linkedPlayerId, playerIsSecretary, setIdentity, setMode, clearIdentity, loginStaff, ensureAnonymous, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
