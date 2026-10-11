@@ -10,7 +10,7 @@ import { playerName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, EmptyState } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoCreate, undoDelete } from '@/lib/activity'
 import { TicketCard } from './TicketCard'
 import { EditTicketModal } from './EditTicketModal'
 
@@ -49,12 +49,14 @@ export function LiveReading({ match, players, playerList, tickets, likes, myPlay
     try {
       const label = categories.find((c) => c.key === category)?.label ?? category
       const n = readAsc.findIndex((t) => t.id === ticketId) + 1
+      const path = `likes/${ref.id}`
+      const before = await readBefore(path)
       if (myLikes[category] === ticketId) {
         await deleteDoc(ref)
-        await logActivity(actor, 'delete', 'like', ref.id, `Coup de cœur retiré (${label}, vote lu n°${n})`)
+        await logActivity(actor, 'delete', 'like', ref.id, `Coup de cœur retiré (${label}, vote lu n°${n})`, undefined, undoDelete(path, before))
       } else {
         await setDoc(ref, { voterPlayerId: myPlayerId, category, ticketId, matchId: match.id, createdAt: serverTimestamp() })
-        await logActivity(actor, myLikes[category] ? 'update' : 'create', 'like', ref.id, `Coup de cœur ${myLikes[category] ? 'déplacé' : 'donné'} (${label}, vote lu n°${n})`)
+        await logActivity(actor, myLikes[category] ? 'update' : 'create', 'like', ref.id, `Coup de cœur ${myLikes[category] ? 'déplacé' : 'donné'} (${label}, vote lu n°${n})`, undefined, before ? undoDelete(path, before) : undoCreate(path))
       }
     } catch (e) {
       console.error(e)

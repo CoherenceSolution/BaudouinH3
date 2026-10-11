@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useGoals, useMatch, usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoCreate, undoDelete } from '@/lib/activity'
 import type { Goal, Match } from '@/lib/types'
 import { formatDate, matchTitle, playerFullLabel, playerName } from '@/lib/format'
 import { Avatar, Button, Card, EmptyState, Input, Modal, Spinner } from '@/components/ui'
@@ -31,8 +31,9 @@ export function MatchStatsPage() {
   async function remove(g: Goal) {
     if (!match || !confirm('Supprimer ce but ?')) return
     try {
+      const before = await readBefore(`goals/${g.id}`)
       await deleteDoc(doc(db, 'goals', g.id))
-      await logActivity(actor, 'delete', 'goal', g.id, `But supprimé (${playerFullLabel(players.byId.get(g.scorerPlayerId))}) — ${match.opponent}`)
+      await logActivity(actor, 'delete', 'goal', g.id, `But supprimé (${playerFullLabel(players.byId.get(g.scorerPlayerId))}) — ${match.opponent}`, undefined, undoDelete(`goals/${g.id}`, before))
       toast('But supprimé')
     } catch (e) {
       console.error(e)
@@ -103,7 +104,7 @@ function AddGoalModal({ match, nextOrder, onClose }: { match: Match; nextOrder: 
       })
       const s = players.byId.get(scorer)
       const a = assist ? players.byId.get(assist) : null
-      await logActivity(actor, 'create', 'goal', ref.id, `But de ${playerFullLabel(s)}${a ? ` sur passe de ${playerFullLabel(a)}` : ''} — ${match.opponent}`)
+      await logActivity(actor, 'create', 'goal', ref.id, `But de ${playerFullLabel(s)}${a ? ` sur passe de ${playerFullLabel(a)}` : ''} — ${match.opponent}`, undefined, undoCreate(`goals/${ref.id}`))
       toast(`But de ${playerName(s)} enregistré`)
       if (again) {
         setScorer(null); setAssist(null); setMinute(''); setOrder((o) => o + 1)

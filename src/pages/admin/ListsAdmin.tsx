@@ -33,8 +33,8 @@ export function ListsAdmin() {
     if (!confirm(`Supprimer la liste « ${c.label} » ?${warning} Cette action est définitive.`)) return
     setBusy(c.id)
     try {
-      const removed = await deleteStatCategory(c.id)
-      await logActivity(actor, 'delete', 'statCategory', c.id, `Liste supprimée : ${c.label}${removed ? ` (${removed} entrée${removed > 1 ? 's' : ''})` : ''}`)
+      const { removed, undo } = await deleteStatCategory(c.id)
+      await logActivity(actor, 'delete', 'statCategory', c.id, `Liste supprimée : ${c.label}${removed ? ` (${removed} entrée${removed > 1 ? 's' : ''})` : ''}`, undefined, undo)
       toast('Liste supprimée')
     } catch (e) {
       console.error(e)

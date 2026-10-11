@@ -3,7 +3,7 @@ import { addDoc, collection, doc, updateDoc } from 'firebase/firestore'
 import { Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
-import { diffChanges, logActivity } from '@/lib/activity'
+import { diffChanges, logActivity, readBefore, undoCreate, undoUpdate } from '@/lib/activity'
 import { deleteStatCategory } from '@/lib/statCategories'
 import type { StatCategory } from '@/lib/types'
 import { Button, Input, Modal } from './ui'
@@ -42,12 +42,13 @@ export function StatCategoryModal({ open, category, nextOrder, entryCount = 0, o
     try {
       if (category) {
         const next = { label: label.trim(), emoji: emoji.trim() || '🏅', active }
+        const before = await readBefore(`statCategories/${category.id}`)
         await updateDoc(doc(db, 'statCategories', category.id), next)
         const changes = diffChanges({ ...category }, next, { label: 'Nom', emoji: 'Emoji', active: 'Visible' })
-        await logActivity(actor, 'update', 'statCategory', category.id, `Liste modifiée : ${label.trim()}`, changes)
+        await logActivity(actor, 'update', 'statCategory', category.id, `Liste modifiée : ${label.trim()}`, changes, undoUpdate(`statCategories/${category.id}`, before, Object.keys(next)))
       } else {
         const ref = await addDoc(collection(db, 'statCategories'), { label: label.trim(), emoji: emoji.trim() || '🏅', active, order: nextOrder })
-        await logActivity(actor, 'create', 'statCategory', ref.id, `Liste créée : ${label.trim()}`)
+        await logActivity(actor, 'create', 'statCategory', ref.id, `Liste créée : ${label.trim()}`, undefined, undoCreate(`statCategories/${ref.id}`))
       }
       toast('Liste enregistrée')
       onClose()
@@ -65,8 +66,8 @@ export function StatCategoryModal({ open, category, nextOrder, entryCount = 0, o
     if (!confirm(`Supprimer la liste « ${category.label} » ?${warning} Cette action est définitive.`)) return
     setLoading(true)
     try {
-      const removed = await deleteStatCategory(category.id)
-      await logActivity(actor, 'delete', 'statCategory', category.id, `Liste supprimée : ${category.label}${removed ? ` (${removed} entrée${removed > 1 ? 's' : ''})` : ''}`)
+      const { removed, undo } = await deleteStatCategory(category.id)
+      await logActivity(actor, 'delete', 'statCategory', category.id, `Liste supprimée : ${category.label}${removed ? ` (${removed} entrée${removed > 1 ? 's' : ''})` : ''}`, undefined, undo)
       toast('Liste supprimée')
       onDeleted?.()
       onClose()

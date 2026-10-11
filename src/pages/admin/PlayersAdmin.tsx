@@ -6,7 +6,7 @@ import { usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
 import { createPlayer } from '@/lib/players'
 import { INITIAL_PLAYERS } from '@/lib/initialPlayers'
-import { diffChanges, logActivity } from '@/lib/activity'
+import { diffChanges, logActivity, readBefore, undoCreate, undoDelete, undoUpdate } from '@/lib/activity'
 import type { Player } from '@/lib/types'
 import { cx, fullName, playerFullLabel, playerMatches, playerName, playerRealName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, Input, Modal, Spinner } from '@/components/ui'
@@ -44,8 +44,9 @@ export function PlayersAdmin() {
 
   async function toggleActive(p: Player) {
     try {
+      const before = await readBefore(`players/${p.id}`)
       await updateDoc(doc(db, 'players', p.id), { active: !(p.active !== false) })
-      await logActivity(actor, 'update', 'player', p.id, `${playerFullLabel(p)} ${p.active !== false ? 'désactivé' : 'réactivé'}`)
+      await logActivity(actor, 'update', 'player', p.id, `${playerFullLabel(p)} ${p.active !== false ? 'désactivé' : 'réactivé'}`, undefined, undoUpdate(`players/${p.id}`, before, ['active']))
     } catch (err) {
       console.error(err)
       toast('Action impossible', 'error')
@@ -55,8 +56,9 @@ export function PlayersAdmin() {
   async function remove(p: Player) {
     if (!confirm(`Supprimer définitivement ${playerFullLabel(p)} ? Préférez la désactivation pour garder l’historique.`)) return
     try {
+      const before = await readBefore(`players/${p.id}`)
       await deleteDoc(doc(db, 'players', p.id))
-      await logActivity(actor, 'delete', 'player', p.id, `Joueur supprimé : ${playerFullLabel(p)}`)
+      await logActivity(actor, 'delete', 'player', p.id, `Joueur supprimé : ${playerFullLabel(p)}`, undefined, undoDelete(`players/${p.id}`, before))
       toast('Joueur supprimé')
     } catch (err) {
       console.error(err)
@@ -70,9 +72,10 @@ export function PlayersAdmin() {
     if (!confirm(`Ajouter les ${missing.length} joueurs manquants de la liste initiale ?`)) return
     try {
       const batch = writeBatch(db)
-      missing.forEach((p) => batch.set(doc(collection(db, 'players')), { nickname: null, ...p, active: true, createdAt: serverTimestamp() }))
+      const refs = missing.map(() => doc(collection(db, 'players')))
+      missing.forEach((p, i) => batch.set(refs[i], { nickname: null, ...p, active: true, createdAt: serverTimestamp() }))
       await batch.commit()
-      await logActivity(actor, 'create', 'player', 'import', `Import de la liste initiale : ${missing.length} joueurs`)
+      await logActivity(actor, 'create', 'player', 'import', `Import de la liste initiale : ${missing.length} joueurs`, undefined, refs.flatMap((r) => undoCreate(`players/${r.id}`)))
       toast(`${missing.length} joueurs ajoutés`)
     } catch (err) {
       console.error(err)
@@ -136,8 +139,9 @@ function RenameModal({ player, onClose }: { player: Player; onClose: () => void 
     setLoading(true)
     try {
       const next = { firstName: firstName.trim(), lastName: lastName.trim(), nickname: nick.trim() || null }
+      const before = await readBefore(`players/${player.id}`)
       await updateDoc(doc(db, 'players', player.id), next)
-      await logActivity(actor, 'update', 'player', player.id, `Joueur renommé : ${playerFullLabel(player)} → ${playerFullLabel({ ...player, ...next })}`, diffChanges({ ...player }, next, { firstName: 'Prénom', lastName: 'Nom', nickname: 'Surnom' }))
+      await logActivity(actor, 'update', 'player', player.id, `Joueur renommé : ${playerFullLabel(player)} → ${playerFullLabel({ ...player, ...next })}`, diffChanges({ ...player }, next, { firstName: 'Prénom', lastName: 'Nom', nickname: 'Surnom' }), undoUpdate(`players/${player.id}`, before, Object.keys(next)))
       toast('Joueur renommé')
       onClose()
     } catch (e) {

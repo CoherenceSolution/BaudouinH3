@@ -258,8 +258,18 @@ export interface ActivityLog {
   summary: string
   /** Détail d'une modification : chaque champ changé, avec sa valeur avant et après. */
   changes?: ActivityChange[]
+  /** Écritures qui remettent la base dans l'état d'avant (annulation par l'admin). */
+  undo?: UndoOp[]
+  /** Entrée d'annulation : les actions qu'elle a annulées. */
+  undoOf?: string[]
   at: Timestamp
 }
+
+/** Écriture inverse d'une action, appliquée telle quelle pour l'annuler. */
+export type UndoOp =
+  | { op: 'delete'; path: string }
+  | { op: 'set'; path: string; data: Record<string, unknown> }
+  | { op: 'update'; path: string; data: Record<string, unknown> }
 
 export interface ActivityChange {
   field: string

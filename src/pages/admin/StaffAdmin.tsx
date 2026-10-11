@@ -5,7 +5,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers, useStaffList } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import type { Player, StaffMember } from '@/lib/types'
 import { cx, playerFullLabel, playerMatches, playerName, playerRealName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, Input, Select, Spinner } from '@/components/ui'
@@ -32,8 +32,9 @@ export function StaffAdmin() {
 
   async function setSecretary(p: Player, grant: boolean) {
     try {
+      const before = await readBefore(`players/${p.id}`)
       await updateDoc(doc(db, 'players', p.id), { role: grant ? 'secretary' : null })
-      await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerFullLabel(p)}` : `Droits de secrétaire retirés à ${playerFullLabel(p)}`)
+      await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerFullLabel(p)}` : `Droits de secrétaire retirés à ${playerFullLabel(p)}`, undefined, undoUpdate(`players/${p.id}`, before, ['role']))
       toast(grant ? `${playerName(p)} est maintenant secrétaire` : `Droits retirés à ${playerName(p)}`)
     } catch (err) {
       console.error(err)
@@ -43,10 +44,11 @@ export function StaffAdmin() {
 
   async function setSpeaker(p: Player, grant: boolean) {
     try {
+      const before = await readBefore(`players/${p.id}`)
       await updateDoc(doc(db, 'players', p.id), { canSpeak: grant })
       await logActivity(actor, 'update', 'staff', p.id, grant ? `${playerFullLabel(p)} ajouté à la liste des orateurs` : `${playerFullLabel(p)} retiré de la liste des orateurs`, [
         { field: 'Orateur désigné', before: grant ? 'non' : 'oui', after: grant ? 'oui' : 'non' },
-      ])
+      ], undoUpdate(`players/${p.id}`, before, ['canSpeak']))
       toast(grant ? `${playerName(p)} peut être orateur` : `${playerName(p)} n’est plus orateur`)
     } catch (err) {
       console.error(err)
@@ -56,8 +58,9 @@ export function StaffAdmin() {
 
   async function linkPlayer(s: StaffMember, pid: string) {
     try {
+      const before = await readBefore(`staff/${s.id}`)
       await updateDoc(doc(db, 'staff', s.id), { playerId: pid || null })
-      await logActivity(actor, 'update', 'staff', s.id, pid ? `${s.displayName} relié au joueur ${playerFullLabel(players.byId.get(pid))}` : `${s.displayName} : lien joueur retiré`)
+      await logActivity(actor, 'update', 'staff', s.id, pid ? `${s.displayName} relié au joueur ${playerFullLabel(players.byId.get(pid))}` : `${s.displayName} : lien joueur retiré`, undefined, undoUpdate(`staff/${s.id}`, before, ['playerId']))
     } catch (err) {
       console.error(err)
       toast('Action impossible', 'error')

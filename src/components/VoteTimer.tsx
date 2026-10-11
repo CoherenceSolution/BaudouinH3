@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { AlarmClock, ArrowRight, Play, Plus, Square } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import type { Match } from '@/lib/types'
 import { cx } from '@/lib/format'
 import { Button, Card } from './ui'
@@ -101,8 +101,9 @@ export function VoteTimerControl({ match }: { match: Match }) {
   async function apply(patch: Record<string, unknown>, summary: string, message: string) {
     setBusy(true)
     try {
+      const before = await readBefore(`matches/${match.id}`)
       await updateDoc(doc(db, 'matches', match.id), { ...patch, updatedAt: serverTimestamp() })
-      await logActivity(actor, 'update', 'match', match.id, summary)
+      await logActivity(actor, 'update', 'match', match.id, summary, undefined, undoUpdate(`matches/${match.id}`, before, Object.keys(patch)))
       toast(message)
     } catch (e) {
       console.error(e)

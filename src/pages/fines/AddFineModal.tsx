@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, undoCreate } from '@/lib/activity'
 import type { FineType, Match, Player } from '@/lib/types'
 import { computeFineAmount, describeFineType, formatEuro } from '@/lib/fines'
 import { formatDate, matchTitle, playerFullLabel, playerName, todayIso } from '@/lib/format'
@@ -64,7 +64,7 @@ export function AddFineModal({ open, onClose, players, types, matches }: Props) 
         createdAt: serverTimestamp(),
       })
       const p = players.find((x) => x.id === playerId)
-      await logActivity(actor, 'create', 'fine', ref.id, `Amende infligée : ${type.label} ${formatEuro(amount)} — ${playerFullLabel(p)} (${formatDate(date)})`)
+      await logActivity(actor, 'create', 'fine', ref.id, `Amende infligée : ${type.label} ${formatEuro(amount)} — ${playerFullLabel(p)} (${formatDate(date)})`, undefined, undoCreate(`fines/${ref.id}`))
       toast(`Amende de ${formatEuro(amount)} infligée à ${playerName(p)}`)
       onClose()
     } catch (e) {

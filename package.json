@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "node --test scripts/calendar/*.test.mjs",
+    "test": "node --test scripts/calendar/*.test.mjs scripts/*.test.mjs",
     "verify": "npm run typecheck && npm test && vite build",
     "verify:e2e": "bash scripts/e2e.sh",
     "verify:all": "npm run verify && npm run verify:e2e",

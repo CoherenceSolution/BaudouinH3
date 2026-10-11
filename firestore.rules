@@ -172,9 +172,11 @@ service cloud.firestore {
     }
 
     // ---- Journal d'activité (ajout seul) ----
+    // Chacun signe ses propres entrées : l'outil d'annulation de l'admin s'appuie sur l'auteur
+    // pour vérifier qu'une annulation ne dépasse jamais ses droits.
     match /activity/{id} {
       allow read: if isStaff();
-      allow create: if signedIn();
+      allow create: if signedIn() && request.resource.data.actorUid == request.auth.uid;
       allow update, delete: if false;
     }
   }

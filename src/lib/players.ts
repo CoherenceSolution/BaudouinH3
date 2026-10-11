@@ -1,6 +1,6 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
-import { logActivity, type Actor } from './activity'
+import { logActivity, type Actor, undoCreate } from './activity'
 
 /** Ajoute un joueur "sur le pouce" (surnom facultatif) et journalise l'action. */
 export async function createPlayer(actor: Actor, firstName: string, lastName: string, nickname = ''): Promise<string> {
@@ -13,6 +13,6 @@ export async function createPlayer(actor: Actor, firstName: string, lastName: st
     createdAt: serverTimestamp(),
   })
   const label = `${firstName.trim()} ${lastName.trim()}${nick ? ` « ${nick} »` : ''}`
-  await logActivity(actor, 'create', 'player', ref.id, `Joueur ajouté : ${label}`)
+  await logActivity(actor, 'create', 'player', ref.id, `Joueur ajouté : ${label}`, undefined, undoCreate(`players/${ref.id}`))
   return ref.id
 }

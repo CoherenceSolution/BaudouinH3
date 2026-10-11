@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { doc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
-import { logActivity } from '@/lib/activity'
+import { logActivity, undoUpdate } from '@/lib/activity'
 import type { Match, Player, SpeakerTakeover } from '@/lib/types'
 import { playerName } from '@/lib/format'
 import { useActor } from './useActor'
@@ -49,9 +49,12 @@ export function useSpeakerLead(match: Match, players: Map<string, Player>) {
     async (force = false): Promise<boolean> => {
       if (!uid) return false
       const ref = doc(db, 'matches', match.id)
+      let before: Record<string, unknown> | null = null
+      let keys: string[] = []
       const previous = await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref)
         if (!snap.exists()) return false
+        before = snap.data()
         const cur = snap.data() as Match
         if (holdsLead(cur, uid, playerId)) return null
         const taken = Boolean(cur.speakerUid)
@@ -73,11 +76,12 @@ export function useSpeakerLead(match: Match, players: Map<string, Player>) {
           }
         }
         tx.update(ref, patch)
+        keys = Object.keys(patch).filter((k) => k !== 'updatedAt')
         return taken ? (cur.speakerName ?? 'l’orateur') : ''
       })
       if (previous === false) return false
       if (previous === null) return true
-      await logActivity(actor, 'update', 'match', match.id, previous ? `${myName} a pris la main sur l’orateur ${previous}` : `${myName} est l’orateur en cours`)
+      await logActivity(actor, 'update', 'match', match.id, previous ? `${myName} a pris la main sur l’orateur ${previous}` : `${myName} est l’orateur en cours`, undefined, undoUpdate(`matches/${match.id}`, before, keys))
       return true
     },
     [uid, playerId, actor, myName, match.id],
@@ -87,13 +91,15 @@ export function useSpeakerLead(match: Match, players: Map<string, Player>) {
   const release = useCallback(async () => {
     if (!uid) return
     const ref = doc(db, 'matches', match.id)
+    let before: Record<string, unknown> | null = null
     const released = await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref)
       if (!snap.exists() || !holdsLead(snap.data() as Match, uid, playerId)) return false
+      before = snap.data()
       tx.update(ref, { speakerUid: null, speakerPlayerId: null, speakerName: null, speakerSince: null, updatedAt: serverTimestamp() })
       return true
     })
-    if (released) await logActivity(actor, 'update', 'match', match.id, `${myName} n’est plus l’orateur en cours`)
+    if (released) await logActivity(actor, 'update', 'match', match.id, `${myName} n’est plus l’orateur en cours`, undefined, undoUpdate(`matches/${match.id}`, before, ['speakerUid', 'speakerPlayerId', 'speakerName', 'speakerSince']))
   }, [uid, playerId, actor, myName, match.id])
 
   return {
