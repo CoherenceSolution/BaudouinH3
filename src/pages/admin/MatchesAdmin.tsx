@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, RefreshCw, RotateCcw } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, RotateCcw, Merge } from 'lucide-react'
 import { useCalendarConfig, useMatches } from '@/hooks/useData'
 import type { Match } from '@/lib/types'
 import { formatDate, matchTitle } from '@/lib/format'
@@ -8,6 +8,7 @@ import { formatTime } from '@/lib/matches'
 import { Badge, Button, Card, Spinner } from '@/components/ui'
 import { MatchStatusBadge, ResultPill } from '@/components/MatchCard'
 import { MatchFormModal } from '@/components/MatchFormModal'
+import { MergeMatchesModal } from '@/components/MergeMatchesModal'
 import { SyncStatus } from './CalendarSettings'
 import { CalendarSyncButton } from './CalendarSyncButton'
 import { useAuth } from '@/auth/AuthProvider'
@@ -21,6 +22,7 @@ export function MatchesAdmin() {
   const { isAdmin } = useAuth()
   const [editing, setEditing] = useState<Match | null | 'new'>(null)
   const [reopening, setReopening] = useState<string | null>(null)
+  const [merging, setMerging] = useState<Match | null>(null)
   const actor = useActor()
   const toast = useToast()
 
@@ -72,6 +74,11 @@ export function MatchesAdmin() {
               </div>
               <Pencil className="size-4 text-muted" />
             </button>
+            {isAdmin && matches.data.length > 1 && (
+              <Button size="sm" variant="ghost" icon={<Merge className="size-4" />} title="Fusionner avec un match en double" onClick={() => setMerging(m)}>
+                <span className="hidden sm:inline">Fusionner</span>
+              </Button>
+            )}
             {isAdmin && m.status !== 'voting' && (
               <Button size="sm" variant="secondary" icon={<RotateCcw className="size-4" />} loading={reopening === m.id} onClick={() => reopen(m)}>
                 {m.status === 'scheduled' ? 'Ouvrir les votes' : 'Rouvrir les votes'}
@@ -80,6 +87,7 @@ export function MatchesAdmin() {
           </div>
         ))}
       </Card>
+      <MergeMatchesModal match={merging} matches={matches.data} onClose={() => setMerging(null)} />
       <MatchFormModal open={editing !== null} match={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
     </div>
   )
