@@ -65,7 +65,7 @@ Au premier chargement, l'application affiche **Première installation** : créez
 L'équipe (21 joueurs), le barème d'amendes (retard 1 €/min après 5 min plafonné à 15 €, équipement, cartons)
 et deux catégories maison sont préchargés. Cet écran n'apparaît plus ensuite.
 
-Depuis **Gestion → Staff**, l'admin définit le code commun des secrétaires et choisit quels joueurs ont les droits.
+Depuis **Gestion → Staff**, l'admin choisit quels joueurs ont les droits de secrétaire. Aucun code : ces joueurs se connectent par leur nom et leurs droits s'appliquent aussitôt.
 
 ### Surnoms
 
@@ -91,8 +91,8 @@ rétrospective affichent le vote normalement pour tout le monde.
 |---|---|---|
 | Votant | Prénom et nom | Remplir son vote (trois catégories), suivre la lecture et le compte à rebours, voter ses coups de cœur, voir qui a coumé |
 | Orateur (liste désignée par l'admin) | Prénom et nom, case « Je suis l'orateur ce soir » (ou bouton « Je suis l'orateur » sur la page du match) | Console : son propre vote, minuteur, clôture des votes, file de lecture avec « Valider le vote », votes lus grisés, étoiles, lecture guidée (commentaire avant le nom), révélation d'auteur (s'il a la main), correction d'un nom |
-| Secrétaire | Prénom et nom, puis le code commun (une fois par téléphone) | Console orateur, vote hors plateforme, correction d'un nom, matchs, **coum** (qui a payé, absents, recoum), amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
-| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs et code commun (Gestion → Staff), rouvrir les votes de n'importe quel match (Gestion → Matchs ou page du match) |
+| Secrétaire | Prénom et nom, comme tout le monde : les droits suivent le nom | Console orateur, vote hors plateforme, correction d'un nom, matchs, **coum** (qui a payé, absents, recoum), amendes, buts et passes, joueurs, listes maison, paramètres, journal d'activité |
+| Administrateur | E-mail + mot de passe | Tout ce que fait le secrétaire + droits des joueurs, liste des orateurs (Gestion → Staff), rouvrir les votes de n'importe quel match (Gestion → Matchs ou page du match) |
 
 ### Agenda Sportlink (matchs automatiques)
 
@@ -136,10 +136,28 @@ de qui a coumé — pas de montants, pas de caisse, pas d'historique de saison, 
 - Quand tous les présents ont payé, la feuille affiche « Tout le monde a coumé » : c'est terminé.
 - Tout le monde voit qui a coumé ; seuls le secrétaire et l'admin tiennent la liste à jour.
 
+### Page du match : le résumé
+
+L'onglet **Résumé** montre le match d'un coup d'œil : score (victoire, défaite, nul), buts et passes, résultats des
+votes lus, amendes et coum du match, avec un lien vers chaque détail. Le match du jour (ou le dernier joué) est
+résumé de la même façon sur l'accueil. Un secrétaire **entre ou corrige le score** directement ici (« nous / eux »),
+et ajoute un but ou une amende sans quitter la page ; tant que le score manque, un bouton « Entrer le score »
+apparaît dans l'en-tête du match.
+
+### Surveillance et annulation (admin)
+
+**Gestion → Surveillance** signale ce qui sort de l'ordinaire (rafales de modifications, suppressions en série,
+actions en pleine nuit, droits de secrétaire utilisés depuis plusieurs téléphones, score modifié plusieurs fois).
+L'admin choisit une personne et une période (**dernière heure**, **24 h** ou **un jour précis**) : ses actions
+s'affichent et s'annulent d'un geste, les données revenant à leur état d'avant. Une action modifiée ensuite par
+quelqu'un d'autre, ou qui dépasse les droits de son auteur, n'est pas cochée d'office. L'annulation est inscrite au
+journal et peut elle-même être annulée.
+
 ### Minuteur des votes
 
-Dans la console, l'admin ou un secrétaire lance un compte à rebours (5, 10, 15 minutes ou une durée libre),
-le prolonge (+ 2 min) ou l'arrête. Tout le monde voit le temps restant sur les pages du match ; ceux qui n'ont
+En haut de la console (et sur l'accueil pendant les votes), l'orateur, un secrétaire ou l'admin lance un compte à
+rebours (5, 10, 15 minutes), le prolonge (+ 2 min) ou l'arrête. Juste à côté, **« Clôturer les votes »** ; une fois
+clôturé, le même endroit propose **« Rouvrir les votes »** pour un orateur qui a clôturé trop tôt. Tout le monde voit le temps restant sur les pages du match ; ceux qui n'ont
 pas encore envoyé leur vote lisent « Il vous reste du temps pour voter ». Rien ne se ferme tout seul : la clôture
 reste un geste de l'orateur.
 
@@ -172,7 +190,8 @@ dans l'onglet Stats.
 ## Sécurité et confidentialité
 
 - Les votants n'ont pas de mot de passe : l'identité est déclarative (saisie du nom), comme souhaité.
-- Les secrétaires n'ont pas de mot de passe personnel : un code commun, fixé par l'admin, active leurs droits.
+- Les secrétaires n'ont ni mot de passe ni code : leurs droits suivent leur nom. Choix assumé : quiconque se connecte
+  sous le nom d'un secrétaire obtient ses droits ; chaque geste reste dans le journal d'activité.
 - Les tickets sont anonymes. Seuls **l'orateur en cours** (celui qui « a la main » sur la lecture) et **l'admin**
   peuvent afficher le nom d'un votant, pour eux seuls ; les secrétaires et les autres orateurs non. Si quelqu'un
   prend la main (« Prendre la main » dans la console), l'ancien orateur perd l'accès aux noms et un bandeau le

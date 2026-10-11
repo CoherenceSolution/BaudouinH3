@@ -3,13 +3,16 @@ import { ArrowRight, Clock, Euro, MapPin, Mic, Trophy, Vote, Target, Sparkles } 
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useAllGoals, useAllReadTickets, useFines, useMatches, usePlayers } from '@/hooks/useData'
-import { currentSeason, formatDate, matchTitle, playerName, seasonOf } from '@/lib/format'
+import type { Player } from '@/lib/types'
+import { currentSeason, formatDate, matchTitle, playerName, pluralize, seasonOf, todayIso } from '@/lib/format'
 import { formatTime, isPlayed, nextMatch } from '@/lib/matches'
-import { goalTotals, nominationRanking, readTickets } from '@/lib/rankings'
+import { goalTotals, leaders, readTickets, titleRanking, type RankRow } from '@/lib/rankings'
 import { formatEuro } from '@/lib/fines'
 import { useCategories } from '@/hooks/useSettings'
 import { Card, Stat } from '@/components/ui'
 import { MatchCard, MatchStatusBadge } from '@/components/MatchCard'
+import { MatchSummary } from '@/components/MatchSummary'
+import { VoteTimerControl } from '@/components/VoteTimer'
 
 export function HomePage() {
   const { identity, staff, isStaff } = useAuth()
@@ -25,13 +28,16 @@ export function HomePage() {
   const me = identity ? players.byId.get(identity.playerId) : null
   const live = matches.data.find((m) => m.status === 'voting' || m.status === 'reading')
   const next = nextMatch(matches.data)
-  const recent = matches.data.filter((m) => m.status === 'closed').slice(0, 3)
+  // Match du jour (ou, à défaut, le dernier joué) : résumé condensé sur l'accueil.
+  const featured = live ?? matches.data.find((m) => m.status !== 'scheduled')
+  const featuredToday = featured?.date === todayIso()
+  const recent = matches.data.filter((m) => m.status === 'closed' && m.id !== featured?.id).slice(0, 3)
 
   const seasonMatchIds = new Set(matches.data.filter((m) => isPlayed(m) && seasonOf(m.date) === season).map((m) => m.id))
   const seasonGoals = goals.data.filter((g) => seasonMatchIds.has(g.matchId))
   const totals = goalTotals(seasonGoals)
   const seasonTickets = readTickets(tickets.data.filter((t) => seasonMatchIds.has(t.matchId)))
-  const best = nominationRanking(seasonTickets, 'best')[0]
+  const seasonMatchCount = new Set(seasonTickets.map((t) => t.matchId)).size
   const unpaid = fines.data.filter((f) => !f.paid).reduce((s, f) => s + f.amount, 0)
 
   const hour = new Date().getHours()
@@ -65,6 +71,12 @@ export function HomePage() {
               <ArrowRight className="size-4" />
             </Link>
           </div>
+          {/* Orateur et staff : le minuteur des votes à portée de main, dès l'accueil. */}
+          {(isSpeaker || isStaff) && live.status === 'voting' && (
+            <div className="px-5 py-3">
+              <VoteTimerControl match={live} compact />
+            </div>
+          )}
         </Card>
       ) : (
         <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
@@ -78,6 +90,20 @@ export function HomePage() {
             </Link>
           )}
         </Card>
+      )}
+
+      {featured && (
+        <section>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[15px] font-semibold">
+              {featuredToday ? 'Match du jour' : featured === live ? 'Match en cours' : 'Dernier match'} · <span className="font-normal text-muted">{matchTitle(featured)}{featuredToday ? '' : `, ${formatDate(featured.date, { day: 'numeric', month: 'long' })}`}</span>
+            </h2>
+            <Link to={`/votes/${featured.id}?tab=resume`} className="inline-flex items-center gap-1 text-[13px] font-medium text-muted hover:text-ink">
+              Page du match <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+          <MatchSummary match={featured} />
+        </section>
       )}
 
       {next && (
@@ -102,10 +128,20 @@ export function HomePage() {
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label={categories[0].label} value={best ? playerName(players.byId.get(best.playerId)) : '—'} sub={best ? `${best.count} voix cette saison` : 'Aucune lecture'} tone="gold" />
-        <Stat label="Meilleur buteur" value={totals.scorers[0] ? playerName(players.byId.get(totals.scorers[0].playerId)) : '—'} sub={totals.scorers[0] ? `${totals.scorers[0].count} buts` : 'Aucun but encodé'} tone="accent" />
-        <Stat label="Meilleur passeur" value={totals.assisters[0] ? playerName(players.byId.get(totals.assisters[0].playerId)) : '—'} sub={totals.assisters[0] ? `${totals.assisters[0].count} passes` : 'Aucune passe encodée'} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {categories.map((c, i) => (
+          <LeaderStat
+            key={c.key}
+            label={`${c.emoji} ${c.label}`}
+            rows={titleRanking(seasonTickets, c.key)}
+            players={players.byId}
+            describe={(r, tied) => `${r.count} fois${tied ? ' chacun' : ''} sur ${pluralize(seasonMatchCount, 'match', 'matchs')}${tied ? '' : ` · ${pluralize(r.votes ?? 0, 'voix', 'voix')}`}`}
+            empty="Aucune lecture"
+            tone={i === 0 ? 'gold' : i === 1 ? 'rose' : 'neutral'}
+          />
+        ))}
+        <LeaderStat label="Meilleur buteur" rows={totals.scorers} players={players.byId} describe={(r, tied) => `${pluralize(r.count, 'but')}${tied ? ' chacun' : ''}`} empty="Aucun but encodé" tone="accent" />
+        <LeaderStat label="Meilleur passeur" rows={totals.assisters} players={players.byId} describe={(r, tied) => `${pluralize(r.count, 'passe')}${tied ? ' chacun' : ''}`} empty="Aucune passe encodée" />
         <Stat label="Amendes impayées" value={formatEuro(unpaid)} sub={`${fines.data.filter((f) => !f.paid).length} en attente`} tone="rose" />
       </div>
 
@@ -129,6 +165,23 @@ export function HomePage() {
         </section>
       )}
     </div>
+  )
+}
+
+/** Tête d'un classement : affiche tous les premiers ex æquo plutôt qu'un seul nom arbitraire. */
+function LeaderStat({ label, rows, players, describe, empty, tone }: { label: string; rows: RankRow[]; players: Map<string, Player>; describe: (r: RankRow, tied: boolean) => string; empty: string; tone?: 'neutral' | 'accent' | 'rose' | 'gold' }) {
+  const top = leaders(rows)
+  if (top.length === 0) return <Stat label={label} value="—" sub={empty} tone={tone} />
+  const names = top.map((r) => playerName(players.get(r.playerId)))
+  if (top.length === 1) return <Stat label={label} value={names[0]} sub={describe(top[0], false)} tone={tone} />
+  const shown = names.length > 3 ? [...names.slice(0, 3), `+${names.length - 3}`] : names
+  return (
+    <Stat
+      label={`${label} · ${top.length} ex æquo`}
+      value={<span className="block text-[16px] leading-snug" title={names.join(', ')}>{shown.join(' · ')}</span>}
+      sub={describe(top[0], true)}
+      tone={tone}
+    />
   )
 }
 

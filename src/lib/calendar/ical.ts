@@ -121,18 +121,33 @@ export function normalizeTeam(s: string | null | undefined): string {
 /**
  * Titre de l'événement → adversaire et domicile/extérieur.
  * « Baudouin H3 - Dragons H4 » : domicile. « Dragons H4 - Baudouin H3 » : extérieur.
+ * Sportlink colle les équipes sans espaces et met des tirets dans leurs noms (« Baudouin H-3-Rapid H-3 ») :
+ * on coupe alors au tiret qui suit un chiffre et précède une lettre.
  * L'équipe est reconnue par un mot-clé (« Baudouin » par défaut) ; sans lui, on garde le titre entier.
  */
 export function parseTeams(summary: string, teamKeyword = 'Baudouin'): { home: boolean; opponent: string } {
   const title = String(summary ?? '').trim()
   const key = normalizeTeam(teamKeyword)
-  const sides = title.split(/\s+(?:-|–|—|vs\.?|contre)\s+/i)
-  if (sides.length === 2 && key) {
-    const [a, b] = sides.map((s) => s.trim())
+  const split = (a: string, b: string) => {
     const ourA = normalizeTeam(a).includes(key)
     const ourB = normalizeTeam(b).includes(key)
-    if (ourA && !ourB) return { home: true, opponent: b }
-    if (ourB && !ourA) return { home: false, opponent: a }
+    if (!a.trim() || !b.trim() || ourA === ourB) return null
+    return ourA ? { home: true, opponent: b.trim() } : { home: false, opponent: a.trim() }
+  }
+  if (key) {
+    const sides = title.split(/\s+(?:-|–|—|vs\.?|contre)\s+/i)
+    const spaced = sides.length === 2 ? split(sides[0], sides[1]) : null
+    if (spaced) return spaced
+    // Tirets collés : le meilleur point de coupe est entre un chiffre et une lettre (« H-3-Rapid »).
+    let best: { score: number; result: { home: boolean; opponent: string } } | null = null
+    for (let i = 1; i < title.length - 1; i++) {
+      if (!'-–—'.includes(title[i])) continue
+      const result = split(title.slice(0, i), title.slice(i + 1))
+      if (!result) continue
+      const score = (/\d/.test(title[i - 1]) ? 2 : 0) + (/\D/.test(title[i + 1]) ? 1 : 0) - (/\d/.test(title[i + 1]) ? 3 : 0)
+      if (!best || score > best.score) best = { score, result }
+    }
+    if (best && best.score > 0) return best.result
   }
   return { home: true, opponent: title || 'Adversaire à confirmer' }
 }

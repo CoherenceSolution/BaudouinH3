@@ -4,7 +4,7 @@ import { ClipboardPen } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
 import { useCategories } from '@/hooks/useSettings'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoCreate, undoDelete } from '@/lib/activity'
 import type { Match, Player, Ticket, VoteCategory, VoteEntry } from '@/lib/types'
 import { playerFullLabel } from '@/lib/format'
 import { PlayerPicker } from '@/components/PlayerPicker'
@@ -56,6 +56,7 @@ export function ManualVoteModal({ open, match, players, tickets, onClose }: Prop
       const authorPlayerId = author ?? `manual-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
       const id = `${match.id}_${authorPlayerId}`
       const existing = tickets.find((t) => t.id === id)
+      const before = await readBefore(`tickets/${id}`)
       await setDoc(doc(db, 'tickets', id), {
         matchId: match.id,
         authorPlayerId,
@@ -76,7 +77,7 @@ export function ManualVoteModal({ open, match, players, tickets, onClose }: Prop
         updatedAt: serverTimestamp(),
       })
       const who = author ? playerFullLabel(players.find((p) => p.id === author)) : 'auteur non précisé'
-      await logActivity(actor, 'create', 'ticket', id, `Vote hors plateforme encodé (${who}) pour ${match.opponent}`)
+      await logActivity(actor, 'create', 'ticket', id, `Vote hors plateforme encodé (${who}) pour ${match.opponent}`, undefined, before ? undoDelete(`tickets/${id}`, before) : undoCreate(`tickets/${id}`))
       toast('Vote ajouté à la file de lecture')
       close()
     } catch (e) {

@@ -25,8 +25,8 @@ d'inactivité), Cloudflare Pages + D1 (gratuit mais temps réel à recoder), VPS
 |---|---|---|
 | **Membre public (votant)** | Connexion anonyme Firebase + saisie de son prénom et de son nom, qui doivent correspondre à un joueur de l'équipe (comparaison sans accents ni majuscules). Identité mémorisée sur l'appareil. | Remplir et modifier son vote (et demander que l'orateur lise son commentaire avant le nom), suivre la lecture et le compte à rebours, voter « coup de cœur », voir qui a coumé, consulter amendes et stats. |
 | **Orateur** | Choisi parmi la **liste des orateurs désignés par l'admin** (`players.canSpeak`, Gestion → Staff). Même formulaire que tout le monde (prénom + nom), en cochant « Je suis l'orateur ce soir » — ou plus tard via le bouton « Je suis l'orateur » de la page du match, visible seulement pour un orateur désigné. | Tout dans la **console orateur** : voter lui-même, lancer / prolonger / arrêter le minuteur, clôturer les votes de tout le monde, puis lire la file d'attente (« Valider le vote » envoie chaque vote à tous), réorganiser / mélanger, étoiles, conserver, consigne « commentaire avant le nom », afficher le nom d'un auteur (**seulement s'il est l'orateur en cours**, qui « a la main » ; l'admin aussi), corriger un nom mal choisi, indiquer que « La lecture des votes est terminée ». |
-| **Secrétaire** | Même formulaire que tout le monde ; aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom, puis entre une fois le **code commun** (4 à 8 chiffres) fixé par l'admin ; ce code ouvre un compte technique partagé (`staff/{uid}`, rôle `secretary`, `shared: true`) qui reste connecté sur l'appareil. | Tout ce que fait l'orateur (sauf voir le nom des votants, à moins de prendre la main) + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité, encoder un **vote hors plateforme**. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume ». |
-| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, tenir la liste des orateurs, définir ou changer le code commun, **rouvrir les votes de n'importe quel match** en un geste (Gestion → Matchs, ou bouton « Rouvrir les votes » sur la page d'un match en lecture ou terminé ; les votes déjà lus le restent), **fusionner deux matchs en double dans un nouveau match** (Gestion → Matchs → « Fusionner »). |
+| **Secrétaire** | Même formulaire que tout le monde ; aucun e-mail ni mot de passe personnel. L'admin accorde les droits à un joueur (`players.role = 'secretary'`). Le membre se connecte par son nom et ses droits s'appliquent **aussitôt, sans code** : l'appareil déclare son joueur dans `identities/{uid}`, que lisent les règles Firestore. Retirer les droits agit immédiatement. | Tout ce que fait l'orateur (sauf voir le nom des votants, à moins de prendre la main) + créer/modifier les matchs, infliger des amendes, gérer le barème, encoder buts et passes, gérer les catégories maison, ajouter des joueurs à la volée, paramètres, journal d'activité, encoder un **vote hors plateforme**. Tient aussi le rôle de **trésorier** : note qui a coumé, marque les absents, « recoume ». |
+| **Administrateur** | Seul compte e-mail + mot de passe (Firebase Auth), rôle `admin` dans `staff/{uid}`, relié à un joueur pour voter. | Tout ce que fait le secrétaire + accorder/retirer les droits de secrétaire, tenir la liste des orateurs, **rouvrir les votes de n'importe quel match** en un geste (Gestion → Matchs, ou bouton « Rouvrir les votes » sur la page d'un match en lecture ou terminé ; les votes déjà lus le restent), **fusionner deux matchs en double dans un nouveau match** (Gestion → Matchs → « Fusionner »), **annuler en groupe** les actions d'une personne (Gestion → Surveillance). |
 
 Première installation : au premier lancement, si `config/bootstrap` n'existe pas, l'application affiche un écran
 « Première installation » qui crée le compte admin, le document `config/bootstrap` et précharge l'équipe
@@ -43,8 +43,8 @@ en connaissant le nom d'un secrétaire.
 ```
 config/bootstrap              { claimedBy, at }
 staff/{uid}                   { email, displayName, role: 'admin'|'secretary', playerId, createdAt }
+identities/{uid}              { playerId, updatedAt }   ← joueur sous le nom duquel l'appareil est connecté
 config/settings               { categories: { best|worst|moment: { label, emoji } } }
-config/secretaryAccess        { email, uid, updatedAt }   ← compte technique courant des secrétaires
 config/calendar               { icalUrl, teamKeyword, lastSync: { at, ok, by, events, created, updated, cancelled, error } }
 players/{id}                  { firstName, lastName, nickname, active, role: 'secretary'|null, canSpeak, createdAt }
 matches/{id}                  { date, time, venue, details, opponent, competition, home, homeScore, awayScore,
@@ -113,7 +113,8 @@ Points de conception :
   à tous les présents (ou à un joueur précis) : `rounds` passe à 2, 3… et ceux qui avaient payé repassent
   « pas encore ». Tout le monde voit qui a coumé ; seul le staff écrit (règles Firestore).
 - **Console orateur, tout au même endroit** : l'orateur et le staff n'ont plus d'onglet « Mon vote » séparé ; la console
-  enchaîne les étapes **1. Mon vote → 2. Minuteur → 3. Clôturer les votes de tout le monde → Lecture**. Pendant la
+  commence par une carte de **pilotage** (minuteur et gros bouton « Clôturer les votes » ; une fois clôturé,
+  « Rouvrir les votes » au même endroit), puis **1. Mon vote → 2. Lecture**. Pendant la
   lecture, les votes forment une **file d'attente** : le premier est mis en avant avec le bouton **« Valider le vote »**
   (qui pose `readAt` : le vote apparaît chez tous et compte dans les classements), les suivants attendent, et les votes
   déjà lus sont **grisés** dans une section repliable « Déjà lus », d'où l'on peut les remettre dans la file.
@@ -141,9 +142,13 @@ Points de conception :
   d'une liste efface aussi toutes ses entrées, par lots de 400 écritures.
 - **Agenda Sportlink** (`src/lib/calendar/`, `scripts/calendar/sync.mjs`, `.github/workflows/sync-calendar.yml`) :
   chaque matin, et quand l'admin appuie sur « Mettre à jour le calendrier », l'agenda iCal est lu et comparé aux matchs existants. L'identifiant du match dérive de l'UID de l'événement
-  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Si l'UID change (Sportlink republie l'agenda) ou si le
+  (`sl_<sha1>`), ce qui relie un match déplacé à sa fiche. Si l'UID change (Sportlink le régénère à chaque lecture) ou si le
   match a été saisi à la main, l'événement est relié au match existant de même jour et même adversaire (ou au seul
-  match à venir contre cet adversaire) : `externalId` est mis à jour, rien n'est dupliqué. Seuls `date, time, opponent, home, venue, details,
+  match à venir contre cet adversaire) : `externalId` est mis à jour, rien n'est dupliqué. Les titres collés
+  (« Baudouin H-3-Rapid H-3 ») sont coupés au tiret entre un chiffre et une lettre ; les matchs importés avant ce
+  correctif, dont l'adversaire est le titre entier, sont relus de la même façon pour être reconnus. Les doublons
+  annulés laissés par les anciennes lectures sont supprimés, sauf s'ils portent des données (votes, coum, buts,
+  amendes…) ; les écritures partent par lots de 400 (limite Firestore : 500). Seuls `date, time, opponent, home, venue, details,
   cancelled` sont écrits ; score, compétition et état des votes jamais. Les événements passés ne sont ni importés
   ni modifiés ; un match futur qui disparaît de l'agenda est marqué `cancelled`, jamais supprimé, mais seulement s'il
   tombe dans la période couverte par l'agenda (un agenda vide ou limité aux prochaines semaines n'annule rien). Les
@@ -182,6 +187,20 @@ Points de conception :
   La lecture est aussi entièrement tracée : clôture, vote validé (n° de lecture), vote remis dans la file, ordre
   modifié ou mélangé, étoiles, nom d'auteur consulté, prise de main sur l'orateur, vote hors plateforme, coups de cœur, minuteur, fin de lecture.
   Gestion → Activité : filtres par type et par personne, recherche, « Charger plus ancien ».
+- **Annulation groupée (Gestion → Surveillance, admin)** : chaque entrée garde aussi `undo`, les écritures inverses
+  (lecture de l'état brut juste avant d'écrire : `readBefore`, puis `undoCreate` / `undoUpdate` / `undoDelete`, qui
+  pour une modification ne remet que les champs touchés). L'admin filtre par personne (un appareil = un `actorUid`)
+  et par période, puis applique ces écritures de la plus récente à la plus ancienne ; une entrée « Annulation »
+  (`undoOf`, avec ses propres `undo`) s'ajoute au journal, qui reste en ajout seul. Les anciennes créations
+  s'annulent par suppression du document. Garde-fous (`lib/undoRules.ts`, testé) : une action dont les mêmes
+  champs ont été modifiés ensuite par quelqu'un d'autre n'est pas cochée d'office ; une écriture au-delà des droits
+  actuels de l'auteur n'est appliquée que si l'admin la coche ; staff, identités, journal et installation ne sont
+  jamais touchés — le journal étant écrit par les appareils, une entrée pourrait contenir une annulation fabriquée.
+  Les règles imposent `actorUid == request.auth.uid`. Alertes calculées sur 7 jours : rafales, suppressions en série,
+  nuit, plusieurs appareils pour un même secrétaire, score modifié plusieurs fois.
+- **Résumé du match** (`components/MatchSummary`) : score saisi en « nous / eux » (`saveScore`), buts et passes,
+  meilleurs de chaque catégorie sur les votes lus, amendes et coum du match ; onglet par défaut d'un match terminé,
+  et match du jour (ou dernier joué) sur l'accueil.
   Exception volontaire : les brouillons auto-sauvegardés d'un vote (toutes les 800 ms) ne sont pas journalisés,
   seul l'envoi ou la mise à jour du vote l'est ; et le contenu d'un vote n'est jamais écrit dans le journal, pour
   préserver l'anonymat (seules les corrections de nom y figurent, sans l'auteur du vote).
@@ -190,8 +209,9 @@ Points de conception :
 
 - Lecture de toutes les données métier : utilisateur connecté (anonyme compris).
 - Écriture joueurs, matchs, amendes, barème, buts, coums, catégories, statistiques : **staff uniquement**
-  (`exists(staff/{uid})`, c'est-à-dire l'admin ou le compte technique ouvert par le code). L'admin seul gère
-  `staff`, `config/secretaryAccess` et le champ `players.role`.
+  (l'admin, avec `staff/{uid}`, ou un appareil dont `identities/{uid}` désigne un joueur `role: 'secretary'`).
+  L'admin seul gère `staff` et le champ `players.role`. Chacun n'écrit que sa propre identité. Limite assumée :
+  l'identité étant déclarative, quiconque se connecte sous le nom d'un secrétaire obtient ses droits.
 - Tickets et coups de cœur : tout utilisateur connecté (modèle de confiance : l'identité du votant est déclarative,
   comme demandé, sans adresse e-mail).
 - Cycle de vie d'un match par l'orateur anonyme : autorisé uniquement pour les champs

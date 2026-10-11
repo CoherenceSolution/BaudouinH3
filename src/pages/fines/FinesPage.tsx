@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useFines, useFineTypes, useMatches, usePlayers } from '@/hooks/useData'
 import { isPlayed } from '@/lib/matches'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoDelete, undoUpdate } from '@/lib/activity'
 import type { Fine, Player } from '@/lib/types'
 import { formatEuro } from '@/lib/fines'
 import { currentSeason, cx, formatDate, playerFullLabel, playerName, seasonOf } from '@/lib/format'
@@ -84,8 +84,9 @@ function useFineActions() {
   const players = usePlayers(true)
   async function togglePaid(f: Fine) {
     try {
+      const before = await readBefore(`fines/${f.id}`)
       await updateDoc(doc(db, 'fines', f.id), { paid: !f.paid, paidAt: f.paid ? null : serverTimestamp() })
-      await logActivity(actor, 'update', 'fine', f.id, `${f.paid ? 'Paiement annulé' : 'Amende payée'} : ${f.label} ${formatEuro(f.amount)} — ${playerFullLabel(players.byId.get(f.playerId))}`)
+      await logActivity(actor, 'update', 'fine', f.id, `${f.paid ? 'Paiement annulé' : 'Amende payée'} : ${f.label} ${formatEuro(f.amount)} — ${playerFullLabel(players.byId.get(f.playerId))}`, undefined, undoUpdate(`fines/${f.id}`, before, ['paid', 'paidAt']))
     } catch (e) {
       console.error(e)
       toast('Action impossible', 'error')
@@ -94,8 +95,9 @@ function useFineActions() {
   async function remove(f: Fine) {
     if (!confirm(`Supprimer l’amende « ${f.label} » de ${formatEuro(f.amount)} ?`)) return
     try {
+      const before = await readBefore(`fines/${f.id}`)
       await deleteDoc(doc(db, 'fines', f.id))
-      await logActivity(actor, 'delete', 'fine', f.id, `Amende supprimée : ${f.label} ${formatEuro(f.amount)} — ${playerFullLabel(players.byId.get(f.playerId))}`)
+      await logActivity(actor, 'delete', 'fine', f.id, `Amende supprimée : ${f.label} ${formatEuro(f.amount)} — ${playerFullLabel(players.byId.get(f.playerId))}`, undefined, undoDelete(`fines/${f.id}`, before))
       toast('Amende supprimée')
     } catch (e) {
       console.error(e)

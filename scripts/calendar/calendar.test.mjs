@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { eventsToMatches, parseStart, parseTeams } from '../../src/lib/calendar/ical.ts'
-import { describeChanges, matchIdFor, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
+import { chunks, describeChanges, matchIdFor, planSync, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
 
 const withIds = (feed) => Promise.all(feed.map(async (m) => ({ ...m, id: await matchIdFor(m.externalId) })))
 
@@ -193,4 +193,51 @@ test('écritures : match créé « à venir », journal, bilan ; le lien n’app
 
 test('un contenu qui n’est pas un agenda est refusé', async () => {
   await assert.rejects(prepareSync('<html>Erreur</html>', []), /pas un agenda/)
+})
+
+test('titres Sportlink collés : « Baudouin H-3-Rapid H-3 »', () => {
+  assert.deepEqual(parseTeams('Baudouin H-3-Rapid H-3'), { home: true, opponent: 'Rapid H-3' })
+  assert.deepEqual(parseTeams('Leuven H-8-Baudouin H-3'), { home: false, opponent: 'Leuven H-8' })
+  assert.deepEqual(parseTeams('Old-Club H-3-Baudouin H-3'), { home: false, opponent: 'Old-Club H-3' })
+})
+
+// Situation réelle constatée dans la tâche du matin : « 15 matchs ajoutés, 15 annulés » chaque jour, avec des
+// adversaires enregistrés sous le titre entier.
+const event = (summary, date, uid) => ({ externalId: uid, id: `sl_${uid}`, date, time: '10:00', ...parseTeams(summary), venue: null, details: null, cancelled: false, summary })
+
+test('réparation : ancien import au titre entier repris et corrigé, doublons annulés retirés (passé compris)', async () => {
+  const today = '2026-10-11'
+  const old = (id, date, cancelled, extra = {}) => ({ id, source: 'sportlink', externalId: id, status: 'scheduled', date, time: '10:00', opponent: 'Baudouin H-3-Herakles H-6', home: true, venue: null, details: null, cancelled, ...extra })
+  const existing = [
+    old('jour1', '2026-10-18', true),
+    old('jour2', '2026-10-18', true),
+    old('jour3', '2026-10-18', false),
+    // Match passé : l'original gardé et une copie annulée.
+    { ...old('passe', '2026-10-04', false, { opponent: 'Dragons H-5-Baudouin H-3', status: 'closed' }) },
+    { ...old('passe-copie', '2026-10-04', true, { opponent: 'Dragons H-5-Baudouin H-3' }) },
+  ]
+  const plan = planSync([event('Baudouin H-3-Herakles H-6', '2026-10-18', 'nouveau')], existing, today)
+  assert.equal(plan.create.length, 0)
+  assert.deepEqual(plan.update.map((u) => [u.id, u.data.opponent, u.data.home]), [['jour3', 'Herakles H-6', true]])
+  assert.deepEqual(plan.cancel, [])
+  assert.deepEqual(plan.remove.map((r) => r.id).sort(), ['jour1', 'jour2', 'passe-copie'])
+})
+
+test('un doublon qui porte des données n’est jamais retiré ; sans vérification possible, rien ne l’est', async () => {
+  const existing = [
+    { id: 'a', source: 'sportlink', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: false },
+    { id: 'b', source: 'sportlink', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: true },
+    { id: 'c', source: 'sportlink', status: 'scheduled', date: '2026-10-18', opponent: 'Herakles H-6', home: true, cancelled: true },
+  ]
+  const ics = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:x', 'DTSTART:20261018T080000Z', 'SUMMARY:Baudouin H-3-Herakles H-6', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
+  const now = new Date('2026-10-11T08:00:00Z')
+  const { plan, summary } = await prepareSync(ics, existing, { now, referenced: async () => new Set(['c']) })
+  assert.deepEqual(plan.remove.map((r) => r.id), ['b'])
+  assert.equal(summary.removed, 1)
+  assert.equal((await prepareSync(ics, existing, { now })).plan.remove.length, 0)
+})
+
+test('gros nettoyage : écritures découpées en lots de moins de 500', () => {
+  const parts = chunks(Array.from({ length: 901 }, (_, i) => i), 400)
+  assert.deepEqual(parts.map((p) => p.length), [400, 400, 101])
 })

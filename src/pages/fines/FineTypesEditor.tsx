@@ -3,7 +3,7 @@ import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from '
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
-import { diffChanges, logActivity } from '@/lib/activity'
+import { diffChanges, logActivity, readBefore, undoCreate, undoDelete, undoUpdate } from '@/lib/activity'
 import type { FineType } from '@/lib/types'
 import { describeFineType } from '@/lib/fines'
 import { Badge, Button, Card, Input, Modal, Select, Toggle } from '@/components/ui'
@@ -18,8 +18,9 @@ export function FineTypesEditor({ types, isStaff }: { types: FineType[]; isStaff
   async function remove(t: FineType) {
     if (!confirm(`Supprimer « ${t.label} » du barème ? Les amendes déjà infligées sont conservées.`)) return
     try {
+      const before = await readBefore(`fineTypes/${t.id}`)
       await deleteDoc(doc(db, 'fineTypes', t.id))
-      await logActivity(actor, 'delete', 'fineType', t.id, `Type d’amende supprimé : ${t.label}`)
+      await logActivity(actor, 'delete', 'fineType', t.id, `Type d’amende supprimé : ${t.label}`, undefined, undoDelete(`fineTypes/${t.id}`, before))
       toast('Supprimé du barème')
     } catch (e) {
       console.error(e)
@@ -98,14 +99,15 @@ function FineTypeModal({ open, type, nextOrder, onClose }: { open: boolean; type
     }
     try {
       if (type) {
+        const before = await readBefore(`fineTypes/${type.id}`)
         await updateDoc(doc(db, 'fineTypes', type.id), data)
         const changes = diffChanges({ ...type }, data, {
           label: 'Libellé', description: 'Description', kind: 'Type', amount: 'Montant', unitLabel: 'Unité', freeUnits: 'Unités offertes', cap: 'Plafond', active: 'Actif',
         })
-        await logActivity(actor, 'update', 'fineType', type.id, `Barème modifié : ${data.label}`, changes)
+        await logActivity(actor, 'update', 'fineType', type.id, `Barème modifié : ${data.label}`, changes, undoUpdate(`fineTypes/${type.id}`, before, Object.keys(data)))
       } else {
         const ref = await addDoc(collection(db, 'fineTypes'), { ...data, order: nextOrder, createdAt: serverTimestamp() })
-        await logActivity(actor, 'create', 'fineType', ref.id, `Barème : ajout de « ${data.label} »`)
+        await logActivity(actor, 'create', 'fineType', ref.id, `Barème : ajout de « ${data.label} »`, undefined, undoCreate(`fineTypes/${ref.id}`))
       }
       toast('Barème enregistré')
       onClose()

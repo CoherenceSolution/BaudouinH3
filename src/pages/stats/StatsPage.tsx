@@ -7,7 +7,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useAllGoals, useMatches, usePlayers, useStatCategories, useStatEntries } from '@/hooks/useData'
 import { isPlayed } from '@/lib/matches'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoCreate, undoDelete } from '@/lib/activity'
 import type { Match, Player, StatCategory, StatEntry } from '@/lib/types'
 import { goalTotals } from '@/lib/rankings'
 import { currentSeason, formatDate, matchTitle, playerFullLabel, playerName, seasonOf, todayIso } from '@/lib/format'
@@ -168,8 +168,9 @@ function CategoryView({ category, entries, players, isStaff, onAdd, onEdit }: { 
   async function remove(e: StatEntry) {
     if (!confirm('Supprimer cette entrée ?')) return
     try {
+      const before = await readBefore(`statEntries/${e.id}`)
       await deleteDoc(doc(db, 'statEntries', e.id))
-      await logActivity(actor, 'delete', 'statEntry', e.id, `${category.label} : entrée supprimée pour ${playerFullLabel(players.get(e.playerId))}`)
+      await logActivity(actor, 'delete', 'statEntry', e.id, `${category.label} : entrée supprimée pour ${playerFullLabel(players.get(e.playerId))}`, undefined, undoDelete(`statEntries/${e.id}`, before))
       toast('Entrée supprimée')
     } catch (err) {
       console.error(err)
@@ -220,7 +221,7 @@ function AddEntryModal({ category, players, matches, onClose }: { category: Stat
       const ref = await addDoc(collection(db, 'statEntries'), {
         categoryId: category.id, playerId, matchId: matchId || null, date, value: Number(value || 1), note: note.trim(), createdBy: actor.uid, createdAt: serverTimestamp(),
       })
-      await logActivity(actor, 'create', 'statEntry', ref.id, `${category.label} : +${value} pour ${playerFullLabel(players.find((p) => p.id === playerId))}`)
+      await logActivity(actor, 'create', 'statEntry', ref.id, `${category.label} : +${value} pour ${playerFullLabel(players.find((p) => p.id === playerId))}`, undefined, undoCreate(`statEntries/${ref.id}`))
       toast('Entrée ajoutée')
       onClose()
     } catch (e) {

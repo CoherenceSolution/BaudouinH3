@@ -1,7 +1,7 @@
 // Décide ce que la synchronisation doit faire (créer, mettre à jour, annuler) et le traduit en écritures.
 // Pur et sans dépendance : le navigateur (bouton de l'admin) et la tâche quotidienne (firebase-admin)
 // appliquent les mêmes écritures, chacun avec son SDK.
-import { eventsToMatches, localParts, normalizeTeam, type FeedMatch } from './ical.ts'
+import { eventsToMatches, localParts, normalizeTeam, parseTeams, type FeedMatch } from './ical.ts'
 
 /** Champs tenus à jour depuis l'agenda. Score, votes, coum, compétition… ne sont jamais touchés. */
 export const SYNCED_FIELDS = ['date', 'time', 'opponent', 'home', 'venue', 'details', 'cancelled'] as const
@@ -46,10 +46,17 @@ function pick(m: FeedMatch): SyncedData {
   return Object.fromEntries(SYNCED_FIELDS.map((k) => [k, m[k] ?? fallback(k)])) as SyncedData
 }
 
-/** Même jour, même adversaire : c'est le même match, quel que soit son identifiant. */
-const sameMatchKey = (m: { date: string; opponent: string }) => `${m.date}|${normalizeTeam(m.opponent)}`
-const sameOpponent = (a: { opponent: string; home?: boolean }, b: { opponent: string; home?: boolean }) =>
-  normalizeTeam(a.opponent) === normalizeTeam(b.opponent) && Boolean(a.home) === Boolean(b.home)
+/**
+ * Adversaire et domicile / extérieur, tels que l'agenda les donne aujourd'hui. Les matchs importés avant le
+ * découpage des titres collés gardent le titre entier comme adversaire (« Baudouin H-3-Rapid H-3 », toujours
+ * « à domicile ») : on les relit de la même façon pour les reconnaître.
+ */
+export function opponentOf(m: { opponent?: string | null; home?: boolean | null }, teamKeyword = 'Baudouin'): { opponent: string; home: boolean } {
+  const opponent = String(m.opponent ?? '')
+  const key = normalizeTeam(teamKeyword)
+  if (key && normalizeTeam(opponent).includes(key)) return parseTeams(opponent, teamKeyword)
+  return { opponent, home: m.home !== false }
+}
 
 /**
  * Compare l'agenda aux matchs de l'application et décide quoi écrire.
@@ -65,7 +72,13 @@ const sameOpponent = (a: { opponent: string; home?: boolean }, b: { opponent: st
  * @param existing  matchs déjà présents (importés ou saisis à la main)
  * @param today     'YYYY-MM-DD' à Bruxelles
  */
-export function planSync(feed: (FeedMatch & { id: string })[], existing: ExistingMatch[], today: string): SyncPlan {
+export function planSync(feed: (FeedMatch & { id: string })[], existing: ExistingMatch[], today: string, { teamKeyword = 'Baudouin' } = {}): SyncPlan {
+  /** Même jour, même adversaire : c'est le même match, quel que soit son identifiant. */
+  const sameMatchKey = (m: { date: string; opponent: string; home?: boolean }) => `${m.date}|${normalizeTeam(opponentOf(m, teamKeyword).opponent)}`
+  const sameOpponent = (a: { opponent: string; home?: boolean }, b: { opponent: string; home?: boolean }) => {
+    const [x, y] = [opponentOf(a, teamKeyword), opponentOf(b, teamKeyword)]
+    return normalizeTeam(x.opponent) === normalizeTeam(y.opponent) && x.home === y.home
+  }
   const byId = new Map(existing.map((m) => [m.id, m]))
   // Un match fusionné et le match qui l'a remplacé peuvent porter le même identifiant : le second l'emporte.
   const byExternal = new Map<string, ExistingMatch>()
@@ -105,7 +118,10 @@ export function planSync(feed: (FeedMatch & { id: string })[], existing: Existin
     let before = direct.get(m.id)
     if (!before && absorbed.has(m.id)) continue
     if (!before) {
-      before = existing.find((e) => free(e) && sameMatchKey(e) === sameMatchKey(m))
+      // Plusieurs copies possibles (anciennes lectures) : d'abord celle dont les votes ont commencé, puis celle
+      // qui n'est pas annulée ; les autres partent ensuite comme doublons.
+      const rank = (e: ExistingMatch) => (e.status !== 'scheduled' ? 0 : e.cancelled ? 2 : 1)
+      before = existing.filter((e) => free(e) && sameMatchKey(e) === sameMatchKey(m)).sort((a, b) => rank(a) - rank(b))[0]
       if (!before) {
         const candidates = existing.filter((e) => free(e) && e.status === 'scheduled' && sameOpponent(e, m))
         if (candidates.length === 1) before = candidates[0]
@@ -131,13 +147,18 @@ export function planSync(feed: (FeedMatch & { id: string })[], existing: Existin
   const dates = events.map((e) => e.date).sort()
   const [first, last] = [dates[0], dates.at(-1)]
   for (const m of existing) {
-    if (m.source !== 'sportlink' || m.mergedInto || claimed.has(m.id) || m.date <= today || m.status !== 'scheduled') continue
-    if (m.cancelled) {
-      // Doublon d'un match bien présent dans l'agenda (ancien identifiant) : on le retire de la liste.
-      if (known.has(sameMatchKey(m))) plan.remove.push({ id: m.id, before: m })
-      continue
-    }
+    if (m.source !== 'sportlink' || m.mergedInto || claimed.has(m.id) || m.date <= today || m.status !== 'scheduled' || m.cancelled) continue
     if (first && last && m.date >= first && m.date <= last) plan.cancel.push({ id: m.id, before: m })
+  }
+
+  // Doublons laissés par les anciennes lectures (un par jour, chacun annulé le lendemain) : copie annulée,
+  // jamais ouverte aux votes, d'un match que l'on garde ou que l'agenda donne encore — passé compris.
+  // prepareSync écarte encore ceux qui portent des données (votes, coum, buts, amendes…).
+  const kept = new Set(existing.filter((e) => !e.mergedInto && (claimed.has(e.id) || !e.cancelled || e.status !== 'scheduled')).map(sameMatchKey))
+  for (const m of existing) {
+    if (m.source !== 'sportlink' || m.mergedInto || claimed.has(m.id) || m.status !== 'scheduled' || !m.cancelled) continue
+    const key = sameMatchKey(m)
+    if (known.has(key) || kept.has(key)) plan.remove.push({ id: m.id, before: m })
   }
   return plan
 }
@@ -197,12 +218,35 @@ export interface SyncSummary {
   removed?: number
 }
 
-/** Lit l'agenda et prépare le plan, sans rien écrire. */
-export async function prepareSync(ics: string, existing: ExistingMatch[], { teamKeyword, now = new Date() }: { teamKeyword?: string; now?: Date } = {}) {
+/** Collections qui rattachent des données à un match : un match qui en porte n'est jamais supprimé. */
+export const LINKED_COLLECTIONS = ['tickets', 'likes', 'coums', 'goals', 'fines', 'statEntries'] as const
+
+/** Découpe une liste en paquets (requêtes « in » limitées à 30 valeurs, lots d'écritures à 500). */
+export function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/**
+ * Lit l'agenda et prépare le plan, sans rien écrire.
+ * @param referenced  parmi ces matchs, ceux qui portent déjà des données (votes, coum, buts, amendes…) :
+ *                    ils ne sont jamais supprimés comme doublons. Sans elle, aucun doublon n'est supprimé.
+ */
+export async function prepareSync(
+  ics: string,
+  existing: ExistingMatch[],
+  { teamKeyword, now = new Date(), referenced }: { teamKeyword?: string; now?: Date; referenced?: (ids: string[]) => Promise<Set<string>> } = {},
+) {
   if (!ics.includes('BEGIN:VCALENDAR')) throw new Error('Le lien ne renvoie pas un agenda iCalendar')
-  const feed = eventsToMatches(ics, { teamKeyword: teamKeyword || 'Baudouin' })
+  const keyword = teamKeyword || 'Baudouin'
+  const feed = eventsToMatches(ics, { teamKeyword: keyword })
   const withIds = await Promise.all(feed.map(async (m) => ({ ...m, id: await matchIdFor(m.externalId) })))
-  const plan = planSync(withIds, existing, localParts(now).date)
+  const plan = planSync(withIds, existing, localParts(now).date, { teamKeyword: keyword })
+  if (plan.remove.length) {
+    const used = referenced ? await referenced(plan.remove.map((r) => r.id)) : new Set(plan.remove.map((r) => r.id))
+    plan.remove = plan.remove.filter((r) => !used.has(r.id))
+  }
   const summary: SyncSummary = { events: feed.length, created: plan.create.length, updated: plan.update.length, cancelled: plan.cancel.length, removed: plan.remove.length }
   return { plan, summary }
 }

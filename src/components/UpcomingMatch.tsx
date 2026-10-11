@@ -5,7 +5,7 @@ import type { Match } from '@/lib/types'
 import { db } from '@/lib/firebase'
 import { formatDate } from '@/lib/format'
 import { formatTime } from '@/lib/matches'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
 import { useSpeaker } from '@/hooks/useSpeaker'
@@ -30,8 +30,9 @@ export function UpcomingMatchPanel({ match }: { match: Match }) {
     if (match.cancelled && !confirm('Ce match est marqué annulé dans l’agenda. Ouvrir quand même les votes ?')) return
     setOpening(true)
     try {
+      const before = await readBefore(`matches/${match.id}`)
       await updateDoc(doc(db, 'matches', match.id), { status: 'voting', updatedAt: serverTimestamp() })
-      await logActivity(actor, 'update', 'match', match.id, `Votes ouverts à la main pour ${match.opponent}`, [{ field: 'Statut', before: 'À venir', after: 'Votes ouverts' }])
+      await logActivity(actor, 'update', 'match', match.id, `Votes ouverts à la main pour ${match.opponent}`, [{ field: 'Statut', before: 'À venir', after: 'Votes ouverts' }], undoUpdate(`matches/${match.id}`, before, ['status']))
       toast('Votes ouverts')
     } catch (e) {
       console.error(e)

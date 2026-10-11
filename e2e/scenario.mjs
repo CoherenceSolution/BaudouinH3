@@ -88,11 +88,8 @@ async function fillTicket(p, best, worst, moment, comment, commentFirst = false)
   }
 }
 
-// 2c. Code des secrétaires + droits à Jarne
+// 2c. Droits de secrétaire à Jarne (aucun code : ils suivent son nom)
 await admin.goto(BASE + '/admin/staff')
-await admin.getByLabel('Code (4 à 8 chiffres)').fill('2468')
-await admin.getByRole('button', { name: 'Définir le code' }).click()
-await admin.getByText('Un code est défini').waitFor({ timeout: 20000 })
 await admin.getByPlaceholder(/Rechercher un nom ou un surnom/).fill('Jarne')
 await admin.getByRole('button', { name: 'Rendre secrétaire' }).first().click()
 await admin.getByText('est maintenant secrétaire').waitFor()
@@ -195,14 +192,14 @@ await shot(admin, '07-stats-duos')
 // 4b. Minuteur des votes, depuis la console
 await admin.goto(BASE + `/votes/${matchId}`)
 await admin.getByRole('button', { name: 'Console orateur', exact: true }).click()
-await admin.getByText('Minuteur des votes').waitFor()
+// Le minuteur est en haut de la console, avec le bouton de clôture.
 await admin.getByRole('button', { name: '10 min' }).click()
 await admin.getByText('Minuteur lancé : 10 minutes').first().waitFor()
-await admin.getByText(/Il reste (9:5\d|10:00) aux votants/).waitFor()
+await admin.getByRole('button', { name: 'Arrêter' }).waitFor()
 await shot(admin, '07c-minuteur')
 
 // 5. Votants
-async function login(name, firstName, lastName, mode = 'public', pin = null) {
+async function login(name, firstName, lastName, mode = 'public', secretary = false) {
   const p = await ctx('voter-' + name)
   await p.goto(BASE)
   // Un seul formulaire pour tout le monde ; l'orateur coche simplement la case.
@@ -210,22 +207,13 @@ async function login(name, firstName, lastName, mode = 'public', pin = null) {
   await p.getByLabel('Nom', { exact: true }).fill(lastName)
   if (mode === 'speaker') await p.getByRole('checkbox').check()
   await p.getByRole('button', { name: mode === 'speaker' ? 'Entrer comme orateur' : 'Continuer' }).click()
-  if (pin) {
-    await p.getByText('Code des secrétaires').waitFor()
-    await expectError('un code faux est refusé', async () => {
-      await p.getByLabel('Code').fill('0000')
-      await p.getByRole('button', { name: 'Valider' }).click()
-      await p.getByText('Code incorrect.').waitFor({ timeout: 15000 })
-    })
-    await p.getByLabel('Code').fill(pin)
-    await p.getByRole('button', { name: 'Valider' }).click()
-    await p.getByRole('link', { name: 'Gestion' }).first().waitFor({ timeout: 20000 })
-  }
+  // Secrétaire : les droits s'appliquent dès la connexion par le nom, sans code.
+  if (secretary) await p.getByRole('link', { name: 'Gestion' }).first().waitFor({ timeout: 20000 })
   return p
 }
-async function vote(name, best, worst, moment, comment, pin = null, commentFirst = false) {
+async function vote(name, best, worst, moment, comment, secretary = false, commentFirst = false) {
   const [firstName, lastName] = name
-  const p = await login(firstName, firstName, lastName, 'public', pin)
+  const p = await login(firstName, firstName, lastName, 'public', secretary)
   // Le compte à rebours est visible partout, pas seulement sur la page du match.
   await p.getByText(/Contre RSC Anderlecht Vétérans/).first().waitFor()
   await p.goto(BASE + `/votes/${matchId}`)
@@ -234,7 +222,7 @@ async function vote(name, best, worst, moment, comment, pin = null, commentFirst
   await fillTicket(p, best, worst, moment, comment, commentFirst)
   return p
 }
-const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', null, true)
+const ronny = await vote(['Ronny', 'verast'], 'Vigne', 'Leyder', 'Le petit pont sur le 9 adverse', 'Deux buts, une masterclass.', false, true)
 await shot(ronny, '08-ticket-form')
 await ronny.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await ronny.getByText('Vote envoyé', { exact: true }).waitFor()
@@ -246,8 +234,8 @@ await shot(ronny, '09-ticket-sent')
 const mathis = await vote(['mathis', 'LEYDER'], 'Vigne', 'Verast', 'La roulette dans le rond central', 'Le passeur mérite aussi… mais bon.')
 await mathis.getByRole('button', { name: 'Envoyer mon vote' }).click()
 await mathis.getByText('Vote envoyé', { exact: true }).waitFor()
-const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.', '2468')
-await shot(jarne, '07b-secretaire-par-code')
+const jarne = await vote(['Jarne', 'Bellinghen'], 'Verast', 'Leyder', 'La glissade du gardien', 'Solide derrière.', true)
+await shot(jarne, '07b-secretaire-par-nom')
 // Jarne garde un brouillon (ne pas envoyer)
 await jarne.waitForTimeout(1500)
 
@@ -283,7 +271,12 @@ await speaker.getByText('Minuteur lancé : 5 minutes').first().waitFor()
 await ronny.getByText(/Minuteur lancé par Maxim Leonard/).waitFor()
 await shot(speaker, '11b-console-vote-minuteur')
 // …et clôture les votes de tout le monde
-await speaker.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
+// Clôturé trop tôt : l'orateur rouvre d'un geste, depuis le même endroit, puis clôture pour de bon.
+await speaker.getByText('Clôturé trop tôt ?').waitFor()
+await speaker.getByRole('button', { name: 'Rouvrir les votes' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
+await speaker.getByText('Clôturé trop tôt ?').waitFor()
 await speaker.getByText('Lecture par Maxim Leonard').waitFor()
 await speaker.getByRole('button', { name: 'Mélanger' }).click()
 await speaker.waitForTimeout(500)
@@ -391,7 +384,7 @@ await speaker.getByRole('button', { name: 'La lecture des votes est terminée' }
 await speaker.getByText('Lecture des votes terminée').first().waitFor()
 // Une lecture terminée peut rouvrir les votes (un retardataire), puis se refermer.
 await speaker.getByRole('button', { name: 'Rouvrir les votes' }).click()
-await speaker.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await speaker.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await speaker.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await speaker.getByText('Lecture des votes terminée').first().waitFor()
 
@@ -413,14 +406,26 @@ const doneRow = admin.locator('div', { has: admin.getByText('RSC Anderlecht Vét
 await doneRow.getByRole('button', { name: 'Rouvrir les votes' }).click()
 await admin.getByText('Votes rouverts').first().waitFor()
 await admin.goto(BASE + `/votes/${matchId}`)
-await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await admin.getByText('Lecture des votes terminée').first().waitFor()
 await admin.getByRole('button', { name: 'Rouvrir les votes' }).first().click()
 await admin.getByText('Votes rouverts').first().waitFor()
-await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await admin.getByText('Lecture des votes terminée').first().waitFor()
+
+// 7c. Une secrétaire corrige le score depuis le résumé du match, sans passer par la gestion.
+await jarne.goto(BASE + `/votes/${matchId}?tab=resume`)
+await jarne.getByRole('button', { name: 'Corriger le score' }).click()
+await jarne.getByLabel('Score Baudouin H3').fill('4')
+await jarne.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+await jarne.getByText('Score enregistré').first().waitFor()
+await jarne.getByText('Victoire').waitFor()
+// Résumé condensé : buts et passes, votes lus, amendes, coum
+await jarne.getByText('Buts et passes').waitFor()
+await jarne.getByText(/votes? lus? sur/).waitFor()
+await shot(jarne, '14b-resume-match')
 
 // 7f. Deux matchs en double, des votes ouverts des deux côtés : l'admin crée un 3e match qui reçoit tout, rien ne se perd.
 const dupIds = []
@@ -468,7 +473,7 @@ if (dupIds.some((id) => keptUrl.endsWith(id))) throw new Error('Un nouveau match
 await admin.goto(BASE + `/votes/${dupIds[1]}`)
 await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
 await admin.waitForURL(keptUrl)
-await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }).click()
+await admin.getByRole('button', { name: 'Clôturer les votes', exact: true }).click()
 await admin.getByText('Doublon de fusion : 2ᵉ vote du même auteur').first().waitFor()
 await admin.getByRole('button', { name: 'Participation' }).click()
 await admin.getByText(/2 envoyés/).waitFor()
@@ -519,6 +524,27 @@ await admin.getByTitle('Supprimer la liste').nth(1).click()
 await admin.getByText('Liste supprimée').first().waitFor()
 await admin.waitForTimeout(600)
 if ((await admin.getByText('Homme du match', { exact: true }).count()) !== 0) throw new Error('La liste devrait avoir disparu')
+
+// 8d. Surveillance : l'admin annule d'un geste les actions de Jarne de la dernière heure.
+await admin.goto(BASE + '/admin/surveillance')
+await admin.getByText('À surveiller (7 derniers jours)').waitFor()
+// La liste des personnes se remplit avec le journal.
+await admin.waitForFunction(() => [...document.querySelectorAll('select[title="Personne"] option')].some((o) => o.textContent.includes('Jarne')))
+const jarneUid = await admin.locator('select[title="Personne"] option', { hasText: 'Jarne' }).first().getAttribute('value')
+await admin.getByTitle('Personne').selectOption(jarneUid)
+await admin.getByText(/Score corrigé : RSC Anderlecht Vétérans/).waitFor()
+// La prise de main de Jarne a été reprise ensuite par l'orateur : signalée, pas cochée d'office.
+await admin.getByText('Modifié ensuite', { exact: true }).first().waitFor()
+await shot(admin, '17d-surveillance')
+await admin.getByRole('button', { name: /^Annuler \d+ actions?$/ }).click()
+await admin.getByText(/actions? annulées?/).first().waitFor({ timeout: 20000 })
+await admin.getByText('Déjà annulée', { exact: true }).first().waitFor()
+// Le score revient à 3 – 2.
+await admin.goto(BASE + `/votes/${matchId}?tab=resume`)
+await admin.getByRole('button', { name: 'Corriger le score' }).waitFor()
+if ((await admin.getByText('Victoire').count()) !== 1) throw new Error('Le match devrait rester une victoire')
+const ours = await admin.locator('.text-3xl').first().textContent()
+if (ours?.trim() !== '3') throw new Error(`Score non rétabli : ${ours}`)
 
 // 9. Mobile
 const m = await ctx('mobile', true)

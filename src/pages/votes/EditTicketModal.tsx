@@ -4,7 +4,7 @@ import { Save } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useActor } from '@/hooks/useActor'
 import { useCategories } from '@/hooks/useSettings'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import type { Player, Ticket, VoteCategory } from '@/lib/types'
 import { playerFullLabel, playerName } from '@/lib/format'
 import { PlayerPicker } from '@/components/PlayerPicker'
@@ -45,6 +45,7 @@ export function EditTicketModal({ ticket, players, onClose }: Props) {
     try {
       const patch: Record<string, unknown> = { correctedByName: actor.name, updatedAt: serverTimestamp() }
       for (const c of changed) patch[`${c.key}.playerId`] = picks[c.key]
+      const before = await readBefore(`tickets/${ticket.id}`)
       await updateDoc(doc(db, 'tickets', ticket.id), patch)
       const summary = changed
         .map((c) => `${c.label} : ${playerFullLabel(byId.get(ticket[c.key]?.playerId ?? '')) || '—'} → ${playerFullLabel(byId.get(picks[c.key] ?? '')) || '—'}`)
@@ -54,7 +55,7 @@ export function EditTicketModal({ ticket, players, onClose }: Props) {
         before: playerFullLabel(byId.get(ticket[c.key]?.playerId ?? '')) || '—',
         after: playerFullLabel(byId.get(picks[c.key] ?? '')) || '—',
       }))
-      await logActivity(actor, 'update', 'ticket', ticket.id, `Vote corrigé — ${summary}`, changes)
+      await logActivity(actor, 'update', 'ticket', ticket.id, `Vote corrigé — ${summary}`, changes, undoUpdate(`tickets/${ticket.id}`, before, Object.keys(patch).filter((k) => k !== 'updatedAt')))
       toast('Vote corrigé, classements mis à jour')
       onClose()
     } catch (e) {

@@ -4,7 +4,7 @@ import { Link2, UserRound } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import type { Player } from '@/lib/types'
 import { playerFullLabel } from '@/lib/format'
 import { PlayerPicker } from '@/components/PlayerPicker'
@@ -23,8 +23,9 @@ export function ChooseIdentity({ players }: { players: Player[] }) {
     if (!value || !staff) return
     setLoading(true)
     try {
+      const before = await readBefore(`staff/${staff.id}`)
       await updateDoc(doc(db, 'staff', staff.id), { playerId: value })
-      await logActivity(actor, 'update', 'staff', staff.id, `Compte ${staff.displayName} relié au joueur ${playerFullLabel(players.find((p) => p.id === value))}`)
+      await logActivity(actor, 'update', 'staff', staff.id, `Compte ${staff.displayName} relié au joueur ${playerFullLabel(players.find((p) => p.id === value))}`, undefined, undoUpdate(`staff/${staff.id}`, before, ['playerId']))
       toast('Compte relié, vous pouvez voter')
     } catch (e) {
       console.error(e)

@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
-import { ShieldCheck, ShieldOff, Link2, KeyRound, Mic, MicOff } from 'lucide-react'
-import { PIN_PATTERN, setSecretaryPin } from '@/lib/secretaryAccess'
-import { humanizePinError } from '@/lib/pinErrors'
-import type { SecretaryAccess } from '@/lib/types'
+import { useMemo, useState } from 'react'
+import { doc, updateDoc } from 'firebase/firestore'
+import { ShieldCheck, ShieldOff, Link2, Mic, MicOff } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers, useStaffList } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import type { Player, StaffMember } from '@/lib/types'
 import { cx, playerFullLabel, playerMatches, playerName, playerRealName } from '@/lib/format'
 import { Avatar, Badge, Button, Card, Input, Select, Spinner } from '@/components/ui'
@@ -35,8 +32,9 @@ export function StaffAdmin() {
 
   async function setSecretary(p: Player, grant: boolean) {
     try {
+      const before = await readBefore(`players/${p.id}`)
       await updateDoc(doc(db, 'players', p.id), { role: grant ? 'secretary' : null })
-      await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerFullLabel(p)}` : `Droits de secrétaire retirés à ${playerFullLabel(p)}`)
+      await logActivity(actor, 'update', 'staff', p.id, grant ? `Droits de secrétaire accordés à ${playerFullLabel(p)}` : `Droits de secrétaire retirés à ${playerFullLabel(p)}`, undefined, undoUpdate(`players/${p.id}`, before, ['role']))
       toast(grant ? `${playerName(p)} est maintenant secrétaire` : `Droits retirés à ${playerName(p)}`)
     } catch (err) {
       console.error(err)
@@ -46,10 +44,11 @@ export function StaffAdmin() {
 
   async function setSpeaker(p: Player, grant: boolean) {
     try {
+      const before = await readBefore(`players/${p.id}`)
       await updateDoc(doc(db, 'players', p.id), { canSpeak: grant })
       await logActivity(actor, 'update', 'staff', p.id, grant ? `${playerFullLabel(p)} ajouté à la liste des orateurs` : `${playerFullLabel(p)} retiré de la liste des orateurs`, [
         { field: 'Orateur désigné', before: grant ? 'non' : 'oui', after: grant ? 'oui' : 'non' },
-      ])
+      ], undoUpdate(`players/${p.id}`, before, ['canSpeak']))
       toast(grant ? `${playerName(p)} peut être orateur` : `${playerName(p)} n’est plus orateur`)
     } catch (err) {
       console.error(err)
@@ -59,8 +58,9 @@ export function StaffAdmin() {
 
   async function linkPlayer(s: StaffMember, pid: string) {
     try {
+      const before = await readBefore(`staff/${s.id}`)
       await updateDoc(doc(db, 'staff', s.id), { playerId: pid || null })
-      await logActivity(actor, 'update', 'staff', s.id, pid ? `${s.displayName} relié au joueur ${playerFullLabel(players.byId.get(pid))}` : `${s.displayName} : lien joueur retiré`)
+      await logActivity(actor, 'update', 'staff', s.id, pid ? `${s.displayName} relié au joueur ${playerFullLabel(players.byId.get(pid))}` : `${s.displayName} : lien joueur retiré`, undefined, undoUpdate(`staff/${s.id}`, before, ['playerId']))
     } catch (err) {
       console.error(err)
       toast('Action impossible', 'error')
@@ -71,12 +71,10 @@ export function StaffAdmin() {
 
   return (
     <div className="space-y-5">
-      <PinSection />
-
       <section>
         <h3 className="mb-2 text-[15px] font-semibold">Secrétaires et orateurs</h3>
         <p className="mb-3 text-[13px] text-muted">
-          Un secrétaire n’a pas d’e-mail ni de mot de passe personnel : il se connecte avec son prénom et son nom, entre le code commun une fois sur son téléphone, et peut gérer matchs, amendes, buts et joueurs. Retirez les droits ici à tout moment.
+          Un secrétaire n’a ni e-mail, ni mot de passe, ni code : il se connecte avec son prénom et son nom, et ses droits s’appliquent aussitôt (matchs, amendes, buts, joueurs). Ils suivent le nom : quiconque se connecte sous ce nom les obtient, et chaque geste reste dans le journal d’activité. Retirez les droits ici à tout moment, l’effet est immédiat.
         </p>
         <ErrorNotice error={players.error} />
         <div className="mb-3 rounded-xl bg-violet-soft/60 p-3">
@@ -155,69 +153,5 @@ export function StaffAdmin() {
         <p className="mt-2 text-[12px] text-muted">Le mot de passe de l’administrateur se change depuis la console Firebase (Authentication → Users).</p>
       </section>
     </div>
-  )
-}
-
-/** Code commun des secrétaires : définition, changement, réinitialisation. */
-function PinSection() {
-  const actor = useActor()
-  const toast = useToast()
-  const [access, setAccess] = useState<SecretaryAccess | null | undefined>(undefined)
-  const [newPin, setNewPin] = useState('')
-  const [oldPin, setOldPin] = useState('')
-  const [forgot, setForgot] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => onSnapshot(doc(db, 'config', 'secretaryAccess'), (snap) => setAccess(snap.exists() ? (snap.data() as SecretaryAccess) : null)), [])
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    setError('')
-    if (!PIN_PATTERN.test(newPin)) {
-      setError('Le code doit comporter entre 4 et 8 chiffres.')
-      return
-    }
-    setLoading(true)
-    try {
-      await setSecretaryPin(newPin, access && !forgot ? oldPin : undefined)
-      await logActivity(actor, access ? 'update' : 'create', 'staff', 'secretaryAccess', access ? 'Code des secrétaires modifié' : 'Code des secrétaires défini')
-      toast(access ? 'Code modifié' : 'Code défini')
-      setNewPin(''); setOldPin(''); setForgot(false)
-    } catch (err) {
-      setError(humanizePinError(err))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <section>
-      <h3 className="mb-2 text-[15px] font-semibold">Code commun des secrétaires</h3>
-      <Card className="p-4">
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong"><KeyRound className="size-5" /></span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px]">
-              {access === undefined ? 'Chargement…' : access ? <>Un code est défini{access.updatedAt ? ` (mis à jour le ${access.updatedAt.toDate().toLocaleDateString('fr-BE')})` : ''}. Partagez-le uniquement avec les secrétaires.</> : <b>Aucun code défini : les secrétaires ne peuvent pas encore activer leurs droits.</b>}
-            </p>
-            <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-2">
-              {access && !forgot && (
-                <Input label="Code actuel" type="password" inputMode="numeric" value={oldPin} onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ''))} className="w-36" maxLength={8} />
-              )}
-              <Input label={access ? 'Nouveau code' : 'Code (4 à 8 chiffres)'} type="password" inputMode="numeric" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} className="w-40" maxLength={8} />
-              <Button type="submit" loading={loading} disabled={!newPin || (Boolean(access) && !forgot && !oldPin)}>{access ? 'Changer le code' : 'Définir le code'}</Button>
-            </form>
-            {access && (
-              <label className="mt-2 flex items-center gap-2 text-[12px] text-muted">
-                <input type="checkbox" checked={forgot} onChange={(e) => setForgot(e.target.checked)} className="size-3.5" /> J’ai oublié le code actuel (un nouvel accès est créé, l’ancien code cesse de fonctionner)
-              </label>
-            )}
-            {error && <p className="mt-2 text-[13px] text-rose">{error}</p>}
-            <p className="mt-2 text-[12px] text-muted">Les secrétaires déjà connectés restent connectés jusqu’à ce qu’ils changent d’utilisateur ; changer le code ne les déconnecte pas.</p>
-          </div>
-        </div>
-      </Card>
-    </section>
   )
 }

@@ -4,7 +4,7 @@ import { Check, CheckCheck, Coins, RefreshCw, RotateCcw, UserRoundX, UserRoundCh
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, readBeforeMany, undoUpdate } from '@/lib/activity'
 import type { Coum, Match, Player } from '@/lib/types'
 import { coumId, coumRows, coumTotals, type CoumRow } from '@/lib/coums'
 import { cx, playerFullLabel, playerName } from '@/lib/format'
@@ -41,6 +41,8 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
   async function write(row: CoumRow, patch: Record<string, unknown>, summary: string) {
     setBusy(row.player.id)
     try {
+      const path = `coums/${coumId(match.id, row.player.id)}`
+      const before = await readBefore(path)
       await setDoc(
         doc(db, 'coums', coumId(match.id, row.player.id)),
         {
@@ -55,7 +57,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
         },
         { merge: true },
       )
-      await logActivity(actor, 'update', 'coum', coumId(match.id, row.player.id), summary)
+      await logActivity(actor, 'update', 'coum', coumId(match.id, row.player.id), summary, undefined, undoUpdate(path, before, ['rounds', 'paid', 'absent', ...Object.keys(patch)]))
     } catch (e) {
       console.error(e)
       toast('Action impossible', 'error')
@@ -87,6 +89,8 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
     if (!confirm(`Redemander une coum à ${present.length} présent${present.length > 1 ? 's' : ''} ?`)) return
     setBusy('all')
     try {
+      const paths = present.map((r) => `coums/${coumId(match.id, r.player.id)}`)
+      const before = await readBeforeMany(paths)
       const batch = writeBatch(db)
       for (const r of present) {
         batch.set(
@@ -104,7 +108,7 @@ export function CoumPanel({ match, players, coums, loading }: Props) {
         )
       }
       await batch.commit()
-      await logActivity(actor, 'update', 'coum', match.id, `Recoum : une coum de plus demandée à ${present.length} présents`)
+      await logActivity(actor, 'update', 'coum', match.id, `Recoum : une coum de plus demandée à ${present.length} présents`, undefined, paths.flatMap((p) => undoUpdate(p, before.get(p), ['rounds', 'absent'])))
       toast('Recoum lancée : une coum de plus pour les présents')
     } catch (e) {
       console.error(e)

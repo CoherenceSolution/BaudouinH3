@@ -9,16 +9,9 @@ export interface StaffMember {
   role: Role
   /** Joueur de l'équipe auquel ce compte est relié (nom, avatar, votes). */
   playerId?: string | null
-  /** Compte technique partagé des secrétaires (ouvert par le code PIN). */
+  /** Ancien compte technique partagé des secrétaires (code PIN, abandonné : les droits suivent le nom). */
   shared?: boolean
   createdAt?: Timestamp
-}
-
-/** config/secretaryAccess : compte technique courant des secrétaires. */
-export interface SecretaryAccess {
-  email: string
-  uid: string
-  updatedAt?: Timestamp
 }
 
 export interface Player {
@@ -273,8 +266,18 @@ export interface ActivityLog {
   summary: string
   /** Détail d'une modification : chaque champ changé, avec sa valeur avant et après. */
   changes?: ActivityChange[]
+  /** Écritures qui remettent la base dans l'état d'avant (annulation par l'admin). */
+  undo?: UndoOp[]
+  /** Entrée d'annulation : les actions qu'elle a annulées. */
+  undoOf?: string[]
   at: Timestamp
 }
+
+/** Écriture inverse d'une action, appliquée telle quelle pour l'annuler. */
+export type UndoOp =
+  | { op: 'delete'; path: string }
+  | { op: 'set'; path: string; data: Record<string, unknown> }
+  | { op: 'update'; path: string; data: Record<string, unknown> }
 
 export interface ActivityChange {
   field: string
@@ -296,6 +299,7 @@ export interface CalendarConfig {
     created?: number
     updated?: number
     cancelled?: number
+    /** Doublons supprimés (anciennes synchronisations). */
     removed?: number
     error?: string | null
   }

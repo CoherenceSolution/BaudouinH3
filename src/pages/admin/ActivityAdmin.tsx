@@ -7,7 +7,7 @@ import type { ActivityLog } from '@/lib/types'
 
 const ENTITY_LABELS: Record<string, string> = {
   player: 'Joueur', match: 'Match', ticket: 'Vote', like: 'Coup de cœur', coum: 'Coum', fine: 'Amende', fineType: 'Barème', goal: 'But',
-  statEntry: 'Statistique', statCategory: 'Catégorie', staff: 'Staff', setup: 'Installation', backup: 'Sauvegarde', settings: 'Paramètres',
+  statEntry: 'Statistique', statCategory: 'Catégorie', staff: 'Staff', setup: 'Installation', backup: 'Sauvegarde', settings: 'Paramètres', undo: 'Annulation',
 }
 
 const PAGE = 400

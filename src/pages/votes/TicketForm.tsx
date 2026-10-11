@@ -10,7 +10,7 @@ import { isTicketComplete } from '@/lib/rankings'
 import { PlayerPicker } from '@/components/PlayerPicker'
 import { Button, Card, Checkbox, Textarea } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
-import { logActivity } from '@/lib/activity'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
 import { useActor } from '@/hooks/useActor'
 
 interface Props {
@@ -108,8 +108,10 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
     }
     setSending(true)
     try {
-      await setDoc(doc(db, 'tickets', ticketId), { ...payload('submitted'), ...baseFields() }, { merge: true })
-      await logActivity(actor, existing?.status === 'submitted' ? 'update' : 'create', 'ticket', ticketId, `Vote ${existing?.status === 'submitted' ? 'modifié' : 'envoyé'} pour ${match.opponent}`)
+      const data = { ...payload('submitted'), ...baseFields() }
+      const before = await readBefore(`tickets/${ticketId}`)
+      await setDoc(doc(db, 'tickets', ticketId), data, { merge: true })
+      await logActivity(actor, existing?.status === 'submitted' ? 'update' : 'create', 'ticket', ticketId, `Vote ${existing?.status === 'submitted' ? 'modifié' : 'envoyé'} pour ${match.opponent}`, undefined, undoUpdate(`tickets/${ticketId}`, before, Object.keys(data)))
       setEditing(false)
       toast('Vote envoyé, merci !')
     } catch (e) {

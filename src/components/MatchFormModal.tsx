@@ -4,7 +4,7 @@ import { RefreshCw, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import type { Match } from '@/lib/types'
 import { formatDate, todayIso } from '@/lib/format'
-import { diffChanges, logActivity } from '@/lib/activity'
+import { diffChanges, logActivity, readBefore, undoCreate, undoDelete, undoUpdate } from '@/lib/activity'
 import { formatTime, initialStatus } from '@/lib/matches'
 import { useActor } from '@/hooks/useActor'
 import { Button, Input, Modal, Select, Toggle } from './ui'
@@ -62,6 +62,7 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
     }
     try {
       if (match) {
+        const before = await readBefore(`matches/${match.id}`)
         await updateDoc(doc(db, 'matches', match.id), { ...data, status })
         const statusLabel = { scheduled: 'À venir', voting: 'Votes ouverts', reading: 'Lecture', closed: 'Terminé' } as const
         const view = (m: { date: string; time?: string | null; venue?: string | null; opponent: string; competition?: string; home: boolean; homeScore: number | null; awayScore: number | null; status: Match['status'] }) => ({
@@ -71,13 +72,13 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
         const changes = diffChanges(view(match), view({ ...data, status }), {
           date: 'Date', time: 'Heure', venue: 'Lieu', opponent: 'Adversaire', competition: 'Compétition', home: 'Domicile / extérieur', homeScore: 'Score Baudouin', awayScore: 'Score adversaire', status: 'Statut',
         })
-        await logActivity(actor, 'update', 'match', match.id, `Match modifié : ${opponent.trim()} (${formatDate(date)})`, changes)
+        await logActivity(actor, 'update', 'match', match.id, `Match modifié : ${opponent.trim()} (${formatDate(date)})`, changes, undoUpdate(`matches/${match.id}`, before, [...Object.keys(data), 'status']))
         toast('Match mis à jour')
       } else {
         const initial = initialStatus(date)
         const ref = await addDoc(collection(db, 'matches'), { ...data, status: initial, createdBy: actor.uid, createdAt: serverTimestamp() })
         const opened = initial === 'voting'
-        await logActivity(actor, 'create', 'match', ref.id, `Match créé : ${opponent.trim()} (${formatDate(date)}) — ${opened ? 'votes ouverts' : 'à venir'}`)
+        await logActivity(actor, 'create', 'match', ref.id, `Match créé : ${opponent.trim()} (${formatDate(date)}) — ${opened ? 'votes ouverts' : 'à venir'}`, undefined, undoCreate(`matches/${ref.id}`))
         toast(opened ? 'Match créé, les votes sont ouverts' : 'Match ajouté : les votes s’ouvriront le jour du match')
         onCreated?.(ref.id)
       }
@@ -96,8 +97,9 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
     if (!confirm(`Supprimer ce match et tous ses votes ? Cette action est définitive.${again}`)) return
     setLoading(true)
     try {
+      const before = await readBefore(`matches/${match.id}`)
       await deleteDoc(doc(db, 'matches', match.id))
-      await logActivity(actor, 'delete', 'match', match.id, `Match supprimé : ${match.opponent} (${formatDate(match.date)})`)
+      await logActivity(actor, 'delete', 'match', match.id, `Match supprimé : ${match.opponent} (${formatDate(match.date)})`, undefined, undoDelete(`matches/${match.id}`, before))
       toast('Match supprimé')
       onClose()
     } catch (err) {

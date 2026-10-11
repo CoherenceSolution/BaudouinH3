@@ -5,8 +5,8 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/auth/AuthProvider'
 import { usePlayers } from '@/hooks/useData'
 import { useActor } from '@/hooks/useActor'
-import { logActivity } from '@/lib/activity'
-import type { Like, Match, Player, Ticket } from '@/lib/types'
+import { logActivity, readBefore, undoUpdate } from '@/lib/activity'
+import type { Like, Match, Player, Ticket, UndoOp } from '@/lib/types'
 import { commentFirstPicks, likeCounts, submittedTickets } from '@/lib/rankings'
 import { cx, playerName } from '@/lib/format'
 import { Button, Card } from '@/components/ui'
@@ -33,7 +33,7 @@ interface Props {
 
 /**
  * Console de l'orateur (et du staff), tout au même endroit :
- * 1. son propre vote, 2. le minuteur, 3. la clôture des votes de tout le monde,
+ * en haut le pilotage (minuteur, clôture des votes, réouverture d'un geste), puis son propre vote,
  * puis la lecture : une file d'attente, « Valider le vote » qui l'envoie à tous, les votes lus grisés.
  */
 export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoaded, likes }: Props) {
@@ -95,8 +95,17 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       if (status === 'closed') patch.closedAt = serverTimestamp()
       // Le minuteur n'a plus de sens hors phase de vote.
       if (status !== 'voting') Object.assign(patch, { voteDeadline: null, voteTimerBy: null })
+      const before = await readBefore(`matches/${match.id}`)
       await updateDoc(doc(db, 'matches', match.id), patch)
-      await logActivity(actor, 'update', 'match', match.id, status === 'reading' ? `Votes clôturés, lecture commencée par ${lead.hasLead ? lead.leadName ?? speakerName : speakerName}` : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
+      await logActivity(
+        actor,
+        'update',
+        'match',
+        match.id,
+        status === 'reading' ? `Votes clôturés, lecture commencée par ${lead.hasLead ? lead.leadName ?? speakerName : speakerName}` : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts',
+        undefined,
+        undoUpdate(`matches/${match.id}`, before, Object.keys(patch).filter((k) => k !== 'updatedAt')),
+      )
       toast(status === 'reading' ? 'Votes clôturés pour tout le monde. Bonne lecture !' : status === 'closed' ? 'La lecture des votes est terminée' : 'Votes réouverts')
     } catch (e) {
       console.error(e)
@@ -109,8 +118,9 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
   async function patchTicket(t: Ticket, patch: Partial<Ticket> | Record<string, unknown>, summary?: string) {
     setBusy(t.id)
     try {
+      const before = summary ? await readBefore(`tickets/${t.id}`) : undefined
       await updateDoc(doc(db, 'tickets', t.id), { ...patch, updatedAt: serverTimestamp() })
-      if (summary) await logActivity(actor, 'update', 'ticket', t.id, summary)
+      if (summary) await logActivity(actor, 'update', 'ticket', t.id, summary, undefined, undoUpdate(`tickets/${t.id}`, before, Object.keys(patch)))
     } catch (e) {
       console.error(e)
       toast('Action impossible', 'error')
@@ -129,6 +139,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
     const other = unread[idx + dir]
     if (!other) return
     const batch = writeBatch(db)
+    const undo = readOrderUndo(unread)
     // Normalise l'ordre sur la liste courante puis échange les deux positions.
     unread.forEach((x, i) => {
       const order = i === idx ? idx + dir : i === idx + dir ? idx : i
@@ -136,7 +147,7 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
     })
     await batch
       .commit()
-      .then(() => logActivity(actor, 'update', 'ticket', t.id, `Ordre de lecture : vote n°${read.length + idx + 1} ${dir < 0 ? 'monté' : 'descendu'} en position ${read.length + idx + dir + 1}`))
+      .then(() => logActivity(actor, 'update', 'ticket', t.id, `Ordre de lecture : vote n°${read.length + idx + 1} ${dir < 0 ? 'monté' : 'descendu'} en position ${read.length + idx + dir + 1}`, undefined, undo))
       .catch((e) => { console.error(e); toast('Réorganisation impossible', 'error') })
   }
 
@@ -147,10 +158,11 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       ;[ids[i], ids[j]] = [ids[j], ids[i]]
     }
     const batch = writeBatch(db)
+    const undo = readOrderUndo(unread)
     ids.forEach((id, i) => batch.update(doc(db, 'tickets', id), { readOrder: i }))
     await batch
       .commit()
-      .then(() => { toast('Ordre mélangé'); return logActivity(actor, 'update', 'match', match.id, `Ordre de lecture mélangé (${ids.length} votes dans la file)`) }).catch((e) => { console.error(e); toast('Mélange impossible', 'error') })
+      .then(() => { toast('Ordre mélangé'); return logActivity(actor, 'update', 'match', match.id, `Ordre de lecture mélangé (${ids.length} votes dans la file)`, undefined, undo) }).catch((e) => { console.error(e); toast('Mélange impossible', 'error') })
   }
 
   async function takeLead() {
@@ -225,6 +237,38 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
         </div>
       </Card>
 
+      {/* Pilotage, toujours en haut : minuteur et clôture pendant les votes ; réouverture d'un geste ensuite
+          (un orateur qui a clôturé trop tôt rouvre aussitôt, les votes déjà lus le restent). */}
+      <Card className="border-2 border-ink/80 p-4 sm:p-5">
+        {match.status === 'voting' ? (
+          <div className="space-y-4">
+            <VoteTimerControl match={match} compact />
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+              <div className="text-[14px]">
+                <b>{submitted.length}</b> vote{submitted.length > 1 ? 's' : ''} envoyé{submitted.length > 1 ? 's' : ''}
+                {drafts > 0 && <span className="text-amber-700"> · {drafts} encore en cours</span>}
+              </div>
+              <Button size="lg" variant="accent" className="w-full sm:w-auto" icon={<Lock className="size-5" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>
+                Clôturer les votes
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-[14px]">
+              <b>{match.status === 'reading' ? 'Votes clôturés' : 'Lecture terminée'}</b>
+              {match.status === 'reading' && match.readingStartedAt?.toDate && (
+                <span className="text-muted"> à {match.readingStartedAt.toDate().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+              <div className="text-[13px] text-muted">Clôturé trop tôt ? Rouvrez : chacun peut de nouveau voter, les votes déjà lus le restent.</div>
+            </div>
+            <Button size="lg" variant="secondary" className="w-full sm:w-auto" icon={<RotateCcw className="size-5" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>
+              Rouvrir les votes
+            </Button>
+          </div>
+        )}
+      </Card>
+
       {match.status === 'voting' && (
         <>
           {/* 1. Mon vote : l'orateur vote comme tout le monde, sans quitter sa console. */}
@@ -236,31 +280,12 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
             )}
           </Step>
 
-          {/* 2. Minuteur : visible par tout le monde, sur toutes les pages. */}
-          <Step n={2} title="Minuteur (facultatif)" hint="Donnez un temps limite aux retardataires : le compte à rebours s’affiche chez tout le monde.">
-            <VoteTimerControl match={match} />
-          </Step>
-
-          {/* 3. Clôture : les votes de tout le monde sont figés, la lecture peut commencer. */}
-          <Step n={3} title="Clôturer les votes" hint="Plus personne ne peut voter ni modifier son vote. Vous pourrez rouvrir si besoin.">
-            <Card className="p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-[14px]">
-                  <b>{submitted.length}</b> vote{submitted.length > 1 ? 's' : ''} prêt{submitted.length > 1 ? 's' : ''} à lire
-                  {drafts > 0 && <span className="text-amber-700"> · {drafts} encore en cours (non envoyé{drafts > 1 ? 's' : ''})</span>}
-                </div>
-                <Button variant="accent" icon={<Lock className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>
-                  Clôturer les votes de tout le monde
-                </Button>
-              </div>
-            </Card>
-          </Step>
         </>
       )}
 
       {/* Lecture : file d'attente des votes à lire, puis les votes déjà lus, grisés. */}
       <Step
-        n={match.status === 'voting' ? 4 : undefined}
+        n={match.status === 'voting' ? 2 : undefined}
         title={match.status === 'voting' ? 'Préparer la lecture' : 'Lecture des votes'}
         hint={
           match.status === 'voting'
@@ -406,20 +431,14 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       {match.status !== 'voting' && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
           <div className="text-[13px] text-muted">
-            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée. Besoin d’un vote en plus ? Rouvrez les votes.' : 'La lecture des votes est terminée. Vous pouvez la reprendre ou rouvrir les votes si besoin.'}
+            {match.status === 'reading' ? 'Tous les votes sont lus ? Indiquez que la lecture est terminée.' : 'La lecture des votes est terminée. Vous pouvez la reprendre si besoin.'}
           </div>
           <div className="flex flex-wrap gap-2">
             {match.status === 'reading' && (
-              <>
-                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>Rouvrir les votes</Button>
-                <Button icon={<Flag className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('closed')}>La lecture des votes est terminée</Button>
-              </>
+              <Button icon={<Flag className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('closed')}>La lecture des votes est terminée</Button>
             )}
             {match.status === 'closed' && (
-              <>
-                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('voting')}>Rouvrir les votes</Button>
-                <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>Reprendre la lecture</Button>
-              </>
+              <Button variant="secondary" size="sm" icon={<RotateCcw className="size-4" />} loading={busy === 'status'} onClick={() => setStatus('reading')}>Reprendre la lecture</Button>
             )}
           </div>
         </Card>
@@ -429,6 +448,11 @@ export function SpeakerConsole({ match, players, playerList, tickets, ticketsLoa
       {isStaff && <ManualVoteModal open={manualOpen} match={match} players={playerList} tickets={tickets} onClose={() => setManualOpen(false)} />}
     </div>
   )
+}
+
+/** Ordre de lecture d'avant, pour pouvoir le remettre (annulation par l'admin). */
+function readOrderUndo(tickets: Ticket[]): UndoOp[] {
+  return tickets.map((t) => ({ op: 'update', path: `tickets/${t.id}`, data: { readOrder: t.readOrder ?? null } }))
 }
 
 /** Les trois temps de la soirée, pour savoir d'un coup d'œil où l'on en est. */

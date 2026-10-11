@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { Users, CalendarDays, ShieldCheck, ScrollText, DatabaseBackup, SlidersHorizontal, ListChecks } from 'lucide-react'
+import { Users, CalendarDays, ShieldCheck, ScrollText, DatabaseBackup, SlidersHorizontal, ListChecks, ShieldAlert } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { cx } from '@/lib/format'
 import { PageHeader } from '@/components/ui'
@@ -10,6 +10,7 @@ import { ActivityAdmin } from './ActivityAdmin'
 import { BackupAdmin } from './BackupAdmin'
 import { SettingsAdmin } from './SettingsAdmin'
 import { ListsAdmin } from './ListsAdmin'
+import { SurveillanceAdmin } from './SurveillanceAdmin'
 
 export function AdminPage() {
   const { isAdmin } = useAuth()
@@ -20,6 +21,7 @@ export function AdminPage() {
     { to: '/admin/listes', label: 'Listes', icon: ListChecks },
     { to: '/admin/parametres', label: 'Paramètres', icon: SlidersHorizontal },
     { to: '/admin/activite', label: 'Activité', icon: ScrollText },
+    ...(isAdmin ? [{ to: '/admin/surveillance', label: 'Surveillance', icon: ShieldAlert }] : []),
     ...(isAdmin ? [{ to: '/admin/sauvegarde', label: 'Sauvegarde', icon: DatabaseBackup }] : []),
   ]
   return (
@@ -40,6 +42,7 @@ export function AdminPage() {
         <Route path="listes" element={<ListsAdmin />} />
         <Route path="parametres" element={<SettingsAdmin />} />
         <Route path="activite" element={<ActivityAdmin />} />
+        {isAdmin && <Route path="surveillance" element={<SurveillanceAdmin />} />}
         {isAdmin && <Route path="sauvegarde" element={<BackupAdmin />} />}
       </Routes>
     </div>
