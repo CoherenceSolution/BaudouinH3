@@ -14,6 +14,19 @@ export function leaders<T extends { count: number }>(rows: T[]): T[] {
   return rows.filter((r) => r.count === rows[0].count)
 }
 
+/**
+ * Tête d'un classement trié, ex æquo compris : rang « sportif » (1, 1, 3…), et les ex æquo du dernier rang
+ * affiché sont gardés (jusqu'à `n + 3` lignes) plutôt que coupés arbitrairement. `hidden` compte ceux qui
+ * restent au-delà.
+ */
+export function topWithTies<T extends { count: number }>(rows: T[], n: number): { rows: (T & { rank: number })[]; hidden: number } {
+  const ranked = rows.map((r, i) => ({ ...r, rank: rows.findIndex((x) => x.count === r.count) + 1, i }))
+  const cut = ranked.length > n ? ranked[n - 1].count : -Infinity
+  const kept = ranked.filter((r) => r.i < n || r.count === cut)
+  const shown = kept.slice(0, n + 3)
+  return { rows: shown.map(({ i: _i, ...r }) => r as unknown as T & { rank: number }), hidden: kept.length - shown.length }
+}
+
 /** Tickets envoyés et déjà lus par l'orateur : les seuls qui comptent dans les classements. */
 export function readTickets(tickets: Ticket[]): Ticket[] {
   return tickets.filter((t) => t.status === 'submitted' && t.readAt != null)
