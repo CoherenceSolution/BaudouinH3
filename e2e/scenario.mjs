@@ -421,7 +421,7 @@ await admin.getByRole('button', { name: 'Clôturer les votes de tout le monde' }
 await admin.getByRole('button', { name: 'La lecture des votes est terminée' }).click()
 await admin.getByText('Lecture des votes terminée').first().waitFor()
 
-// 7f. Deux matchs en double, des votes ouverts des deux côtés : l'admin les fusionne, rien ne se perd.
+// 7f. Deux matchs en double, des votes ouverts des deux côtés : l'admin crée un 3e match qui reçoit tout, rien ne se perd.
 const dupIds = []
 for (let i = 0; i < 2; i++) {
   await admin.goto(BASE + '/votes')
@@ -452,17 +452,18 @@ await mergeDlg.getByText('Match en double').waitFor()
 // Le doublon probable (même jour, même adversaire) est proposé d'office.
 const proposed = await mergeDlg.locator('select').inputValue()
 if (!dupIds.includes(proposed)) throw new Error('Le doublon devrait être proposé d’office')
-await mergeDlg.getByText(/Récupéré depuis/).waitFor()
+await mergeDlg.getByText(/Le nouveau match recevra tout le contenu des deux : 3 votes/).waitFor()
 await mergeDlg.getByText(/a voté dans les deux matchs : les deux votes sont gardés/).waitFor()
 await shot(admin, '14d-fusion-apercu')
-await mergeDlg.getByRole('button', { name: 'Fusionner' }).click()
+await mergeDlg.getByRole('button', { name: 'Créer le match fusionné' }).click()
 await admin.getByText(/Matchs fusionnés/).first().waitFor()
 await admin.getByRole('dialog').waitFor({ state: 'hidden' })
-if (await admin.getByText('Doublon HC').count() !== 1) throw new Error('Le doublon fusionné devrait disparaître de la liste')
-// Les deux adresses mènent au match conservé, qui a les trois votes (dont le second vote de Ronny, signalé).
+if (await admin.getByText('Doublon HC').count() !== 1) throw new Error('Seul le nouveau match devrait rester dans la liste')
+// Les deux anciennes adresses mènent au nouveau match, qui a les trois votes (dont le second vote de Ronny, signalé).
 await admin.goto(BASE + `/votes/${dupIds[0]}`)
 await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
 const keptUrl = admin.url()
+if (dupIds.some((id) => keptUrl.endsWith(id))) throw new Error('Un nouveau match devrait avoir été créé')
 await admin.goto(BASE + `/votes/${dupIds[1]}`)
 await admin.getByRole('button', { name: 'Console orateur', exact: true }).waitFor()
 await admin.waitForURL(keptUrl)

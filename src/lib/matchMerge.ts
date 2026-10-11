@@ -240,3 +240,48 @@ export function describeMergeSummary(s: MergeSummary): string {
   ].filter(Boolean)
   return parts.length ? parts.join(', ') : 'rien à déplacer'
 }
+
+/** Champs du match qui décrivent la rencontre (repris pour créer le nouveau match). */
+const MATCH_INFO = ['date', 'time', 'opponent', 'competition', 'home', 'homeScore', 'awayScore', 'venue', 'details'] as const
+
+/**
+ * Nouveau match créé à partir de deux doublons : les informations viennent de `base`
+ * (les manques sont ensuite comblés par l'autre lors de la fusion). Il n'est pas relié à Sportlink :
+ * la synchronisation continue de viser l'ancien match, masqué.
+ */
+export function newMatchData(base: Match, by: string, now: unknown): Record<string, unknown> {
+  const data: Record<string, unknown> = Object.fromEntries(MATCH_INFO.map((k) => [k, base[k] ?? null]))
+  return { ...data, cancelled: false, status: base.status, createdBy: by, createdAt: now, updatedAt: now }
+}
+
+/** Ce que contiendra le match cible une fois un plan appliqué (le match cible étant vide au départ). */
+function dataAfter(plan: MergePlan, source: MatchData): MatchData {
+  const sets = (name: string) =>
+    plan.groups.flat().flatMap((w) => (w.kind === 'set' && w.path.startsWith(name + '/') ? [{ id: w.path.slice(name.length + 1), ...w.data }] : []))
+  const patched = <T extends { id: string }>(name: string, list: T[]) =>
+    list.map((x) => {
+      const w = plan.groups.flat().find((u) => u.kind === 'update' && u.path === `${name}/${x.id}`)
+      return w && w.kind === 'update' ? { ...x, ...w.data } : x
+    })
+  return {
+    tickets: sets('tickets') as unknown as MatchData['tickets'],
+    likes: sets('likes') as unknown as MatchData['likes'],
+    coums: sets('coums') as unknown as MatchData['coums'],
+    goals: patched('goals', source.goals),
+    fines: patched('fines', source.fines),
+    statEntries: patched('statEntries', source.statEntries),
+  }
+}
+
+/**
+ * Deux matchs en double → un troisième, neuf, qui reçoit tout : d'abord `a` (ses votes gardent
+ * leur place), puis `b` (un joueur qui a voté des deux côtés garde ses deux votes, le second signalé).
+ * Les deux anciens sont marqués fusionnés et masqués. Sert à l'aperçu ; l'exécution relit la base entre les deux étapes.
+ */
+export function planMergeIntoNew(target: Match, a: Match, b: Match, da: MatchData, db: MatchData, opts: { now: unknown; by: string }) {
+  const first = planMerge(target, a, { tickets: [], likes: [], coums: [], goals: [], fines: [], statEntries: [] }, da, opts)
+  const second = planMerge({ ...target, status: first.status }, b, dataAfter(first, da), db, opts)
+  const summary = { ...first.summary }
+  for (const k of Object.keys(summary) as (keyof MergeSummary)[]) summary[k] += second.summary[k]
+  return { first, second, status: second.status, summary }
+}

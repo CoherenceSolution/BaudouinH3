@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeMergeSummary, mergedStatus, planMerge } from '../../src/lib/matchMerge.ts'
+import { describeMergeSummary, mergedStatus, newMatchData, planMerge, planMergeIntoNew } from '../../src/lib/matchMerge.ts'
 
 const match = (id, extra = {}) => ({ id, date: '2026-10-10', opponent: 'Dragons', homeScore: null, awayScore: null, home: true, status: 'voting', createdBy: 'x', ...extra })
 const entry = (playerId = null, comment = '') => ({ playerId, proposal: '', comment })
@@ -96,4 +96,34 @@ test('état après fusion : des votes ouverts d’un côté restent ouverts', ()
   assert.equal(mergedStatus('closed', 'closed', true), 'reading')
   assert.equal(mergedStatus('closed', 'closed', false), 'closed')
   assert.equal(mergedStatus('scheduled', 'scheduled', false), 'scheduled')
+})
+
+test('deux doublons → un troisième match qui reçoit tout, les deux anciens masqués', () => {
+  const a = match('A', { venue: 'Terrain 1' })
+  const b = match('B', { homeScore: 2, awayScore: 0 })
+  const da = { ...none(), tickets: [ticket('A', 'ana'), ticket('A', 'bob')], coums: [{ id: 'A_ana', matchId: 'A', playerId: 'ana', rounds: 1, paid: 1, absent: false }] }
+  const db = {
+    ...none(),
+    tickets: [ticket('B', 'ana'), ticket('B', 'cid')],
+    likes: [{ id: 'B_bob_best', matchId: 'B', voterPlayerId: 'bob', category: 'best', ticketId: 'B_ana' }],
+    coums: [{ id: 'B_ana', matchId: 'B', playerId: 'ana', rounds: 1, paid: 0, absent: false }],
+    goals: [{ id: 'g1', matchId: 'B', scorerPlayerId: 'x', assistPlayerId: null, minute: null, order: 0 }],
+  }
+  const data = newMatchData(a, 'admin', 'NOW')
+  assert.equal(data.venue, 'Terrain 1')
+  assert.equal(data.source, undefined, 'le nouveau match n’est pas relié à Sportlink')
+  const c = { id: 'C', ...data }
+  const { first, second, summary } = planMergeIntoNew(c, a, b, da, db, { now: 'NOW', by: 'Admin' })
+  const all = [...first.groups.flat(), ...second.groups.flat()]
+  const sets = all.filter((w) => w.kind === 'set').map((w) => w.path).sort()
+  assert.deepEqual(sets, ['coums/C_ana', 'likes/C_bob_best', 'tickets/C_ana', 'tickets/C_ana__B', 'tickets/C_bob', 'tickets/C_cid'])
+  // La coum d'Ana payée dans A n'est pas écrasée par celle de B : elle est combinée.
+  assert.equal(all.find((w) => w.kind === 'update' && w.path === 'coums/C_ana').data.paid, 1)
+  assert.equal(all.find((w) => w.path === 'likes/C_bob_best').data.ticketId, 'C_ana__B')
+  assert.equal(all.find((w) => w.path === 'goals/g1').data.matchId, 'C')
+  // Le score de B comble le manque.
+  assert.equal(second.matchWrites[0].data.homeScore, 2)
+  assert.deepEqual([first.matchWrites[1].data.mergedInto, second.matchWrites[1].data.mergedInto], ['C', 'C'])
+  assert.equal(summary.tickets, 4)
+  assert.equal(summary.duplicates, 1)
 })
