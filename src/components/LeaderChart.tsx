@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { topWithTies } from '@/lib/rankings'
+import { leaders, topByRank } from '@/lib/rankings'
 import { cx } from '@/lib/format'
 
 /** Une ligne du classement : un joueur et sa valeur (buts, matchs remportés, euros…). */
@@ -41,15 +41,19 @@ interface Props {
   summary?: { value: string; sub: string }
 }
 
+/** Lignes au plus dans le graphique d'une tuile, sur téléphone comme sur ordinateur. */
+const MAX_ROWS = 5
+
 /**
  * Tuile de classement : le premier (ou les premiers ex æquo) en titre, puis le top 5 en barres
- * horizontales — top 3 sur téléphone. Les ex æquo du dernier rang sont gardés. Toute la tuile mène
- * aux statistiques liées.
+ * horizontales, par rangs entiers : un groupe d'ex æquo est montré en entier ou résumé en une ligne
+ * (« 2e rang : 4 ex æquo à 3 »), jamais coupé. Toute la tuile mène aux statistiques liées.
  */
 export function LeaderChart({ label, rows, color, to, format, describe, empty, summary }: Props) {
-  const top = topWithTies(rows.filter((r) => r.count > 0), 5)
-  const max = top.rows[0]?.count ?? 0
-  const firsts = top.rows.filter((r) => r.rank === 1)
+  const ranked = rows.filter((r) => r.count > 0)
+  const top = topByRank(ranked, MAX_ROWS)
+  const max = ranked[0]?.count ?? 0
+  const firsts = leaders(ranked)
   const tied = firsts.length > 1
   const headline = tied
     ? firsts.length > 3
@@ -69,7 +73,7 @@ export function LeaderChart({ label, rows, color, to, format, describe, empty, s
         <ArrowRight className="size-3.5 shrink-0 transition group-hover:translate-x-0.5 group-hover:text-ink" />
       </div>
 
-      {top.rows.length === 0 ? (
+      {ranked.length === 0 ? (
         <>
           <div className="mt-0.5 text-2xl font-bold tracking-tight text-ink">—</div>
           <div className="mt-0.5 text-[12px] text-muted">{empty}</div>
@@ -90,12 +94,12 @@ export function LeaderChart({ label, rows, color, to, format, describe, empty, s
             </>
           )}
 
-          {/* Top 5 (top 3 sur téléphone) : barres fines, valeur au bout, rang en tête. */}
-          <ol className="mt-3 space-y-1.5" aria-label={`Classement : ${label}`}>
-            {top.rows.map((r, i) => (
+          {/* Top 5 par rangs entiers : barres fines, valeur au bout, rang en tête. */}
+          {top.rows.length > 0 && <ol className="mt-3 space-y-1.5" aria-label={`Classement : ${label}`}>
+            {top.rows.map((r) => (
               <li
                 key={r.playerId}
-                className={cx('grid grid-cols-[1.25rem_minmax(0,7rem)_1fr_auto] items-center gap-2 text-[12px]', i >= 3 && 'hidden sm:grid')}
+                className="grid grid-cols-[1.25rem_minmax(0,7rem)_1fr_auto] items-center gap-2 text-[12px]"
                 title={`${r.rank}. ${r.name} — ${r.detail ?? format(r.count)}`}
               >
                 <span className="text-right tabular-nums text-muted">{r.rank}</span>
@@ -106,8 +110,15 @@ export function LeaderChart({ label, rows, color, to, format, describe, empty, s
                 <span className="tabular-nums text-ink-2">{format(r.count)}</span>
               </li>
             ))}
-          </ol>
-          {top.hidden > 0 && <div className="mt-1 text-[11px] text-muted">+ {top.hidden} autre{top.hidden > 1 ? 's' : ''} ex æquo</div>}
+          </ol>}
+          {top.next && (
+            <div className={cx('text-[12px] text-muted', top.rows.length > 0 ? 'mt-1.5' : 'mt-3')}>
+              {top.next.size > 1
+                ? `${top.next.rank === 1 ? '1er' : `${top.next.rank}e`} rang : ${top.next.size} ex æquo à ${format(top.next.count)}`
+                : `+ ${top.rest} autre${top.rest > 1 ? 's' : ''}`}
+              {top.rest > top.next.size && top.next.size > 1 ? `, puis ${top.rest - top.next.size} autre${top.rest - top.next.size > 1 ? 's' : ''}` : ''}
+            </div>
+          )}
         </>
       )}
     </Link>

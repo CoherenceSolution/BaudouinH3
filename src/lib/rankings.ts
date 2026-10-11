@@ -15,16 +15,26 @@ export function leaders<T extends { count: number }>(rows: T[]): T[] {
 }
 
 /**
- * Tête d'un classement trié, ex æquo compris : rang « sportif » (1, 1, 3…), et les ex æquo du dernier rang
- * affiché sont gardés (jusqu'à `n + 3` lignes) plutôt que coupés arbitrairement. `hidden` compte ceux qui
- * restent au-delà.
+ * Tête d'un classement trié, par rangs entiers : rang « sportif » (1, 1, 3…) et jamais un groupe d'ex æquo
+ * coupé en deux. On prend les rangs complets tant qu'ils tiennent dans `n` lignes ; le premier rang qui ne
+ * tient plus est résumé dans `next` (son rang, sa valeur, combien de joueurs le partagent) plutôt que
+ * montré à moitié, ce qui laisserait croire à moins d'ex æquo qu'il n'y en a. `rest` compte tous les
+ * joueurs laissés de côté.
  */
-export function topWithTies<T extends { count: number }>(rows: T[], n: number): { rows: (T & { rank: number })[]; hidden: number } {
-  const ranked = rows.map((r, i) => ({ ...r, rank: rows.findIndex((x) => x.count === r.count) + 1, i }))
-  const cut = ranked.length > n ? ranked[n - 1].count : -Infinity
-  const kept = ranked.filter((r) => r.i < n || r.count === cut)
-  const shown = kept.slice(0, n + 3)
-  return { rows: shown.map(({ i: _i, ...r }) => r as unknown as T & { rank: number }), hidden: kept.length - shown.length }
+export function topByRank<T extends { count: number }>(
+  rows: T[],
+  n: number,
+): { rows: (T & { rank: number })[]; next: { rank: number; count: number; size: number } | null; rest: number } {
+  const shown: (T & { rank: number })[] = []
+  let i = 0
+  while (i < rows.length) {
+    let j = i
+    while (j < rows.length && rows[j].count === rows[i].count) j++
+    if (j > n) return { rows: shown, next: { rank: i + 1, count: rows[i].count, size: j - i }, rest: rows.length - i }
+    for (let k = i; k < j; k++) shown.push({ ...rows[k], rank: i + 1 })
+    i = j
+  }
+  return { rows: shown, next: null, rest: 0 }
 }
 
 /** Tickets envoyés et déjà lus par l'orateur : les seuls qui comptent dans les classements. */
