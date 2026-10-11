@@ -143,7 +143,9 @@ export function MatchFormModal({ open, onClose, match, onCreated }: Props) {
         <Input label="Adversaire" placeholder="Nom de l’équipe adverse" value={opponent} onChange={(e) => setOpponent(e.target.value)} required />
         <Toggle checked={home} onChange={setHome} label={home ? 'Baudouin H3 joue à domicile' : 'Baudouin H3 joue à l’extérieur'} />
         <div>
-          <label className="label">Score {home ? '(Baudouin H3 – Adversaire)' : '(Adversaire – Baudouin H3)'}</label>
+          <label className="label">
+            Score, dans l’ordre du match : {home ? `Baudouin H3 (domicile) – ${opponent.trim() || 'adversaire'} (extérieur)` : `${opponent.trim() || 'adversaire'} (domicile) – Baudouin H3 (extérieur)`}
+          </label>
           <div className="flex items-center gap-2">
             <Input type="number" min={0} inputMode="numeric" value={homeScore} onChange={(e) => setHomeScore(e.target.value)} className="flex-1" placeholder="–" />
             <span className="text-muted">–</span>

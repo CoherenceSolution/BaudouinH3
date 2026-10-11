@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, RefreshCw, RotateCcw, Merge } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, RotateCcw, Merge, Trash2 } from 'lucide-react'
 import { useCalendarConfig, useMatches } from '@/hooks/useData'
 import type { Match } from '@/lib/types'
 import { formatDate, matchTitle } from '@/lib/format'
@@ -14,7 +14,7 @@ import { CalendarSyncButton } from './CalendarSyncButton'
 import { useAuth } from '@/auth/AuthProvider'
 import { useActor } from '@/hooks/useActor'
 import { useToast } from '@/components/ui/Toast'
-import { reopenVotes } from '@/lib/matchActions'
+import { findDuplicateCopies, removeDuplicateCopies, reopenVotes } from '@/lib/matchActions'
 
 export function MatchesAdmin() {
   const matches = useMatches()
@@ -23,6 +23,7 @@ export function MatchesAdmin() {
   const [editing, setEditing] = useState<Match | null | 'new'>(null)
   const [reopening, setReopening] = useState<string | null>(null)
   const [merging, setMerging] = useState<Match | null>(null)
+  const [cleaning, setCleaning] = useState(false)
   const actor = useActor()
   const toast = useToast()
 
@@ -40,6 +41,27 @@ export function MatchesAdmin() {
       setReopening(null)
     }
   }
+  // Copies annulées en double (anciennes lectures de l'agenda) : déjà masquées partout, supprimées ici.
+  async function clean() {
+    setCleaning(true)
+    try {
+      const { removable, kept } = await findDuplicateCopies()
+      const note = kept ? ` ${kept} autre${kept > 1 ? 's' : ''}, qui porte${kept > 1 ? 'nt' : ''} des données (votes, coum, amendes…), ser${kept > 1 ? 'ont' : 'a'} gardée${kept > 1 ? 's' : ''}.` : ''
+      if (removable.length === 0) {
+        toast(kept ? `Aucun doublon supprimable.${note}` : 'Aucun doublon : la liste est propre.', 'info')
+        return
+      }
+      if (!confirm(`Supprimer ${removable.length} copie${removable.length > 1 ? 's' : ''} annulée${removable.length > 1 ? 's' : ''} en double ? Le vrai match est gardé à chaque fois.${note} L’opération peut être annulée depuis Gestion → Surveillance.`)) return
+      await removeDuplicateCopies(removable, actor)
+      toast(`${removable.length} doublon${removable.length > 1 ? 's' : ''} supprimé${removable.length > 1 ? 's' : ''}`)
+    } catch (e) {
+      console.error(e)
+      toast('Nettoyage impossible', 'error')
+    } finally {
+      setCleaning(false)
+    }
+  }
+
   if (matches.loading) return <Spinner />
   return (
     <div className="space-y-4">
@@ -56,6 +78,7 @@ export function MatchesAdmin() {
         </div>
         <div className="flex flex-wrap gap-2">
           {isAdmin && calendar?.icalUrl && <CalendarSyncButton />}
+          {isAdmin && <Button variant="secondary" icon={<Trash2 className="size-4" />} loading={cleaning} onClick={clean}>Supprimer les doublons</Button>}
           <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>Nouveau match</Button>
         </div>
       </div>

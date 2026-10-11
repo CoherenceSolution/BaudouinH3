@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase'
 import { useCollection } from './useCollection'
 import type { CalendarConfig, Coum, Fine, FineType, Goal, Like, Match, Player, StaffMember, StatCategory, StatEntry, Ticket, ActivityLog } from '@/lib/types'
 import { playerName } from '@/lib/format'
-import { withEffectiveStatus } from '@/lib/matches'
+import { duplicateCopies, withCleanTeams, withEffectiveStatus } from '@/lib/matches'
 import { useAuth } from '@/auth/AuthProvider'
 
 export function usePlayers(includeInactive = false) {
@@ -30,7 +30,11 @@ export function usePlayers(includeInactive = false) {
 export function useMatches() {
   const { user } = useAuth()
   const res = useCollection<Match>(() => (user ? query(collection(db, 'matches'), orderBy('date', 'desc')) : null), [user?.uid])
-  const data = useMemo(() => res.data.filter((m) => !m.mergedInto).map((m) => withEffectiveStatus(m)), [res.data])
+  // Ni les matchs fusionnés, ni les copies annulées en double laissées par les anciennes lectures de l'agenda.
+  const data = useMemo(() => {
+    const copies = duplicateCopies(res.data)
+    return res.data.filter((m) => !m.mergedInto && !copies.has(m.id)).map((m) => withEffectiveStatus(withCleanTeams(m)))
+  }, [res.data])
   return { ...res, data }
 }
 
@@ -40,7 +44,7 @@ export function useMatch(matchId: string | undefined) {
   useEffect(() => {
     if (!matchId) return
     return onSnapshot(doc(db, 'matches', matchId), (snap) =>
-      setMatch(snap.exists() ? withEffectiveStatus({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) }) : null),
+      setMatch(snap.exists() ? withEffectiveStatus(withCleanTeams({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) })) : null),
     )
   }, [matchId])
   return match

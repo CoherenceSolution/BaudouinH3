@@ -394,7 +394,8 @@ await admin.getByRole('button', { name: 'Nouveau match' }).click()
 await admin.getByLabel('Adversaire').fill('Match avancé FC')
 await admin.getByLabel('Date').fill('2099-06-01')
 await admin.getByRole('button', { name: 'Ajouter le match' }).click()
-await admin.getByText('Match avancé FC').first().click()
+await admin.getByRole('dialog').waitFor({ state: 'hidden' })
+await admin.locator('a[href^="/votes/"]', { hasText: 'Match avancé FC' }).first().click()
 await admin.getByText('Les votes s’ouvriront le jour du match.').waitFor()
 await admin.getByRole('button', { name: 'Ouvrir les votes maintenant' }).click()
 await admin.getByText('Votes ouverts', { exact: true }).first().waitFor()
@@ -426,6 +427,11 @@ await jarne.getByText('Victoire').waitFor()
 await jarne.getByText('Buts et passes').waitFor()
 await jarne.getByText(/votes? lus? sur/).waitFor()
 await shot(jarne, '14b-resume-match')
+// Onglet « Score du match » : le sens du score est expliqué (domicile, puis extérieur).
+await jarne.getByRole('button', { name: 'Score du match' }).click()
+await jarne.getByText('à domicile', { exact: true }).waitFor()
+await jarne.getByText('Domicile', { exact: true }).first().waitFor()
+await shot(jarne, '14c-score-du-match')
 
 // 7f. Deux matchs en double, des votes ouverts des deux côtés : l'admin crée un 3e match qui reçoit tout, rien ne se perd.
 const dupIds = []
@@ -524,6 +530,11 @@ await admin.getByTitle('Supprimer la liste').nth(1).click()
 await admin.getByText('Liste supprimée').first().waitFor()
 await admin.waitForTimeout(600)
 if ((await admin.getByText('Homme du match', { exact: true }).count()) !== 0) throw new Error('La liste devrait avoir disparu')
+
+// 8c-bis. Nettoyage des copies annulées en double : aucune dans ce scénario.
+await admin.goto(BASE + '/admin/matchs')
+await admin.getByRole('button', { name: 'Supprimer les doublons' }).click()
+await admin.getByText(/Aucun doublon/).first().waitFor({ timeout: 20000 })
 
 // 8d. Surveillance : l'admin annule d'un geste les actions de Jarne de la dernière heure.
 await admin.goto(BASE + '/admin/surveillance')

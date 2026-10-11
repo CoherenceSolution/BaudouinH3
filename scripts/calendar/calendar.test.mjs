@@ -241,3 +241,10 @@ test('gros nettoyage : écritures découpées en lots de moins de 500', () => {
   const parts = chunks(Array.from({ length: 901 }, (_, i) => i), 400)
   assert.deepEqual(parts.map((p) => p.length), [400, 400, 101])
 })
+
+test('domicile corrigé par l’agenda : le score déjà encodé suit (celui de Baudouin ne change pas)', () => {
+  const before = { id: 'v', source: 'sportlink', status: 'closed', date: '2026-10-11', opponent: 'Victory H-4-Baudouin H-3', home: true, homeScore: 3, awayScore: 1 }
+  const data = { date: '2026-10-11', time: '11:30', opponent: 'Victory H-4', home: false, venue: null, details: null, cancelled: false }
+  const [w] = syncWrites({ create: [], update: [{ id: 'v', before, data }], cancel: [], remove: [] }, { events: 1, created: 0, updated: 1, cancelled: 0 }, { actorUid: 'u', actorName: 'B', actorRole: 'admin' }, 'NOW')
+  assert.deepEqual([w.data.home, w.data.homeScore, w.data.awayScore], [false, 1, 3])
+})

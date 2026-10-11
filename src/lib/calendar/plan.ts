@@ -14,6 +14,9 @@ export interface ExistingMatch extends Partial<SyncedData> {
   id: string
   date: string
   opponent: string
+  /** Score de l'équipe qui reçoit et de l'équipe qui se déplace. */
+  homeScore?: number | null
+  awayScore?: number | null
   status: string
   /** 'sportlink' pour un match importé ; absent pour un match saisi à la main. */
   source?: string
@@ -283,7 +286,11 @@ export function syncWrites(plan: SyncPlan, summary: SyncSummary, actor: SyncActo
     log('create', id, `Match importé de Sportlink : ${data.opponent} (${describeWhen(data)})`)
   }
   for (const { id, before, data } of plan.update) {
-    writes.push({ kind: 'update', path: `matches/${id}`, data: { ...data, updatedAt: now, syncedAt: now } })
+    // Domicile et extérieur inversés (ancien import au titre entier, toujours « à domicile ») : le score déjà
+    // encodé suit, pour que celui de Baudouin reste le même.
+    const swap = before.home != null && Boolean(before.home) !== data.home && (before.homeScore != null || before.awayScore != null)
+    const scores = swap ? { homeScore: before.awayScore ?? null, awayScore: before.homeScore ?? null } : {}
+    writes.push({ kind: 'update', path: `matches/${id}`, data: { ...data, ...scores, updatedAt: now, syncedAt: now } })
     const changes = describeChanges(before, data)
     log('update', id, data.externalId && !changes.length ? `Match relié à l’agenda Sportlink : ${data.opponent} (${describeWhen(data)})` : describeUpdate(before, data), changes)
   }
