@@ -16,6 +16,9 @@ import { useToast } from './ui/Toast'
 import { AddGoalModal } from '@/pages/stats/MatchStatsPage'
 import { AddFineModal } from '@/pages/fines/AddFineModal'
 
+/** Lignes au plus par tuile (buts, amendes), comme les classements de l'accueil ; le détail est derrière le lien. */
+const MAX_LINES = 5
+
 export type SummaryTab = 'live' | 'rankings' | 'coum'
 
 interface Props {
@@ -53,7 +56,9 @@ export function MatchSummary({ match, onOpenTab }: Props) {
     <div className="space-y-3">
       <ScoreCard match={match} goalsCount={goals.data.length} canEdit={isStaff} />
 
-      <div className="grid gap-3 md:grid-cols-2">
+      {/* Même grille et même gabarit que les tuiles de classement de l'accueil : deux colonnes au plus,
+          tuiles de même hauteur, une colonne compacte sur téléphone. */}
+      <div className="grid gap-3 sm:auto-rows-fr sm:grid-cols-2">
         {/* Buts et passes */}
         <Block
           icon={<GoalIcon className="size-4" />}
@@ -65,18 +70,19 @@ export function MatchSummary({ match, onOpenTab }: Props) {
             <p className="text-[13px] text-muted">Aucun but encodé.</p>
           ) : (
             <ol className="space-y-1.5">
-              {goals.data.map((g) => {
+              {goals.data.slice(0, MAX_LINES).map((g) => {
                 const s = players.byId.get(g.scorerPlayerId)
                 const a = g.assistPlayerId ? players.byId.get(g.assistPlayerId) : null
                 return (
-                  <li key={g.id} className="flex items-center gap-2 text-[14px]">
+                  <li key={g.id} className="flex min-w-0 items-center gap-2 text-[13px]">
                     <Avatar player={s} size="sm" />
-                    <span className="font-semibold">{playerName(s)}</span>
+                    <span className="truncate font-semibold">{playerName(s)}</span>
                     {g.minute != null && <span className="text-[12px] text-muted">{g.minute}’</span>}
                     {a && <span className="inline-flex min-w-0 items-center gap-1 truncate text-[12px] text-muted"><Handshake className="size-3.5 shrink-0" /> {playerName(a)}</span>}
                   </li>
                 )
               })}
+              {goals.data.length > MAX_LINES && <li className="text-[12px] text-muted">+ {goals.data.length - MAX_LINES} autre{goals.data.length - MAX_LINES > 1 ? 's' : ''} · {goals.data.length} buts</li>}
             </ol>
           )}
         </Block>
@@ -98,7 +104,7 @@ export function MatchSummary({ match, onOpenTab }: Props) {
                 const first = top[0]
                 const tied = first ? top.filter((r) => r.count === first.count) : []
                 return (
-                  <li key={c.key} className="flex items-center gap-2 text-[14px]">
+                  <li key={c.key} className="flex items-center gap-2 text-[13px]">
                     <span className="w-5 text-center">{c.emoji}</span>
                     <span className="min-w-0 flex-1 truncate">
                       <span className="text-[12px] text-muted">{c.label} · </span>
@@ -124,14 +130,14 @@ export function MatchSummary({ match, onOpenTab }: Props) {
             <p className="text-[13px] text-muted">Aucune amende pour ce match.</p>
           ) : (
             <ul className="space-y-1">
-              {matchFines.slice(0, 5).map((f) => (
-                <li key={f.id} className="flex items-center gap-2 text-[14px]">
+              {matchFines.slice(0, MAX_LINES).map((f) => (
+                <li key={f.id} className="flex items-center gap-2 text-[13px]">
                   <span className="min-w-0 flex-1 truncate"><b>{playerName(players.byId.get(f.playerId))}</b> <span className="text-[12px] text-muted">{f.label}</span></span>
                   <span className={cx('shrink-0 tabular-nums', f.paid ? 'text-muted line-through' : 'font-semibold')}>{formatEuro(f.amount)}</span>
                 </li>
               ))}
               <li className="text-[12px] text-muted">
-                {matchFines.length > 5 ? `+ ${matchFines.length - 5} autre${matchFines.length > 6 ? 's' : ''} · ` : ''}Total {formatEuro(finesTotal)}
+                {matchFines.length > MAX_LINES ? `+ ${matchFines.length - MAX_LINES} autre${matchFines.length - MAX_LINES > 1 ? 's' : ''} · ` : ''}Total {formatEuro(finesTotal)}
               </li>
             </ul>
           )}
@@ -142,7 +148,7 @@ export function MatchSummary({ match, onOpenTab }: Props) {
           {coums.data.length === 0 ? (
             <p className="text-[13px] text-muted">Pas encore commencée.</p>
           ) : (
-            <p className="text-[14px]">
+            <p className="text-[13px]">
               <b>{coum.paidPlayers}</b> sur {coum.present} présent{coum.present > 1 ? 's' : ''} {coum.paidPlayers > 1 ? 'ont' : 'a'} coumé
               {coum.pendingPlayers === 0 ? ' 🎉' : <span className="text-muted"> · {coum.pendingPlayers} pas encore</span>}
             </p>
@@ -265,13 +271,13 @@ function ScoreInput({ label, side, value, onChange }: { label: string; side: str
 
 function Block({ icon, title, action, footer, children }: { icon: ReactNode; title: string; action?: ReactNode; footer?: ReactNode; children: ReactNode }) {
   return (
-    <Card className="flex flex-col p-4">
+    <Card className="flex min-w-0 flex-col px-4 py-3.5">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-[14px] font-semibold">{icon} {title}</h3>
+        <h3 className="flex items-center gap-2 text-[13px] font-semibold">{icon} {title}</h3>
         {action}
       </div>
       <div className="flex-1">{children}</div>
-      {footer && <div className="mt-3 border-t border-line pt-2">{footer}</div>}
+      {footer && <div className="mt-2.5 border-t border-line pt-2">{footer}</div>}
     </Card>
   )
 }

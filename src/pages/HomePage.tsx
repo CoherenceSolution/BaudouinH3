@@ -137,9 +137,9 @@ export function HomePage() {
         </section>
       )}
 
-      {/* Classements de la saison : top 5 en barres (top 3 sur téléphone), ex æquo compris ; chaque tuile
-          mène aux statistiques liées. */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Classements de la saison : top 5 en barres par rangs entiers (un groupe d'ex æquo n'est jamais coupé) ;
+          chaque tuile mène aux statistiques liées. Même grille que le résumé du match : tuiles de même taille. */}
+      <div className="grid gap-3 sm:auto-rows-fr sm:grid-cols-2">
         {categories.map((c, i) => (
           <LeaderChart
             key={c.key}
