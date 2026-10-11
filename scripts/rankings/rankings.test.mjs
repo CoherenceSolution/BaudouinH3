@@ -34,3 +34,13 @@ test('leaders renvoie toutes les égalités en tête', () => {
   assert.deepEqual(leaders([]), [])
   assert.deepEqual(leaders([{ playerId: 'a', count: 3 }, { playerId: 'b', count: 3 }, { playerId: 'c', count: 1 }]).map((r) => r.playerId), ['a', 'b'])
 })
+
+test('top 5 avec ex æquo : rangs sportifs, ex æquo du dernier rang gardés', async () => {
+  const { topWithTies } = await import('../../src/lib/rankings.ts')
+  const rows = [9, 7, 7, 5, 4, 4, 4, 1].map((count, i) => ({ playerId: `p${i}`, count }))
+  const top = topWithTies(rows, 5)
+  assert.deepEqual(top.rows.map((r) => [r.count, r.rank]), [[9, 1], [7, 2], [7, 2], [5, 4], [4, 5], [4, 5], [4, 5]])
+  assert.equal(top.hidden, 0)
+  const many = topWithTies(Array.from({ length: 12 }, (_, i) => ({ playerId: `x${i}`, count: 1 })), 3)
+  assert.deepEqual([many.rows.length, many.hidden], [6, 6])
+})

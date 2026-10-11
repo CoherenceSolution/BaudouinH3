@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { Plus, Handshake, Pencil, Trash2, ClipboardList, Settings2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
@@ -29,7 +29,9 @@ export function StatsPage() {
   const goals = useAllGoals()
   const cats = useStatCategories()
   const entries = useStatEntries()
-  const [tab, setTab] = useState<Tab>('scorers')
+  // Onglet demandé dans le lien (tuiles de l'accueil : ?tab=scorers, ?tab=assists).
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => (params.get('tab') as Tab | null) ?? 'scorers')
   const [season, setSeason] = useState(currentSeason())
   const [addEntry, setAddEntry] = useState<StatCategory | null>(null)
   const [editCat, setEditCat] = useState<StatCategory | null | 'new'>(null)

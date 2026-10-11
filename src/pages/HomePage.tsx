@@ -3,13 +3,13 @@ import { ArrowRight, Clock, Euro, MapPin, Mic, Trophy, Vote, Target, Sparkles } 
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useAllGoals, useAllReadTickets, useFines, useMatches, usePlayers } from '@/hooks/useData'
-import type { Player } from '@/lib/types'
 import { currentSeason, formatDate, matchTitle, playerName, pluralize, seasonOf, todayIso } from '@/lib/format'
 import { formatTime, isPlayed, nextMatch } from '@/lib/matches'
-import { goalTotals, leaders, readTickets, titleRanking, type RankRow } from '@/lib/rankings'
+import { goalTotals, readTickets, titleRanking, type RankRow } from '@/lib/rankings'
 import { formatEuro } from '@/lib/fines'
 import { useCategories } from '@/hooks/useSettings'
-import { Card, Stat } from '@/components/ui'
+import { Card } from '@/components/ui'
+import { LeaderChart, type LeaderRow } from '@/components/LeaderChart'
 import { MatchCard, MatchStatusBadge } from '@/components/MatchCard'
 import { MatchSummary } from '@/components/MatchSummary'
 import { VoteTimerControl } from '@/components/VoteTimer'
@@ -39,6 +39,15 @@ export function HomePage() {
   const seasonTickets = readTickets(tickets.data.filter((t) => seasonMatchIds.has(t.matchId)))
   const seasonMatchCount = new Set(seasonTickets.map((t) => t.matchId)).size
   const unpaid = fines.data.filter((f) => !f.paid).reduce((s, f) => s + f.amount, 0)
+  /** Classement → lignes nommées pour les graphiques de l'accueil. */
+  const withNames = (rows: RankRow[], detail?: (r: RankRow) => string): LeaderRow[] =>
+    rows.map((r) => ({ playerId: r.playerId, name: playerName(players.byId.get(r.playerId)), count: r.count, votes: r.votes, detail: detail?.(r) }))
+  // Qui doit le plus (amendes impayées, toutes saisons).
+  const unpaidByPlayer = withNames(
+    [...fines.data.filter((f) => !f.paid).reduce((m, f) => m.set(f.playerId, (m.get(f.playerId) ?? 0) + f.amount), new Map<string, number>())]
+      .map(([playerId, count]) => ({ playerId, count }))
+      .sort((a, b) => b.count - a.count),
+  )
 
   const hour = new Date().getHours()
   const greeting = hour < 18 ? 'Bonjour' : 'Bonsoir'
@@ -128,21 +137,33 @@ export function HomePage() {
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+      {/* Classements de la saison : top 5 en barres (top 3 sur téléphone), ex æquo compris ; chaque tuile
+          mène aux statistiques liées. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {categories.map((c, i) => (
-          <LeaderStat
+          <LeaderChart
             key={c.key}
             label={`${c.emoji} ${c.label}`}
-            rows={titleRanking(seasonTickets, c.key)}
-            players={players.byId}
+            rows={withNames(titleRanking(seasonTickets, c.key), (r) => `${pluralize(r.count, 'fois', 'fois')} · ${pluralize(r.votes ?? 0, 'voix', 'voix')}`)}
+            color={i === 0 ? 'gold' : i === 1 ? 'rose' : 'violet'}
+            to="/historique"
+            format={(n) => `${n}×`}
             describe={(r, tied) => `${r.count} fois${tied ? ' chacun' : ''} sur ${pluralize(seasonMatchCount, 'match', 'matchs')}${tied ? '' : ` · ${pluralize(r.votes ?? 0, 'voix', 'voix')}`}`}
             empty="Aucune lecture"
-            tone={i === 0 ? 'gold' : i === 1 ? 'rose' : 'neutral'}
           />
         ))}
-        <LeaderStat label="Meilleur buteur" rows={totals.scorers} players={players.byId} describe={(r, tied) => `${pluralize(r.count, 'but')}${tied ? ' chacun' : ''}`} empty="Aucun but encodé" tone="accent" />
-        <LeaderStat label="Meilleur passeur" rows={totals.assisters} players={players.byId} describe={(r, tied) => `${pluralize(r.count, 'passe')}${tied ? ' chacun' : ''}`} empty="Aucune passe encodée" />
-        <Stat label="Amendes impayées" value={formatEuro(unpaid)} sub={`${fines.data.filter((f) => !f.paid).length} en attente`} tone="rose" />
+        <LeaderChart label="⚽ Meilleur buteur" rows={withNames(totals.scorers)} color="lime" to="/stats?tab=scorers" format={String} describe={(r, tied) => `${pluralize(r.count, 'but')}${tied ? ' chacun' : ''}`} empty="Aucun but encodé" />
+        <LeaderChart label="🎯 Meilleur passeur" rows={withNames(totals.assisters)} color="sky" to="/stats?tab=assists" format={String} describe={(r, tied) => `${pluralize(r.count, 'passe')}${tied ? ' chacun' : ''}`} empty="Aucune passe encodée" />
+        <LeaderChart
+          label="💶 Amendes impayées"
+          rows={unpaidByPlayer}
+          color="rose"
+          to="/amendes"
+          format={formatEuro}
+          describe={() => ''}
+          empty="Tout est payé"
+          summary={{ value: formatEuro(unpaid), sub: `${pluralize(fines.data.filter((f) => !f.paid).length, 'amende')} en attente` }}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -165,23 +186,6 @@ export function HomePage() {
         </section>
       )}
     </div>
-  )
-}
-
-/** Tête d'un classement : affiche tous les premiers ex æquo plutôt qu'un seul nom arbitraire. */
-function LeaderStat({ label, rows, players, describe, empty, tone }: { label: string; rows: RankRow[]; players: Map<string, Player>; describe: (r: RankRow, tied: boolean) => string; empty: string; tone?: 'neutral' | 'accent' | 'rose' | 'gold' }) {
-  const top = leaders(rows)
-  if (top.length === 0) return <Stat label={label} value="—" sub={empty} tone={tone} />
-  const names = top.map((r) => playerName(players.get(r.playerId)))
-  if (top.length === 1) return <Stat label={label} value={names[0]} sub={describe(top[0], false)} tone={tone} />
-  const shown = names.length > 3 ? [...names.slice(0, 3), `+${names.length - 3}`] : names
-  return (
-    <Stat
-      label={`${label} · ${top.length} ex æquo`}
-      value={<span className="block text-[16px] leading-snug" title={names.join(', ')}>{shown.join(' · ')}</span>}
-      sub={describe(top[0], true)}
-      tone={tone}
-    />
   )
 }
 
