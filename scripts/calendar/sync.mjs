@@ -9,7 +9,7 @@
 // SYNC_DRY_RUN=1 affiche ce qui serait fait sans rien écrire.
 import { initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
-import { describeSummary, describeUpdate, describeWhen, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
+import { chunks, describeSummary, describeUpdate, describeWhen, LINKED_COLLECTIONS, prepareSync, syncWrites } from '../../src/lib/calendar/plan.ts'
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'baudouinheren3'
 const DRY_RUN = process.env.SYNC_DRY_RUN === '1'
@@ -31,22 +31,39 @@ async function main() {
   if (!res.ok) throw new Error(`Agenda inaccessible (HTTP ${res.status})`)
   const snap = await db.collection('matches').where('source', '==', 'sportlink').get()
   const existing = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const { plan, summary } = await prepareSync(await res.text(), existing, { teamKeyword: config.teamKeyword })
+  const { plan, summary } = await prepareSync(await res.text(), existing, { teamKeyword: config.teamKeyword, referenced })
 
   console.log(`Agenda : ${summary.events} événement(s). ${describeSummary(summary)}.`)
   for (const c of plan.create) console.log(`  + ${describeWhen(c.data)} ${c.data.home ? 'vs' : '@'} ${c.data.opponent}`)
   for (const u of plan.update) console.log(`  ~ ${describeUpdate(u.before, u.data)}`)
   for (const c of plan.cancel) console.log(`  × ${describeWhen(c.before)} ${c.before.opponent}`)
+  if (plan.purge.length) console.log(`  ${plan.purge.length} doublon(s) supprimé(s)`)
   if (DRY_RUN) return
 
-  const batch = db.batch()
-  for (const w of syncWrites(plan, summary, ACTOR, FieldValue.serverTimestamp())) {
-    if (w.kind === 'add') batch.set(db.collection(w.collection).doc(), w.data)
-    else if (w.kind === 'update') batch.update(db.doc(w.path), w.data)
-    else batch.set(db.doc(w.path), w.data, { merge: true })
+  // Lots de 400 écritures (limite Firestore : 500) ; le bilan, en dernier, n'est écrit que si tout est passé.
+  for (const part of chunks(syncWrites(plan, summary, ACTOR, FieldValue.serverTimestamp()), 400)) {
+    const batch = db.batch()
+    for (const w of part) {
+      if (w.kind === 'add') batch.set(db.collection(w.collection).doc(), w.data)
+      else if (w.kind === 'update') batch.update(db.doc(w.path), w.data)
+      else if (w.kind === 'delete') batch.delete(db.doc(w.path))
+      else batch.set(db.doc(w.path), w.data, { merge: true })
+    }
+    await batch.commit()
   }
-  await batch.commit()
   console.log('Synchronisation terminée.')
+}
+
+/** Matchs (parmi ids) qui portent déjà des votes, une coum, des buts, des amendes… */
+async function referenced(ids) {
+  const used = new Set()
+  for (const name of LINKED_COLLECTIONS) {
+    for (const part of chunks(ids, 30)) {
+      const snap = await db.collection(name).where('matchId', 'in', part).get()
+      snap.forEach((d) => used.add(String(d.data().matchId)))
+    }
+  }
+  return used
 }
 
 main().catch(async (err) => {

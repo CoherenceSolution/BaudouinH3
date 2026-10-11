@@ -2,7 +2,7 @@ import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where
 import { db } from '@/lib/firebase'
 import type { Actor } from '@/lib/activity'
 import type { CalendarConfig } from '@/lib/types'
-import { prepareSync, syncWrites, type ExistingMatch, type SyncSummary } from './plan.ts'
+import { chunks, LINKED_COLLECTIONS, prepareSync, syncWrites, type ExistingMatch, type SyncSummary } from './plan.ts'
 
 /** Page GitHub qui lance la même synchronisation côté serveur (bouton « Run workflow »). */
 export const GITHUB_SYNC_URL = 'https://github.com/CoherenceSolution/BaudouinH3/actions/workflows/sync-calendar.yml'
@@ -33,20 +33,36 @@ export async function syncCalendarFromBrowser(actor: Actor): Promise<SyncSummary
   try {
     const snap = await getDocs(query(collection(db, 'matches'), where('source', '==', 'sportlink')))
     const existing = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ExistingMatch)
-    const { plan, summary } = await prepareSync(ics, existing, { teamKeyword: config.teamKeyword })
+    const { plan, summary } = await prepareSync(ics, existing, { teamKeyword: config.teamKeyword, referenced })
 
-    const batch = writeBatch(db)
     const writes = syncWrites(plan, summary, { actorUid: actor.uid, actorName: actor.name, actorRole: actor.role }, serverTimestamp())
-    for (const w of writes) {
-      if (w.kind === 'add') batch.set(doc(collection(db, w.collection)), w.data)
-      else if (w.kind === 'update') batch.update(doc(db, w.path), w.data)
-      else batch.set(doc(db, w.path), w.data, { merge: true })
+    // Lots de 400 écritures (limite Firestore : 500) ; le bilan, en dernier, n'est écrit que si tout est passé.
+    for (const part of chunks(writes, 400)) {
+      const batch = writeBatch(db)
+      for (const w of part) {
+        if (w.kind === 'add') batch.set(doc(collection(db, w.collection)), w.data)
+        else if (w.kind === 'update') batch.update(doc(db, w.path), w.data)
+        else if (w.kind === 'delete') batch.delete(doc(db, w.path))
+        else batch.set(doc(db, w.path), w.data, { merge: true })
+      }
+      await batch.commit()
     }
-    await batch.commit()
     return summary
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
     await setDoc(configRef, { lastSync: { at: serverTimestamp(), ok: false, by: actor.name, error: error.slice(0, 300) } }, { merge: true }).catch(() => {})
     throw e
   }
+}
+
+/** Matchs (parmi ids) qui portent déjà des votes, une coum, des buts, des amendes… */
+async function referenced(ids: string[]): Promise<Set<string>> {
+  const used = new Set<string>()
+  for (const name of LINKED_COLLECTIONS) {
+    for (const part of chunks(ids, 30)) {
+      const snap = await getDocs(query(collection(db, name), where('matchId', 'in', part)))
+      snap.forEach((d) => used.add(String(d.data().matchId)))
+    }
+  }
+  return used
 }

@@ -288,6 +288,8 @@ export interface CalendarConfig {
     created?: number
     updated?: number
     cancelled?: number
+    /** Doublons supprimés (anciennes synchronisations). */
+    removed?: number
     error?: string | null
   }
 }
