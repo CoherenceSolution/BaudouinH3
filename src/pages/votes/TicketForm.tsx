@@ -225,7 +225,7 @@ export function CategoryBlock({ id, category, entry, players, onChange, commentP
     <Card id={id} className={cx('scroll-mt-40 border-l-4 p-4 sm:p-5 md:scroll-mt-28', tone)}>
       <h3 className="mb-3 flex items-center gap-2 text-[16px] font-bold"><span>{category.emoji}</span> {category.label}</h3>
       <div className="space-y-3">
-        {category.pickPlayer && <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label="Votre choix" />}
+        {category.pickPlayer && <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label="Votre choix" dropdown />}
         <Textarea
           label="Commentaire"
           placeholder={commentPlaceholder ?? (category.key === 'moment' ? 'Racontez le geste ou le moment (ce sera lu à voix haute !)' : 'Justifiez votre vote (ce sera lu à voix haute !)')}
