@@ -1,5 +1,5 @@
 import type { Match } from './types'
-import { todayIso } from './format'
+import { normalize, todayIso } from './format'
 
 /**
  * Un match « à venir » ouvre ses votes le jour même, sans geste de personne : l'état est déduit
@@ -19,6 +19,34 @@ export function isPlayed(m: Match): boolean {
 /** Matchs à venir, du plus proche au plus lointain. */
 export function upcomingMatches(matches: Match[], today = todayIso()): Match[] {
   return matches.filter((m) => m.status === 'scheduled' && m.date >= today).sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')))
+}
+
+/**
+ * « Match du jour » : les matchs joués aujourd'hui, plus celui d'hier soir dont les votes ou la lecture
+ * se prolongent après minuit. Mis en avant en tête de la liste des matchs.
+ */
+export function todayMatches(matches: Match[], today = todayIso()): Match[] {
+  const d = new Date(today + 'T12:00:00')
+  d.setDate(d.getDate() - 1)
+  const yesterday = `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`
+  return matches
+    .filter((m) => m.date === today || (m.date === yesterday && (m.status === 'voting' || m.status === 'reading')))
+    .sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')))
+}
+
+/** « Demain », « Dans 5 jours », « Dans 3 semaines » : délai avant un match à venir. */
+export function relativeDay(date: string, today = todayIso()): string {
+  const days = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(today + 'T12:00:00Z')) / 86_400_000)
+  if (days <= 0) return 'Aujourd’hui'
+  if (days === 1) return 'Demain'
+  if (days < 14) return `Dans ${days} jours`
+  return `Dans ${Math.round(days / 7)} semaines`
+}
+
+/** Recherche dans la liste des matchs : adversaire, compétition, lieu (sans accents ni majuscules). */
+export function matchMatchesQuery(m: Match, query: string): boolean {
+  const q = normalize(query).trim()
+  return !q || [m.opponent, m.competition, m.venue].some((f) => normalize(f ?? '').includes(q))
 }
 
 /** Prochain match qui aura bien lieu. */

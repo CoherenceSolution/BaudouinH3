@@ -168,8 +168,10 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
             <p className="text-[13px] text-muted">Votre vote est anonyme. Seul l’orateur peut, s’il en a besoin, voir votre nom depuis sa console.</p>
           </Card>
 
+          <CategoryNav categories={categories} entries={entries} players={players} />
+
           {categories.map((c) => (
-            <CategoryBlock key={c.key} category={c} entry={entries[c.key]} players={players} onChange={(patch) => update(c.key, patch)} />
+            <CategoryBlock key={c.key} id={`vote-${c.key}`} category={c} entry={entries[c.key]} players={players} onChange={(patch) => update(c.key, patch)} />
           ))}
 
           <div className="sticky bottom-20 z-10 md:static">
@@ -184,10 +186,41 @@ export function TicketForm({ match, players, tickets, loaded, myPlayerId }: Prop
   )
 }
 
-export function CategoryBlock({ category, entry, players, onChange, commentPlaceholder }: { category: CategoryDef; entry: VoteEntry; players: Player[]; onChange: (p: Partial<VoteEntry>) => void; commentPlaceholder?: string }) {
+function entryDone(category: CategoryDef, entry: VoteEntry): boolean {
+  return category.pickPlayer ? Boolean(entry.playerId) : Boolean(entry.comment.trim())
+}
+
+/** Raccourcis collants vers les trois catégories, avec le choix déjà fait pour chacune. */
+function CategoryNav({ categories, entries, players }: { categories: CategoryDef[]; entries: Record<VoteCategory, VoteEntry>; players: Player[] }) {
+  return (
+    <nav aria-label="Catégories du vote" className="sticky top-[57px] z-20 -mx-1 grid grid-cols-3 gap-1.5 rounded-2xl bg-canvas/90 p-1 backdrop-blur md:top-2">
+      {categories.map((c) => {
+        const done = entryDone(c, entries[c.key])
+        const picked = c.pickPlayer && entries[c.key].playerId ? players.find((p) => p.id === entries[c.key].playerId) : undefined
+        return (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => document.getElementById(`vote-${c.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className={cx('flex min-w-0 flex-col items-center rounded-xl border px-1.5 py-2 text-center transition', done ? 'border-accent-strong bg-accent-soft' : 'border-line bg-surface hover:border-ink')}
+          >
+            <span className="flex items-center gap-1 text-[18px] leading-none">
+              {c.emoji}
+              {done && <CheckCircle2 className="size-4 text-accent-strong" />}
+            </span>
+            <span className="mt-1 w-full text-[12px] font-semibold leading-tight">{c.label}</span>
+            <span className={cx('w-full truncate text-[11px]', done ? 'font-medium text-ink-2' : 'text-muted')}>{picked ? playerName(picked) : done ? 'Rempli' : 'À remplir'}</span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
+export function CategoryBlock({ id, category, entry, players, onChange, commentPlaceholder }: { id?: string; category: CategoryDef; entry: VoteEntry; players: Player[]; onChange: (p: Partial<VoteEntry>) => void; commentPlaceholder?: string }) {
   const tone = category.key === 'best' ? 'border-l-gold' : category.key === 'worst' ? 'border-l-rose' : 'border-l-sky'
   return (
-    <Card className={cx('border-l-4 p-4 sm:p-5', tone)}>
+    <Card id={id} className={cx('scroll-mt-40 border-l-4 p-4 sm:p-5 md:scroll-mt-28', tone)}>
       <h3 className="mb-3 flex items-center gap-2 text-[16px] font-bold"><span>{category.emoji}</span> {category.label}</h3>
       <div className="space-y-3">
         {category.pickPlayer && <PlayerPicker players={players} value={entry.playerId} onChange={(id) => onChange({ playerId: id })} label="Votre choix" />}

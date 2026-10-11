@@ -106,9 +106,13 @@ C'est tout : la synchronisation utilise le même accès Google que le déploieme
   et l'adversaire ; domicile ou extérieur est déduit du titre « Équipe A - Équipe B ».
 - **Match déplacé ou avancé** dans Sportlink : la date, l'heure et le lieu sont mis à jour dans l'application
   (et notés dans le journal d'activité).
-- **Match retiré de l'agenda** : il est marqué « Annulé », jamais supprimé.
+- **Agenda republié** (nouveaux matchs, identifiants changés) : les matchs déjà présents sont retrouvés et mis à
+  jour, jamais dupliqués ni annulés ; un match saisi à la main est relié à son événement Sportlink.
+- **Match retiré de l'agenda** : il est marqué « Annulé », jamais supprimé (seulement s'il tombe dans la période
+  couverte par l'agenda).
 - **Jamais touchés** : les matchs passés (non importés), les scores, la compétition, les votes, la coum, les buts.
-- **Votes** : un match à venir est grisé, on peut l'ouvrir pour voir la date, l'heure et le lieu. Les votes
+- **Votes** : en haut, le match du jour (ou le prochain match) ; dessous, les onglets « À venir », « Joués » et
+  « Annulés », et une recherche par adversaire. On peut ouvrir un match à venir pour voir la date, l'heure et le lieu. Les votes
   s'ouvrent automatiquement **le jour du match**.
 - Les matchs ajoutés à la main (amical, tournoi…) restent possibles ; la synchronisation n'y touche pas.
 - **Mise à jour immédiate** : l'admin appuie sur **Mettre à jour le calendrier** (Gestion → Matchs). L'application
