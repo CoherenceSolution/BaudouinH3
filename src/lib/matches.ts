@@ -1,5 +1,49 @@
 import type { Match } from './types'
-import { normalize, todayIso } from './format'
+import { normalize, todayIso } from './format.ts'
+import { normalizeTeam } from './calendar/ical.ts'
+import { opponentOf } from './calendar/plan.ts'
+
+/**
+ * Adversaire et domicile / extérieur lisibles. Les matchs importés avant le découpage des titres collés
+ * gardent le titre entier comme adversaire (« Baudouin H-3-Victory H-4 », toujours « à domicile »),
+ * d'où des titres « Baudouin H3 – Baudouin H-3-Victory H-4 ». On les relit à l'affichage ; la prochaine
+ * synchronisation de l'agenda corrige aussi la base.
+ */
+export function withCleanTeams(m: Match): Match {
+  const { opponent, home } = opponentOf(m)
+  if (opponent === m.opponent && home === m.home) return m
+  // Domicile et extérieur inversés : le score suit, pour que celui de Baudouin reste le même.
+  const swap = home !== (m.home !== false)
+  return { ...m, opponent, home, ...(swap ? { homeScore: m.awayScore, awayScore: m.homeScore } : {}) }
+}
+
+/** Match annulé avant d'avoir été joué (agenda Sportlink ou à la main). */
+export function isCancelled(m: Match): boolean {
+  return Boolean(m.cancelled) && m.status === 'scheduled'
+}
+
+/**
+ * Copies annulées d'un même match (même jour, même adversaire) laissées par les anciennes synchronisations
+ * de l'agenda : on n'en garde qu'un, de préférence celui dont les votes ont commencé, puis celui qui n'est
+ * pas annulé. Les autres sont masquées partout ; « Supprimer les doublons » (Gestion → Matchs) et la
+ * synchronisation les retirent de la base. Un match annulé sans autre copie reste visible.
+ */
+export function duplicateCopies(matches: Match[]): Set<string> {
+  const groups = new Map<string, Match[]>()
+  for (const m of matches) {
+    if (m.mergedInto) continue
+    const key = `${m.date}|${normalizeTeam(opponentOf(m).opponent)}`
+    groups.set(key, [...(groups.get(key) ?? []), m])
+  }
+  const rank = (m: Match) => (m.status !== 'scheduled' ? 0 : m.cancelled ? 2 : 1)
+  const copies = new Set<string>()
+  for (const list of groups.values()) {
+    if (list.length < 2) continue
+    const [, ...others] = [...list].sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))
+    for (const m of others) if (isCancelled(m)) copies.add(m.id)
+  }
+  return copies
+}
 
 /**
  * Un match « à venir » ouvre ses votes le jour même, sans geste de personne : l'état est déduit
@@ -30,7 +74,7 @@ export function todayMatches(matches: Match[], today = todayIso()): Match[] {
   d.setDate(d.getDate() - 1)
   const yesterday = `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`
   return matches
-    .filter((m) => m.date === today || (m.date === yesterday && (m.status === 'voting' || m.status === 'reading')))
+    .filter((m) => !isCancelled(m) && (m.date === today || (m.date === yesterday && (m.status === 'voting' || m.status === 'reading'))))
     .sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')))
 }
 

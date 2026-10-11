@@ -4,7 +4,7 @@ import { ArrowLeft, Mic, MicOff, PenLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useSpeaker } from '@/hooks/useSpeaker'
 import { useSpeakerLead } from '@/hooks/useSpeakerLead'
-import { useCoums, useLikes, useMatch, usePlayers, useTickets } from '@/hooks/useData'
+import { useCoums, useGoals, useLikes, useMatch, usePlayers, useTickets } from '@/hooks/useData'
 import { formatDate, matchTitle } from '@/lib/format'
 import type { Match, Player } from '@/lib/types'
 import { reopenVotes } from '@/lib/matchActions'
@@ -14,7 +14,7 @@ import { formatTime } from '@/lib/matches'
 import { Button, Spinner, Tabs } from '@/components/ui'
 import { MatchStatusBadge, ResultPill, VenueLink } from '@/components/MatchCard'
 import { UpcomingMatchPanel } from '@/components/UpcomingMatch'
-import { MatchSummary } from '@/components/MatchSummary'
+import { MatchSummary, ScoreCard } from '@/components/MatchSummary'
 import { VoteCountdown } from '@/components/VoteTimer'
 import { TicketForm } from './TicketForm'
 import { SpeakerConsole } from './SpeakerConsole'
@@ -24,8 +24,8 @@ import { Participation } from './Participation'
 import { ChooseIdentity } from './ChooseIdentity'
 import { CoumPanel } from './CoumPanel'
 
-type Tab = 'resume' | 'ticket' | 'console' | 'participation' | 'live' | 'rankings' | 'coum'
-const TABS: Tab[] = ['resume', 'ticket', 'console', 'participation', 'live', 'rankings', 'coum']
+type Tab = 'resume' | 'score' | 'ticket' | 'console' | 'participation' | 'live' | 'rankings' | 'coum'
+const TABS: Tab[] = ['resume', 'score', 'ticket', 'console', 'participation', 'live', 'rankings', 'coum']
 
 export function MatchVotePage() {
   const { matchId } = useParams<{ matchId: string }>()
@@ -34,6 +34,7 @@ export function MatchVotePage() {
   const tickets = useTickets(matchId)
   const likes = useLikes(matchId)
   const coums = useCoums(matchId)
+  const goals = useGoals(matchId)
   const match = useMatch(matchId)
 
   // Orateur : seulement un joueur de la liste désignée par l'admin.
@@ -42,7 +43,8 @@ export function MatchVotePage() {
 
   // L'orateur et le staff ont tout au même endroit : la console contient aussi leur propre vote.
   const tabs = useMemo(() => {
-    const list: { key: Tab; label: string }[] = [{ key: 'resume', label: 'Résumé' }]
+    // « Score du match » juste après le résumé : facile à trouver pour l'admin et les secrétaires.
+    const list: { key: Tab; label: string }[] = [{ key: 'resume', label: 'Résumé' }, { key: 'score', label: 'Score du match' }]
     if (canAnimate) list.push({ key: 'console', label: 'Console orateur' }, { key: 'participation', label: 'Participation' })
     else list.push({ key: 'ticket', label: 'Mon vote' })
     list.push({ key: 'live', label: 'En direct' }, { key: 'rankings', label: 'Classement' }, { key: 'coum', label: 'Coum' })
@@ -115,8 +117,8 @@ export function MatchVotePage() {
           </div>
           {match.venue && !upcoming && <VenueLink venue={match.venue} className="mt-1 text-[13px] text-muted" />}
           {/* Score pas encore encodé : un geste depuis l'en-tête. */}
-          {isStaff && !upcoming && (match.homeScore == null || match.awayScore == null) && tab !== 'resume' && (
-            <Button size="sm" variant="secondary" className="mr-2 mt-2" icon={<PenLine className="size-4" />} onClick={() => setTab('resume')}>Entrer le score</Button>
+          {isStaff && !upcoming && (match.homeScore == null || match.awayScore == null) && tab !== 'score' && (
+            <Button size="sm" variant="secondary" className="mr-2 mt-2" icon={<PenLine className="size-4" />} onClick={() => setTab('score')}>Entrer le score</Button>
           )}
           {/* L'admin rouvre les votes d'un match terminé ou en lecture, directement depuis sa page. */}
           {isAdmin && (match.status === 'closed' || match.status === 'reading') && <ReopenButton match={match} />}
@@ -144,6 +146,14 @@ export function MatchVotePage() {
           <VoteCountdown match={match} pending={votePending} />
 
           {tab === 'resume' && <MatchSummary match={match} onOpenTab={setTab} />}
+          {tab === 'score' && (
+            <div className="space-y-3">
+              <ScoreCard match={match} goalsCount={goals.data.length} canEdit={isStaff} />
+              <Link to={`/stats/${match.id}`} className="inline-flex items-center gap-1 text-[13px] font-medium text-ink-2 hover:underline">
+                Buts et passes de ce match ({goals.data.length}) →
+              </Link>
+            </div>
+          )}
           {tab === 'ticket' && (identity ? <TicketForm match={match} players={players.data} tickets={tickets.data} loaded={!tickets.loading} myPlayerId={identity.playerId} /> : <ChooseIdentity players={players.data} />)}
           {tab === 'console' && <SpeakerConsole match={match} players={players.byId} playerList={players.data} tickets={tickets.data} ticketsLoaded={!tickets.loading} likes={likes.data} />}
           {tab === 'participation' && <Participation players={players.data} tickets={tickets.data} />}

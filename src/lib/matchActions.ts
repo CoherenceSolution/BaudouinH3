@@ -1,8 +1,9 @@
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { db } from './firebase'
-import { logActivity, readBefore, undoUpdate, type Actor } from './activity'
+import { logActivity, readBefore, undoDelete, undoUpdate, type Actor } from './activity'
 import { formatDate } from './format'
-import { withEffectiveStatus } from './matches'
+import { duplicateCopies, withCleanTeams, withEffectiveStatus } from './matches'
+import { chunks, LINKED_COLLECTIONS } from './calendar/plan.ts'
 import { describeMergeSummary, newMatchData, planMerge, planMergeIntoNew, type MatchData, type MergeSummary, type MergeWrite } from './matchMerge'
 import type { Match } from './types'
 
@@ -27,7 +28,9 @@ export async function saveScore(match: Match, ours: number | null, theirs: numbe
   const awayScore = match.home ? theirs : ours
   const path = `matches/${match.id}`
   const before = await readBefore(path)
-  await updateDoc(doc(db, 'matches', match.id), { homeScore, awayScore, updatedAt: serverTimestamp() })
+  // L'adversaire et le domicile / extérieur affichés (relus pour un ancien import) sont enregistrés avec le
+  // score : la base reste cohérente, et la prochaine synchronisation n'inverse pas le score.
+  await updateDoc(doc(db, 'matches', match.id), { homeScore, awayScore, opponent: match.opponent, home: match.home, updatedAt: serverTimestamp() })
   const fmt = (h: number | null | undefined, a: number | null | undefined) => (h == null || a == null ? '—' : `${h} – ${a}`)
   await logActivity(
     actor,
@@ -36,7 +39,7 @@ export async function saveScore(match: Match, ours: number | null, theirs: numbe
     match.id,
     `Score ${match.homeScore == null ? 'encodé' : 'corrigé'} : ${match.opponent} ${fmt(homeScore, awayScore)}`,
     [{ field: 'Score', before: fmt(match.homeScore, match.awayScore), after: fmt(homeScore, awayScore) }],
-    undoUpdate(path, before, ['homeScore', 'awayScore']),
+    undoUpdate(path, before, ['homeScore', 'awayScore', 'opponent', 'home']),
   )
 }
 
@@ -53,7 +56,7 @@ export async function loadMatchData(matchId: string): Promise<MatchData> {
 async function loadMatch(id: string): Promise<Match> {
   const snap = await getDoc(doc(db, 'matches', id))
   if (!snap.exists()) throw new Error('Match introuvable')
-  return withEffectiveStatus({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) })
+  return withEffectiveStatus(withCleanTeams({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) }))
 }
 
 /**
@@ -140,4 +143,42 @@ export async function mergeIntoNewMatch(baseId: string, otherId: string, actor: 
   ])
   for (const m of [a, b]) await logActivity(actor, 'update', 'match', m.id, `Match en double fusionné dans le nouveau match : ${label(m)}`)
   return { id: ref.id, summary }
+}
+
+/**
+ * Copies annulées en double laissées par les anciennes synchronisations de l'agenda (même jour, même
+ * adversaire qu'un match gardé). Celles qui portent des données (votes, coum, buts, amendes…) sont gardées.
+ */
+export async function findDuplicateCopies(): Promise<{ removable: Match[]; kept: number }> {
+  const snap = await getDocs(collection(db, 'matches'))
+  const all = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Match, 'id'>) }))
+  const ids = duplicateCopies(all)
+  const copies = all.filter((m) => ids.has(m.id))
+  const used = new Set<string>()
+  for (const name of LINKED_COLLECTIONS) {
+    for (const part of chunks(copies.map((m) => m.id), 30)) {
+      const found = await getDocs(query(collection(db, name), where('matchId', 'in', part)))
+      found.forEach((d) => used.add(String(d.data().matchId)))
+    }
+  }
+  return { removable: copies.filter((m) => !used.has(m.id)), kept: copies.filter((m) => used.has(m.id)).length }
+}
+
+/** Supprime ces copies (par lots), en une seule entrée du journal, annulable depuis Gestion → Surveillance. */
+export async function removeDuplicateCopies(copies: Match[], actor: Actor) {
+  for (const part of chunks(copies, 400)) {
+    const batch = writeBatch(db)
+    for (const m of part) batch.delete(doc(db, 'matches', m.id))
+    await batch.commit()
+  }
+  const n = copies.length
+  await logActivity(
+    actor,
+    'delete',
+    'match',
+    'doublons',
+    `${n} copie${n > 1 ? 's' : ''} annulée${n > 1 ? 's' : ''} en double supprimée${n > 1 ? 's' : ''} (anciennes lectures de l’agenda)`,
+    undefined,
+    copies.flatMap(({ id, ...data }) => undoDelete(`matches/${id}`, data)),
+  )
 }

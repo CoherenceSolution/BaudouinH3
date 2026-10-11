@@ -156,31 +156,38 @@ export function MatchSummary({ match, onOpenTab }: Props) {
   )
 }
 
-/** Score, saisi en deux chiffres « nous / eux ». Le staff l'encode ou le corrige ici. */
-function ScoreCard({ match, goalsCount, canEdit }: { match: Match; goalsCount: number; canEdit: boolean }) {
+/**
+ * Score du match, toujours dans l'ordre du match : l'équipe qui reçoit à gauche, celle qui se déplace à
+ * droite, comme dans le titre (« Victory H-4 – Baudouin H3 » quand Baudouin joue à l'extérieur).
+ * Le staff (admin, secrétaires) l'encode ou le corrige ici.
+ */
+export function ScoreCard({ match, goalsCount, canEdit }: { match: Match; goalsCount: number; canEdit: boolean }) {
   const actor = useActor()
   const toast = useToast()
-  const ours = match.home ? match.homeScore : match.awayScore
-  const theirs = match.home ? match.awayScore : match.homeScore
-  const known = ours != null && theirs != null
+  const known = match.homeScore != null && match.awayScore != null
   const [editing, setEditing] = useState(false)
+  const [h, setH] = useState('')
   const [a, setA] = useState('')
-  const [b, setB] = useState('')
   const [saving, setSaving] = useState(false)
   const result = matchResult(match)
+  const homeName = match.home ? 'Baudouin H3' : match.opponent
+  const awayName = match.home ? match.opponent : 'Baudouin H3'
 
   function start() {
-    setA(ours != null ? String(ours) : String(goalsCount || ''))
-    setB(theirs != null ? String(theirs) : '')
+    // Buts déjà encodés : ils pré-remplissent le score de Baudouin.
+    const ours = goalsCount ? String(goalsCount) : ''
+    setH(match.homeScore != null ? String(match.homeScore) : match.home ? ours : '')
+    setA(match.awayScore != null ? String(match.awayScore) : match.home ? '' : ours)
     setEditing(true)
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (a === '' || b === '') return
+    if (h === '' || a === '') return
     setSaving(true)
     try {
-      await saveScore(match, Number(a), Number(b), actor)
+      const [home, away] = [Number(h), Number(a)]
+      await saveScore(match, match.home ? home : away, match.home ? away : home, actor)
       toast('Score enregistré')
       setEditing(false)
     } catch (err) {
@@ -194,11 +201,14 @@ function ScoreCard({ match, goalsCount, canEdit }: { match: Match; goalsCount: n
   const showForm = canEdit && (editing || !known)
   return (
     <Card className="p-4">
+      <p className="mb-3 text-[13px] text-muted">
+        {match.home ? <>Baudouin H3 joue <b className="text-ink">à domicile</b> et reçoit {match.opponent}.</> : <>Baudouin H3 joue <b className="text-ink">à l’extérieur</b>, chez {match.opponent}.</>}
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <ScoreSide label="Baudouin H3" value={ours} strong />
+          <ScoreSide label={homeName} side="Domicile" value={match.homeScore} strong={match.home} />
           <span className="text-2xl font-bold text-muted">–</span>
-          <ScoreSide label={match.opponent} value={theirs} />
+          <ScoreSide label={awayName} side="Extérieur" value={match.awayScore} strong={!match.home} />
         </div>
         {known && (
           <span className={cx('rounded-lg px-2.5 py-1 text-[13px] font-semibold', result === 'win' ? 'bg-accent-soft text-accent-strong' : result === 'loss' ? 'bg-rose-soft text-rose' : 'bg-slate-100 text-ink-2')}>
@@ -212,11 +222,11 @@ function ScoreCard({ match, goalsCount, canEdit }: { match: Match; goalsCount: n
       </div>
       {showForm && (
         <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-2 border-t border-line pt-3">
-          <span className="w-full text-[13px] font-medium">{known ? 'Corriger le score' : 'Entrer le score du match'}</span>
-          <ScoreInput label="Baudouin H3" value={a} onChange={setA} />
+          <span className="w-full text-[13px] font-medium">{known ? 'Corriger le score' : 'Entrer le score du match'} — dans l’ordre du match : domicile, puis extérieur</span>
+          <ScoreInput label={homeName} side="Domicile" value={h} onChange={setH} />
           <span className="pb-2 text-lg font-bold text-muted">–</span>
-          <ScoreInput label={match.opponent} value={b} onChange={setB} />
-          <Button type="submit" loading={saving} disabled={a === '' || b === ''}>Enregistrer</Button>
+          <ScoreInput label={awayName} side="Extérieur" value={a} onChange={setA} />
+          <Button type="submit" loading={saving} disabled={h === '' || a === ''}>Enregistrer</Button>
           {known && <Button type="button" variant="ghost" onClick={() => setEditing(false)}>Annuler</Button>}
           {goalsCount > 0 && !known && <span className="w-full text-[12px] text-muted">{goalsCount} but{goalsCount > 1 ? 's' : ''} déjà encodé{goalsCount > 1 ? 's' : ''} pour Baudouin.</span>}
         </form>
@@ -225,19 +235,20 @@ function ScoreCard({ match, goalsCount, canEdit }: { match: Match; goalsCount: n
   )
 }
 
-function ScoreSide({ label, value, strong }: { label: string; value: number | null | undefined; strong?: boolean }) {
+function ScoreSide({ label, side, value, strong }: { label: string; side: string; value: number | null | undefined; strong?: boolean }) {
   return (
     <div className="text-center">
       <div className={cx('text-3xl font-bold tabular-nums', !strong && 'text-ink-2')}>{value ?? '–'}</div>
-      <div className="max-w-[9rem] truncate text-[12px] text-muted">{label}</div>
+      <div className={cx('max-w-[9rem] truncate text-[12px]', strong ? 'font-semibold text-ink' : 'text-muted')}>{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">{side}</div>
     </div>
   )
 }
 
-function ScoreInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function ScoreInput({ label, side, value, onChange }: { label: string; side: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="flex flex-col text-[12px] text-muted">
-      <span className="max-w-[8rem] truncate">{label}</span>
+      <span className="max-w-[9rem] truncate"><b className="text-ink-2">{label}</b> · {side.toLowerCase()}</span>
       <input
         type="number"
         inputMode="numeric"
