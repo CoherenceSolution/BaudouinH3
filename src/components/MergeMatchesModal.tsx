@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, Copy, Merge, RefreshCw } from 'lucide-react'
+import { Copy, Merge, Plus, RefreshCw } from 'lucide-react'
 import type { Match } from '@/lib/types'
 import { formatDate, matchTitle, normalize } from '@/lib/format'
 import { formatTime } from '@/lib/matches'
-import { mergeMatches, previewMerge } from '@/lib/matchActions'
-import { describeMergeSummary, type MergePlan } from '@/lib/matchMerge'
+import { mergeIntoNewMatch, previewMergeIntoNew } from '@/lib/matchActions'
+import { describeMergeSummary, type MergeSummary } from '@/lib/matchMerge'
 import { useActor } from '@/hooks/useActor'
 import { useToast } from '@/components/ui/Toast'
 import { Badge, Button, Modal, Select, Spinner } from '@/components/ui'
@@ -24,15 +24,16 @@ function likeness(a: Match, b: Match) {
 const looksLikeDuplicate = (a: Match, b: Match) => likeness(a, b) > 0
 
 /**
- * Admin : fusionne deux matchs en double. Tout ce qui est rattaché au doublon (votes, coups de cœur, coum,
- * buts, amendes, listes) passe sur le match conservé ; un aperçu montre ce qui sera récupéré avant d'écrire.
+ * Admin : deux matchs en double → un troisième, neuf, qui récupère tout ce qui est rattaché aux deux (votes,
+ * coups de cœur, coum, buts, amendes, listes). Les deux anciens sont masqués. Un aperçu montre ce qui sera
+ * récupéré avant d'écrire.
  */
 export function MergeMatchesModal({ match, matches, onClose }: { match: Match | null; matches: Match[]; onClose: () => void }) {
   const actor = useActor()
   const toast = useToast()
   const [otherId, setOtherId] = useState('')
-  const [keepId, setKeepId] = useState('')
-  const [plan, setPlan] = useState<MergePlan | null>(null)
+  const [baseId, setBaseId] = useState('')
+  const [plan, setPlan] = useState<{ summary: MergeSummary; status: Match['status'] } | null>(null)
   const [previewError, setPreviewError] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -50,21 +51,21 @@ export function MergeMatchesModal({ match, matches, onClose }: { match: Match | 
     setOtherId(first?.id ?? '')
   }, [match, candidates])
 
-  // Par défaut on garde le match relié à Sportlink (ses mises à jour continuent), sinon celui choisi dans la liste.
+  // Informations du nouveau match : par défaut celles du match Sportlink (date, heure, lieu à jour).
   useEffect(() => {
-    if (!match || !other) return setKeepId('')
-    setKeepId(other.source === 'sportlink' && match.source !== 'sportlink' ? other.id : match.id)
+    if (!match || !other) return setBaseId('')
+    setBaseId(other.source === 'sportlink' && match.source !== 'sportlink' ? other.id : match.id)
   }, [match, other])
 
-  const keep = keepId === match?.id ? match : other
-  const drop = keepId === match?.id ? other : match
+  const base = baseId === match?.id ? match : other
+  const rest = baseId === match?.id ? other : match
 
   useEffect(() => {
     setPlan(null)
     setPreviewError(false)
-    if (!keep || !drop) return
+    if (!base || !rest) return
     let cancelled = false
-    previewMerge(keep.id, drop.id)
+    previewMergeIntoNew(base.id, rest.id)
       .then((p) => !cancelled && setPlan(p))
       .catch((e) => {
         console.error(e)
@@ -73,19 +74,19 @@ export function MergeMatchesModal({ match, matches, onClose }: { match: Match | 
     return () => {
       cancelled = true
     }
-  }, [keep, drop])
+  }, [base, rest])
 
   async function merge() {
-    if (!keep || !drop) return
-    if (!confirm(`Fusionner « ${matchTitle(drop)} » dans « ${matchTitle(keep)} » ? Tous ses votes y sont déplacés ; le doublon disparaît de la liste.`)) return
+    if (!base || !rest) return
+    if (!confirm('Créer un nouveau match avec tout le contenu des deux ? Les deux anciens disparaissent de la liste.')) return
     setBusy(true)
     try {
-      const summary = await mergeMatches(keep.id, drop.id, actor)
+      const { summary } = await mergeIntoNewMatch(base.id, rest.id, actor)
       toast(`Matchs fusionnés : ${describeMergeSummary(summary)}`)
       onClose()
     } catch (e) {
       console.error(e)
-      toast('Fusion impossible : rien n’a été perdu, vous pouvez réessayer', 'error')
+      toast('Fusion interrompue : rien n’a été perdu. Vérifiez la liste des matchs avant de réessayer.', 'error')
     } finally {
       setBusy(false)
     }
@@ -95,12 +96,12 @@ export function MergeMatchesModal({ match, matches, onClose }: { match: Match | 
     <Modal
       open={match !== null}
       onClose={onClose}
-      title="Fusionner deux matchs en double"
+      title="Fusionner deux matchs en double dans un nouveau match"
       wide
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button icon={<Merge className="size-4" />} loading={busy} disabled={!plan} onClick={merge}>Fusionner</Button>
+          <Button icon={<Merge className="size-4" />} loading={busy} disabled={!plan} onClick={merge}>Créer le match fusionné</Button>
         </>
       }
     >
@@ -115,24 +116,24 @@ export function MergeMatchesModal({ match, matches, onClose }: { match: Match | 
             ))}
           </Select>
 
-          {keep && drop && (
+          {base && rest && (
             <>
               <div className="space-y-2">
-                <p className="label">Match conservé</p>
+                <p className="label">Date, adversaire, lieu du nouveau match repris de</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[match, other!].map((m) => (
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setKeepId(m.id)}
-                      className={`rounded-xl border px-3 py-2.5 text-left ${keepId === m.id ? 'border-ink ring-2 ring-ink/10' : 'border-line hover:bg-slate-50'}`}
+                      onClick={() => setBaseId(m.id)}
+                      className={`rounded-xl border px-3 py-2.5 text-left ${baseId === m.id ? 'border-ink ring-2 ring-ink/10' : 'border-line hover:bg-slate-50'}`}
                     >
                       <div className="text-[14px] font-semibold">{matchTitle(m)}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
                         {formatDate(m.date)}{m.time && ` · ${formatTime(m.time)}`} <MatchStatusBadge status={m.status} cancelled={m.cancelled} />
                         {m.source === 'sportlink' && <Badge tone="sky"><RefreshCw className="size-3" /> Sportlink</Badge>}
                       </div>
-                      <div className="mt-1.5 text-[12px] font-medium">{keepId === m.id ? 'Conservé' : 'Fusionné dedans, puis masqué'}</div>
+                      <div className="mt-1.5 text-[12px] font-medium">{baseId === m.id ? 'Informations reprises' : 'Complète les informations manquantes'}</div>
                     </button>
                   ))}
                 </div>
@@ -145,7 +146,7 @@ export function MergeMatchesModal({ match, matches, onClose }: { match: Match | 
                   <Spinner />
                 ) : (
                   <div className="space-y-2">
-                    <p className="flex items-center gap-1.5 font-medium"><ArrowDown className="size-4" /> Récupéré depuis « {matchTitle(drop)} » : {describeMergeSummary(plan.summary)}.</p>
+                    <p className="flex items-center gap-1.5 font-medium"><Plus className="size-4" /> Le nouveau match recevra tout le contenu des deux : {describeMergeSummary(plan.summary)}.</p>
                     {plan.summary.duplicates > 0 && (
                       <p className="flex gap-1.5 text-amber-700">
                         <Copy className="mt-0.5 size-4 shrink-0" />
@@ -154,9 +155,15 @@ export function MergeMatchesModal({ match, matches, onClose }: { match: Match | 
                       </p>
                     )}
                     <p className="text-muted">
-                      Après la fusion, le match sera : {STATUS_AFTER[plan.status]}. Les votes déjà lus le restent, les autres rejoignent la file de lecture.
-                      Les informations manquantes (heure, lieu, score…) sont reprises du doublon.
+                      Le nouveau match sera : {STATUS_AFTER[plan.status]}. Les votes déjà lus le restent, les autres rejoignent la file de lecture.
+                      Les deux anciens matchs disparaissent de la liste (ils ne sont pas effacés) et leurs liens mènent au nouveau.
                     </p>
+                    {(base.source === 'sportlink' || rest.source === 'sportlink') && (
+                      <p className="flex gap-1.5 text-sky-700">
+                        <RefreshCw className="mt-0.5 size-4 shrink-0" />
+                        Le nouveau match n’est pas relié à l’agenda Sportlink : un changement de date ou de lieu s’y corrige à la main.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

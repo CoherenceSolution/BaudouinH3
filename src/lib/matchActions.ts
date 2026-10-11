@@ -1,9 +1,9 @@
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { db } from './firebase'
 import { logActivity, type Actor } from './activity'
 import { formatDate } from './format'
 import { withEffectiveStatus } from './matches'
-import { describeMergeSummary, planMerge, type MatchData, type MergePlan, type MergeSummary, type MergeWrite } from './matchMerge'
+import { describeMergeSummary, newMatchData, planMerge, planMergeIntoNew, type MatchData, type MergeSummary, type MergeWrite } from './matchMerge'
 import type { Match } from './types'
 
 const STATUS_LABEL: Record<Match['status'], string> = { scheduled: 'À venir', voting: 'Votes ouverts', reading: 'Lecture', closed: 'Terminé' }
@@ -33,10 +33,14 @@ async function loadMatch(id: string): Promise<Match> {
   return withEffectiveStatus({ id: snap.id, ...(snap.data() as Omit<Match, 'id'>) })
 }
 
-/** Aperçu d'une fusion, sans rien écrire. */
-export async function previewMerge(targetId: string, sourceId: string): Promise<MergePlan> {
-  const [target, source, t, s] = await Promise.all([loadMatch(targetId), loadMatch(sourceId), loadMatchData(targetId), loadMatchData(sourceId)])
-  return planMerge(target, source, t, s, { now: null, by: '' })
+/**
+ * Aperçu de la fusion de deux doublons dans un nouveau match, sans rien écrire.
+ * `baseId` : le match dont le nouveau reprend les informations (date, adversaire…).
+ */
+export async function previewMergeIntoNew(baseId: string, otherId: string) {
+  const [a, b, da, dbData] = await Promise.all([loadMatch(baseId), loadMatch(otherId), loadMatchData(baseId), loadMatchData(otherId)])
+  const target = { id: 'nouveau', ...newMatchData(a, '', null) } as unknown as Match
+  return planMergeIntoNew(target, a, b, da, dbData, { now: null, by: '' })
 }
 
 /**
@@ -65,22 +69,17 @@ async function commitGroups(groups: MergeWrite[][]) {
 }
 
 /**
- * Fusionne le match `sourceId` (doublon) dans `targetId` : votes, coups de cœur, coum, buts, amendes et
- * listes maison passent sur le match conservé ; rien n'est perdu (voir lib/matchMerge).
- * Le doublon est ensuite marqué fusionné et disparaît de l'application.
- * Un vote envoyé pendant la fusion sur le doublon est rattrapé par un second passage.
+ * Déplace tout ce qui est rattaché à `sourceId` sur `targetId` (voir lib/matchMerge), puis marque
+ * `sourceId` fusionné. Un vote envoyé sur l'ancien match pendant la fusion est rattrapé par un second passage.
  */
-export async function mergeMatches(targetId: string, sourceId: string, actor: Actor): Promise<MergeSummary> {
-  if (targetId === sourceId) throw new Error('Choisissez deux matchs différents')
+async function moveInto(targetId: string, sourceId: string, actor: Actor) {
   const [target, source] = await Promise.all([loadMatch(targetId), loadMatch(sourceId)])
-  if (target.mergedInto || source.mergedInto) throw new Error('Un de ces matchs a déjà été fusionné')
-
+  if (source.mergedInto) throw new Error('Ce match a déjà été fusionné')
   const now = serverTimestamp()
   const plan = planMerge(target, source, await loadMatchData(targetId), await loadMatchData(sourceId), { now, by: actor.name })
   await commitGroups(plan.groups)
   await commitGroups([plan.matchWrites])
 
-  // Rattrapage : un vote ou un coup de cœur écrit sur le doublon pendant la fusion.
   const total = { ...plan.summary }
   for (let pass = 0; pass < 3; pass++) {
     const late = await loadMatchData(sourceId)
@@ -89,11 +88,33 @@ export async function mergeMatches(targetId: string, sourceId: string, actor: Ac
     await commitGroups(again.groups)
     for (const k of Object.keys(total) as (keyof MergeSummary)[]) total[k] += again.summary[k]
   }
+  return { summary: total, status: plan.status, source }
+}
 
+/**
+ * Deux matchs en double → un troisième, neuf, qui récupère tout ce qui est rattaché aux deux :
+ * votes, coups de cœur, coum, buts, amendes et listes maison. Rien n'est perdu (voir lib/matchMerge).
+ * Les deux anciens sont marqués fusionnés et disparaissent de l'application ; leurs liens mènent au nouveau.
+ * `baseId` : le match dont le nouveau reprend les informations (les manques sont comblés par l'autre).
+ * Renvoie l'identifiant du nouveau match et le bilan.
+ */
+export async function mergeIntoNewMatch(baseId: string, otherId: string, actor: Actor): Promise<{ id: string; summary: MergeSummary }> {
+  if (baseId === otherId) throw new Error('Choisissez deux matchs différents')
+  const [a, b] = await Promise.all([loadMatch(baseId), loadMatch(otherId)])
+  if (a.mergedInto || b.mergedInto) throw new Error('Un de ces matchs a déjà été fusionné')
+
+  const ref = await addDoc(collection(db, 'matches'), newMatchData(a, actor.uid, serverTimestamp()))
   const label = (m: Match) => `${m.opponent} (${formatDate(m.date)})`
-  await logActivity(actor, 'update', 'match', target.id, `Matchs fusionnés : ${label(source)} → ${label(target)} — ${describeMergeSummary(total)}`, [
-    { field: 'Statut', before: STATUS_LABEL[target.status], after: STATUS_LABEL[plan.status] },
+  await logActivity(actor, 'create', 'match', ref.id, `Match créé pour fusionner deux doublons : ${label(a)}`)
+
+  const first = await moveInto(ref.id, a.id, actor)
+  const second = await moveInto(ref.id, b.id, actor)
+  const summary = { ...first.summary }
+  for (const k of Object.keys(summary) as (keyof MergeSummary)[]) summary[k] += second.summary[k]
+
+  await logActivity(actor, 'update', 'match', ref.id, `Matchs fusionnés dans un nouveau match : ${label(a)} + ${label(b)} — ${describeMergeSummary(summary)}`, [
+    { field: 'Statut', before: `${STATUS_LABEL[a.status]} / ${STATUS_LABEL[b.status]}`, after: STATUS_LABEL[second.status] },
   ])
-  await logActivity(actor, 'update', 'match', source.id, `Match en double fusionné dans ${label(target)} : ${label(source)}`)
-  return total
+  for (const m of [a, b]) await logActivity(actor, 'update', 'match', m.id, `Match en double fusionné dans le nouveau match : ${label(m)}`)
+  return { id: ref.id, summary }
 }
